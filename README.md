@@ -9,7 +9,7 @@ garments — from your own inventory, or from a generic list.
 node server.js          # http://localhost:8765
 ```
 
-No build step, no dependencies, no API key.
+No build step, no dependencies, no API key. To put it on a server, see [INSTALL.md](INSTALL.md).
 
 ## Why ride-feel rather than "feels like"
 

@@ -151,17 +151,24 @@ async function runLookup(){
 
   [F("lookup"), F("update")].forEach(b => b.disabled = true);
   note.textContent = "Searching manufacturer and retailer pages…";
-  let data = null, viaService = false;
+  let data = null, why = "lookup service not reachable";
   try{
-    const r = await fetch(`/api/lookup?name=${encodeURIComponent(name)}&slot=${encodeURIComponent(slot)}`);
-    if (r.ok){ data = await r.json(); viaService = true; }
+    // Relative, so the app works when mounted under a sub-path as well as at root.
+    const endpoint = new URL("api/lookup", location.href.replace(/[^/]*$/, ""));
+    endpoint.searchParams.set("name", name);
+    endpoint.searchParams.set("slot", slot);
+    const r = await fetch(endpoint);
+    if (r.ok) data = await r.json();
+    else if (r.status === 429) why = "rate limited — wait a minute";
+    else why = `lookup service returned ${r.status}`;
   }catch(e){ /* service not running — fall through */ }
 
   if (!data || data.error){
+    const detail = data && data.error ? data.error : why;
     data = inferGarment({name, slot});
-    data.source = "inference (lookup service not reachable)";
+    data.source = `inference (${detail})`;
     data.sources = [];
-    data.evidence.push("The local lookup service isn't running, so nothing was read from the web. Start it with `node server.js` for a real lookup.");
+    data.evidence.push(`Nothing was read from the web (${detail}), so these come from the garment name and fabric words alone. Check them against how it actually wears.`);
   }
   lastLookup = data;
   note.textContent = "";
@@ -204,7 +211,9 @@ function renderLookup(d){
             <td>Range °C${d.rangeQuoted ? "" : " <span class='hint'>(derived, not quoted)</span>"}</td>
             <td class="num">${cur.tmin} to ${cur.tmax}</td>
             <td class="num ${rangeDiffers ? "changed" : ""}">${d.tmin} to ${d.tmax}</td>
-            <td><input type="checkbox" class="use" data-k="range" ${d.rangeQuoted && rangeDiffers ? "checked" : ""}></td>
+            <!-- Left unticked on purpose: a maker's air-temperature claim is weaker
+                 evidence than the rider's own ride-feel calibration. -->
+            <td><input type="checkbox" class="use" data-k="range"></td>
           </tr>
         </tbody>
       </table>

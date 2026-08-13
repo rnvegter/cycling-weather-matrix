@@ -1,0 +1,45 @@
+# systemd unit — copy to /etc/systemd/system/cycling-weather-matrix.service
+#
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now cycling-weather-matrix
+#   journalctl -u cycling-weather-matrix -f
+
+[Unit]
+Description=Cycling Weather Effect Matrix
+Documentation=https://github.com/rnvegter/cycling-weather-matrix
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cwem
+Group=cwem
+WorkingDirectory=/opt/cycling-weather-matrix
+ExecStart=/usr/bin/node server.js
+
+# Loopback only: nginx or Caddy is what faces the network.
+Environment=HOST=127.0.0.1
+Environment=PORT=8765
+# Lookups per client per minute.
+Environment=LOOKUP_RATE=12
+
+Restart=on-failure
+RestartSec=5s
+
+# The process reads its own directory and makes outbound HTTP requests.
+# It needs nothing else.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/opt/cycling-weather-matrix
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target

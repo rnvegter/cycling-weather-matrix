@@ -18,7 +18,24 @@ const path = require("path");
 const {inferGarment} = require("./insulation.js");
 
 const PORT = +(process.argv[2] || process.env.PORT || 8765);
+// Behind a reverse proxy, bind to the loopback so the Node process isn't
+// reachable from outside on its own — see INSTALL.md.
+const HOST = process.env.HOST || "0.0.0.0";
 const ROOT = __dirname;
+
+/* The lookup endpoint makes outbound requests on someone else's behalf, which
+   is worth a limit before it faces a network. A handful per minute is far more
+   than a person editing their wardrobe will ever need. */
+const RATE = {max: +(process.env.LOOKUP_RATE || 12), windowMs: 60_000, hits: new Map()};
+function rateLimited(ip){
+  const now = Date.now();
+  const seen = (RATE.hits.get(ip) || []).filter(t => now - t < RATE.windowMs);
+  if (seen.length >= RATE.max){ RATE.hits.set(ip, seen); return true; }
+  seen.push(now);
+  RATE.hits.set(ip, seen);
+  if (RATE.hits.size > 5000) RATE.hits.clear();   // crude, but this is one process
+  return false;
+}
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
            "(KHTML, like Gecko) Chrome/126.0 Safari/537.36";
 
@@ -129,12 +146,19 @@ async function lookup(name, slot){
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
 
-  if (url.pathname === "/api/lookup"){
+  // Matched by suffix so the app still works when mounted under a sub-path.
+  if (url.pathname.endsWith("/api/lookup")){
     const name = (url.searchParams.get("name") || "").trim().slice(0, 120);
     const slot = (url.searchParams.get("slot") || "mid").trim();
     res.setHeader("content-type", "application/json; charset=utf-8");
     if (!name){
       res.writeHead(400); return res.end(JSON.stringify({error:"Give the garment a name first."}));
+    }
+    const ip = (req.headers["x-forwarded-for"] || "").split(",")[0].trim()
+            || req.socket.remoteAddress || "unknown";
+    if (rateLimited(ip)){
+      res.writeHead(429);
+      return res.end(JSON.stringify({error:`Too many lookups — limit is ${RATE.max} a minute.`}));
     }
     try{
       const out = await lookup(name, slot);
@@ -162,7 +186,7 @@ const server = http.createServer(async (req, res) => {
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`Cycling Weather Effect Matrix on http://localhost:${PORT}`);
-  console.log(`Gear lookup at /api/lookup?name=...&slot=...`);
+server.listen(PORT, HOST, () => {
+  console.log(`Cycling Weather Effect Matrix on http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}`);
+  console.log(`Gear lookup at /api/lookup?name=...&slot=...  (max ${RATE.max}/min per client)`);
 });

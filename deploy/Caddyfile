@@ -1,0 +1,46 @@
+# Caddy — the shortest path to a working HTTPS deployment.
+# Certificates are obtained and renewed automatically; there is no certbot step.
+#
+#   sudo cp Caddyfile /etc/caddy/Caddyfile
+#   sudo systemctl reload caddy
+#
+# Point the domain's A/AAAA record at this server first, or the certificate
+# request will fail.
+
+kit.example.com {
+	encode zstd gzip
+
+	# Static assets are safe to cache; index.html is not, so the app updates
+	# on the next load rather than the next cache expiry.
+	@static path *.css *.js *.svg *.ico
+	header @static Cache-Control "public, max-age=604800"
+	header /index.html Cache-Control "no-cache"
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	# The lookup is slow by nature: it fetches two or three pages upstream.
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8765 {
+			transport http {
+				response_header_timeout 45s
+			}
+		}
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:8765
+	}
+}
+
+# Serving the static files directly and letting the lookup fall back to the
+# built-in inference engine is also viable — see INSTALL.md, "Static only".
+#
+# kit.example.com {
+# 	root * /var/www/cycling-weather-matrix
+# 	file_server
+# 	encode zstd gzip
+# }
