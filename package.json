@@ -1,0 +1,12 @@
+{
+  "name": "cycling-weather-matrix",
+  "version": "1.0.0",
+  "description": "Ride-feel temperature and cycling kit advice for one specific ride",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": { "node": ">=18" },
+  "license": "MIT",
+  "private": true
+}

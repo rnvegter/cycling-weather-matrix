@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cycling Weather Effect Matrix</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Cycling Weather Effect Matrix</h1>
+  <p>Ride-feel temperature for the hours you're actually on the bike, and the kit that goes with it.</p>
+  <nav class="tabs">
+    <button class="tab" data-screen="ride" aria-pressed="true">Ride</button>
+    <button class="tab" data-screen="gear" aria-pressed="false">My gear</button>
+  </nav>
+</header>
+
+<!-- ================= RIDE SCREEN ================= -->
+<section id="screen-ride">
+  <div class="panel">
+    <h2>The ride</h2>
+    <div class="grid">
+      <div>
+        <label for="loc">Location</label>
+        <div class="row">
+          <div><input id="loc" placeholder="Utrecht, Girona, Dordogne…" autocomplete="off"></div>
+          <button id="search">Search</button>
+          <button id="here" title="Use current position">📍</button>
+        </div>
+        <div id="geo" class="geo-results hidden"></div>
+        <div id="picked" class="hint"></div>
+      </div>
+
+      <div class="grid g4">
+        <div><label for="date">Date</label><input type="date" id="date"></div>
+        <div><label for="time">Start time</label><input type="time" id="time" step="900"></div>
+        <div><label for="dist">Distance (km)</label><input type="number" id="dist" min="1" max="600" step="1" placeholder="60"></div>
+        <div><label for="dur">Duration (h)</label><input type="number" id="dur" min="0.25" max="24" step="0.25" placeholder="2.5"></div>
+      </div>
+      <div class="hint" id="speedhint"></div>
+
+      <div class="grid g3">
+        <div><label>Ride type</label>
+          <div class="pill-row" data-group="type">
+            <button class="pill" data-v="road">Road</button>
+            <button class="pill" data-v="gravel">Gravel</button>
+            <button class="pill" data-v="mtb">MTB</button>
+          </div></div>
+        <div><label>Pace</label>
+          <div class="pill-row" data-group="pace">
+            <button class="pill" data-v="easy">Easy / stops</button>
+            <button class="pill" data-v="steady">Steady</button>
+            <button class="pill" data-v="hard">Hard / group</button>
+          </div></div>
+        <div><label>Terrain</label>
+          <div class="pill-row" data-group="terrain">
+            <button class="pill" data-v="flat">Flat / sheltered</button>
+            <button class="pill" data-v="exposed">Exposed or hilly</button>
+          </div></div>
+        <div><label>Rider runs</label>
+          <div class="pill-row" data-group="rider">
+            <button class="pill" data-v="cold">Cold</button>
+            <button class="pill" data-v="normal">Normal</button>
+            <button class="pill" data-v="hot">Hot</button>
+          </div></div>
+        <div><label>Gear list</label>
+          <div class="pill-row" data-group="mode">
+            <button class="pill" data-v="wardrobe">My gear</button>
+            <button class="pill" data-v="generic">Generic</button>
+          </div></div>
+      </div>
+
+      <button class="primary" id="go">Get kit advice</button>
+    </div>
+    <div id="status" class="hidden"></div>
+  </div>
+
+  <div id="out"></div>
+</section>
+
+<!-- ================= GEAR SCREEN ================= -->
+<section id="screen-gear" class="hidden">
+  <div class="panel">
+    <div class="gear-head">
+      <div>
+        <h2 style="margin-bottom:4px">My gear</h2>
+        <p class="hint" style="margin:0">
+          The inventory the advice is drawn from. <strong>Range</strong> is the coldest and warmest
+          ride-feel °C a garment works at. <strong>clo</strong> is thermal insulation (a business suit
+          is 1.0); <strong>wind</strong> and <strong>water</strong> run 0–1.
+        </p>
+      </div>
+      <span id="gearcount" class="hint"></span>
+    </div>
+
+    <div class="gearbar">
+      <button id="gearadd" class="primary-sm">+ Add gear</button>
+      <button id="gearedit" disabled>Edit</button>
+      <button id="geardel" disabled>Delete</button>
+      <span class="spacer"></span>
+      <button id="gearexport">Export</button>
+      <label class="filelabel" for="gearimport">Import</label>
+      <input type="file" id="gearimport" accept="application/json" class="hidden">
+      <button id="gearreset">Reset to defaults</button>
+    </div>
+
+    <!-- ---- Add / edit form ---- -->
+    <div id="gearform" class="gearform hidden">
+      <h3 id="formtitle">Add gear</h3>
+
+      <div class="grid g2">
+        <div>
+          <label for="f-name">Item</label>
+          <input id="f-name" placeholder="e.g. Oakley Radar EV photochromic">
+        </div>
+        <div>
+          <label for="f-slot">Slot</label>
+          <select id="f-slot"></select>
+        </div>
+      </div>
+
+      <div class="lookupbar">
+        <button id="f-lookup">🔎 Look up insulation data</button>
+        <button id="f-update" class="hidden">↻ Update from web</button>
+        <span id="f-lookupnote" class="hint"></span>
+      </div>
+
+      <div id="f-result" class="hidden"></div>
+
+      <div class="grid g4" style="margin-top:14px">
+        <div><label for="f-tmin">Min °C</label><input id="f-tmin" type="number" step="1"></div>
+        <div><label for="f-tmax">Max °C</label><input id="f-tmax" type="number" step="1"></div>
+        <div><label for="f-clo">clo</label><input id="f-clo" type="number" step="0.01" min="0"></div>
+        <div><label for="f-wind">Wind 0–1</label><input id="f-wind" type="number" step="0.05" min="0" max="1"></div>
+        <div><label for="f-water">Water 0–1</label><input id="f-water" type="number" step="0.05" min="0" max="1"></div>
+        <div><label>Flags</label>
+          <div class="flagrow">
+            <label class="inline"><input id="f-short" type="checkbox"> Short sleeve / shorts</label>
+            <label class="inline"><input id="f-pack" type="checkbox"> Packs into a pocket</label>
+            <label class="inline"><input id="f-rainonly" type="checkbox"> Rain only</label>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:14px">
+        <label for="f-notes">Notes</label>
+        <input id="f-notes" placeholder="What makes this garment the right or wrong call">
+      </div>
+
+      <div class="gearbar" style="margin-top:16px">
+        <button id="f-save" class="primary-sm">Save</button>
+        <button id="f-cancel">Cancel</button>
+        <span class="spacer"></span>
+        <span id="f-dirty" class="hint"></span>
+      </div>
+    </div>
+
+    <div class="scroll" style="margin-top:16px">
+      <table id="geartable">
+        <thead>
+          <tr>
+            <th title="In the wardrobe">Have</th><th>Item</th><th>Slot</th>
+            <th>Range °C</th><th>clo</th><th>Wind</th><th>Water</th><th>Flags</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<footer>
+  Forecast: <a href="https://open-meteo.com/">Open-Meteo</a> — no account, no key.
+  Insulation model: required clo = 0.148 × (33 − T) ÷ MET, with cycling MET from the
+  <a href="https://pacompendium.com/bicycling/">Compendium of Physical Activities</a>
+  and wind correction after <a href="https://www.iso.org/standard/38900.html">ISO 11079 / 9920</a>.
+</footer>
+
+</div>
+
+<script src="insulation.js"></script>
+<script src="gear.js"></script>
+<script src="model.js"></script>
+<script src="app.js"></script>
+<script src="gearui.js"></script>
+</body>
+</html>
