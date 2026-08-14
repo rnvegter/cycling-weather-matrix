@@ -915,9 +915,10 @@ input[type="checkbox"] { accent-color: var(--temp); width: auto; min-height: 0; 
 /* On a right-aligned column the buttons are rendered before the label, so they
    sit inside the cell rather than hard against the next column's heading. */
 .wx-right .wx-th { justify-content: flex-end; }
-/* Space to the left of each control group, so one column's buttons never crowd
-   the previous column's values. */
-#geartable thead th { padding-left: var(--sp-3); padding-right: var(--sp-3); }
+/* Header cells are ruled apart, which is what lets a column's buttons sit at
+   its edge without reading as the next column's. */
+#geartable thead th { padding-left: var(--sp-3); padding-right: var(--sp-3); vertical-align: bottom; }
+#geartable thead th + th { border-left: 1px solid var(--line); }
 #geartable thead th:first-child { padding-left: var(--sp-2); }
 #geartable tbody td:first-child { padding-left: var(--sp-2); }
 #geartable tbody td { padding-left: var(--sp-3); }
@@ -926,6 +927,34 @@ input[type="checkbox"] { accent-color: var(--temp); width: auto; min-height: 0; 
 .wx-th__label:hover, .wx-th__label:focus-visible { color: var(--text); border-bottom-color: var(--text-dim); }
 
 .wx-th__btns { display: flex; gap: 1px; flex: 0 0 auto; }
+
+/* --- Scale under the range heading --- */
+.wx-axis {
+  position: relative;
+  height: 1.1rem;
+  margin-top: var(--sp-1);
+  border-top: 1px solid var(--line);
+}
+.wx-axis__t {
+  position: absolute;
+  top: 2px;
+  transform: translateX(-50%);
+  font-family: var(--data);
+  font-size: .56rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--text-dim);
+}
+/* The end labels would otherwise hang outside the column. */
+.wx-axis__t:first-child { transform: none; }
+.wx-axis__t:last-child { transform: translateX(-100%); }
+
+/* Gridlines on every lane at the same 5°C spacing, so each bar can be read
+   against the scale rather than only against its neighbours. */
+.wx-gear .wx-lane {
+  background-image: repeating-linear-gradient(90deg,
+    var(--line) 0 1px, transparent 1px calc(100% / 7));
+}
 
 .wx-hbtn {
   width: 22px; height: 22px;

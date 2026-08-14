@@ -282,7 +282,7 @@ function pickOutfit(f, w, opts, gear){
     if (legsPick.short && legFeel < legsPick.tmin){
       const extra = best(inSlot("legextra").filter(l => fits(l, legFeel)), legFeel);
       if (extra) push(extra);
-      else notes.push(`Nothing in the leg-warmer slot covers ${legFeel}°C over shorts.`);
+      else notes.push(`No leg warmer you own covers ${legFeel}°C over shorts.`);
     } else if (legFeel < legsPick.tmin){
       const extra = best(inSlot("legextra").filter(l => l.tmin <= legFeel), legFeel);
       if (extra) push(extra, "Over the top — the tights alone don't reach this far down.");
@@ -337,7 +337,7 @@ function pickOutfit(f, w, opts, gear){
   }
 
   if (edges.length)
-    notes.push(`Colder than anything you own in the ${[...new Set(edges)].join(", ")} slot${edges.length>1?"s":""} — what's listed is the warmest you have, and it's past its limit. Be honest about shortening the ride.`);
+    notes.push(`Colder than anything you own for ${[...new Set(edges)].join(", ")} — what's listed is the warmest you have, and it's past its limit. Be honest about shortening the ride.`);
 
   GEAR_GAPS.forEach(g => { if (g.when(f)) notes.push(g.text); });
 

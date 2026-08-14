@@ -63,9 +63,13 @@ row anywhere else selects it for editing, so the two actions never fight each ot
 Brand and model are separate fields, so the table sorts and filters by maker. Every column
 header carries its description on hover or keyboard focus, plus a sort button cycling
 ascending, descending and off, and a filter shaped to the column: a checklist for brand and
-slot, contains-text for model, min and max for the numbers, and for the range a single
+type, contains-text for model, min and max for the numbers, and for the range a single
 temperature that asks the question actually worth asking — *what covers 8°C?* Filters stack,
 and the row count says how many are showing.
+
+The range column is a chart, so it carries a scale: ticks every 5 °C under the heading and
+gridlines at the same spacing on every row, which is what lets one bar be read as a
+temperature rather than only as longer or shorter than its neighbours.
 
 Columns are declared once in `GEAR_COLS`, which carries each label, description, sort
 accessor and filter type, so the header controls can't drift out of step with the data. Both the add and edit flows offer a

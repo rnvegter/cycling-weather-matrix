@@ -95,6 +95,15 @@ function activeFilterCount(){
     f != null && f !== "" && !(Array.isArray(f) && !f.length)).length;
 }
 
+/* The range column is a chart, and a chart without a scale is a decoration.
+   Ticks every 5°C across the same -5..30 ramp the bars are drawn on. */
+function rangeAxis(){
+  const ticks = [];
+  for (let t = RAMP_MIN; t <= RAMP_MAX; t += 5) ticks.push(t);
+  return `<div class="wx-axis">${ticks.map(t => `
+    <span class="wx-axis__t" style="left:${rampPos(t)}%">${t}</span>`).join("")}</div>`;
+}
+
 function renderGearHead(){
   const thead = document.querySelector("#geartable thead");
   thead.innerHTML = "<tr>" + GEAR_COLS.map(c => {
@@ -109,10 +118,14 @@ function renderGearHead(){
           <button class="wx-hbtn${filtered ? " is-on" : ""}" data-filter="${c.key}"
             aria-label="Filter ${c.label}" title="Filter ${escHtml(c.label)}">${FUNNEL}</button>
         </span>`;
-    // Controls always lead the column. With the label first they ended up at the
-    // cell's right edge, reading as though they belonged to the next heading.
-    return `<th class="${c.align === "right" ? "wx-right" : ""}">
-      <div class="wx-th">${btns}${label}</div>
+    // The label sits where its values sit, so the heading lines up with the
+    // column beneath it: leading on a left-aligned column, trailing on a
+    // right-aligned one. The hairline between header cells is what keeps the
+    // buttons legibly part of their own column.
+    const right = c.align === "right";
+    const axis = c.type === "covers" ? rangeAxis() : "";
+    return `<th class="${right ? "wx-right" : ""}">
+      <div class="wx-th">${right ? btns + label : label + btns}</div>${axis}
     </th>`;
   }).join("") + "</tr>";
 }

@@ -199,8 +199,8 @@ const GEAR_COLS = [
    desc:"The specific garment. This is what the web lookup searches for, so the closer it matches the maker's own name, the better the result.",
    val: g => g.model.toLowerCase(), text: g => g.model},
 
-  {key:"slot", label:"Slot", type:"enum",
-   desc:"Which part of the outfit it competes for. Only one garment wins each slot, except legs, which can take a warmer over the top.",
+  {key:"slot", label:"Type", type:"enum",
+   desc:"Which part of the outfit this competes for. Only one garment wins each type, except legs, which can take a warmer over the top.",
    val: g => SLOT_LABEL[g.slot] || g.slot, text: g => SLOT_LABEL[g.slot] || g.slot},
 
   {key:"range", label:"Ride-feel range", type:"covers",
