@@ -45,6 +45,16 @@
     </div>
     <p id="speedhint" class="wx-note"></p>
 
+    <div class="wx-bar-row" style="margin-top:var(--sp-3)">
+      <label class="wx-file" for="gpx">Load a route</label>
+      <input type="file" id="gpx" accept=".gpx,application/gpx+xml,text/xml" class="wx-hidden">
+      <button id="gpxclear" class="wx-btn wx-btn--quiet wx-hidden">Drop route</button>
+      <span id="gpxnote" class="wx-note" style="margin:0">
+        Optional. A GPX checks the kit against the whole ride — where you'll be, how high,
+        and which way you're pointing — rather than only the start.
+      </span>
+    </div>
+
     <div class="wx-grid wx-grid--2" style="margin-top:var(--sp-4)">
       <div>
         <span class="wx-label">Surface</span>
@@ -205,6 +215,7 @@
 
 </div>
 
+<script src="gpx.js"></script>
 <script src="weather.js"></script>
 <script src="insulation.js"></script>
 <script src="gear.js"></script>

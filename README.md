@@ -120,6 +120,28 @@ quietly picking one.
 Below force 3 it says the wind isn't worth planning a route around, instead of inventing
 advice.
 
+## Checking a route
+
+Load a GPX and the kit gets checked against the whole ride rather than the start point. Three
+things change along a route and none are visible from where you set off: **where you are**,
+because a coastal leg and an inland one are different weather; **how high**, at roughly
+0.65 °C per 100 m; and **which way you're pointing**, because wind only chills you by the part
+of it you ride into.
+
+The route is cut into legs — more of them when there's climbing, since cutting an 11 km
+mountain route by distance alone smooths a col down to its leg average and hides the thing you
+loaded the route to find. Each leg gets its own position, elevation, heading, and clock time,
+arrived at with a gradient-adjusted speed so a col is reached when you'd actually reach it.
+One forecast call covers every leg.
+
+Climbing and descending are treated as opposite problems, which they are: climbing at 7% is
+the warmest you'll be all day — hard effort, low speed, almost no airflow — and the descent
+that follows is the cold one.
+
+The verdict compares what you'd have to **put on or take off**, not garment names. Two
+near-equivalent jerseys swapping over a single degree is the model breaking a tie, not the ride
+needing different kit, and reporting that as a change would cry wolf on every route.
+
 ## Look
 
 An instrument rather than a lifestyle app: it gets read on a phone at 06:40 in December,
@@ -150,6 +172,7 @@ INSTALL.md if you want to self-host them for a genuinely offline install.
 | `server.js` | Static files plus `/api/lookup` |
 | `app.js` | Forecast, form wiring, rendering |
 | `gearui.js` | Gear screen: add, edit, delete, lookup |
+| `gpx.js` | Route parsing, leg sampling, headwind and lapse rate |
 | `styles.css` | The Weather Effect design system, plus app chrome |
 
 Forecast data from [Open-Meteo](https://open-meteo.com/). Wind correction after

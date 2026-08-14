@@ -1010,3 +1010,48 @@ input[type="checkbox"] { accent-color: var(--temp); width: auto; min-height: 0; 
 .wx-pop .wx-input { min-height: 36px; }
 
 @media print { .wx-th__btns, .wx-tip, .wx-pop { display: none; } }
+
+/* ---------- 18. Along the route ------------------------------ */
+/* One column per leg, ordered by distance. Same shape as the hourly strip,
+   because it answers the same question along a different axis. */
+
+.wx-legs { display: flex; gap: 1px; min-width: min-content; }
+
+.wx-leg {
+  flex: 0 0 4.6rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--sp-2) var(--sp-1);
+  background: var(--surface-2);
+  border-top: var(--edge) solid var(--temp);
+}
+
+.wx-leg__km {
+  font-family: var(--data);
+  font-size: .62rem;
+  letter-spacing: .04em;
+  color: var(--text);
+}
+.wx-leg__feel {
+  font-family: var(--data);
+  font-weight: 600;
+  font-size: var(--step-1);
+  line-height: 1.1;
+  color: var(--temp);
+}
+.wx-leg__air, .wx-leg__ele, .wx-leg__time {
+  font-family: var(--data);
+  font-size: .58rem;
+  color: var(--text-dim);
+}
+.wx-leg__wind {
+  display: flex; align-items: center; gap: 2px;
+  font-size: .6rem; color: var(--text-dim);
+}
+/* Riding into it is the case worth seeing without reading the number. */
+.wx-leg__wind .wx-num { color: var(--minus); font-weight: 600; }
+
+[data-touch="gloves"] .wx-leg { flex-basis: 5.4rem; }
+@media print { .wx-leg { break-inside: avoid; } }

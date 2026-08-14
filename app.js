@@ -110,6 +110,53 @@ function status(msg, isErr){
 }
 
 /* ---------------------------------------------------------------
+   Route file
+----------------------------------------------------------------*/
+let route = null;
+
+$("#gpx").onchange = e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const fr = new FileReader();
+  fr.onload = () => {
+    try{
+      const parsed = parseGPX(fr.result);
+      const stats = routeStats(parsed.points);
+      if (!(stats.distance > 0.5)) throw new Error("That route is shorter than half a kilometre.");
+      route = {name: parsed.name, points: parsed.points, stats};
+
+      // The route knows the distance better than the form does.
+      $("#dist").value = Math.round(stats.distance);
+      updateSpeedHint();
+      // A route file usually carries its own start point.
+      if (!state.place) state.place = {name: parsed.name || "Route start",
+        latitude: parsed.points[0].lat, longitude: parsed.points[0].lon};
+      showPlace(state.place);
+
+      $("#gpxnote").innerHTML =
+        `<b>${route.name ? escapeText(route.name) + " — " : ""}${r1(stats.distance)} km</b>`
+        + (stats.hasElevation ? `, ${Math.round(stats.ascent)} m up` : ", no elevation data")
+        + (stats.loop ? ", a loop" : ", point to point")
+        + `. ${route.points.length} points.`;
+      $("#gpxclear").classList.remove("wx-hidden");
+      status("");
+    }catch(err){
+      route = null;
+      status(err.message, true);
+    }
+  };
+  fr.readAsText(file);
+  e.target.value = "";
+};
+$("#gpxclear").onclick = () => {
+  route = null;
+  $("#gpxclear").classList.add("wx-hidden");
+  $("#gpxnote").textContent =
+    "Optional. A GPX checks the kit against the whole ride — where you'll be, how high, and which way you're pointing — rather than only the start.";
+};
+const escapeText = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");
+
+/* ---------------------------------------------------------------
    Forecast
 ----------------------------------------------------------------*/
 async function forecast(lat, lon){
@@ -192,12 +239,125 @@ function rideWindow(fc, dateStr, timeStr, hours){
 }
 
 /* ---------------------------------------------------------------
+   Route analysis
+
+   One forecast call covers every leg: Open-Meteo takes comma-separated
+   coordinates and answers with one block per location.
+----------------------------------------------------------------*/
+async function forecastMany(legs){
+  const lats = legs.map(l => l.lat.toFixed(4)).join(",");
+  const lons = legs.map(l => l.lon.toFixed(4)).join(",");
+  const url = "https://api.open-meteo.com/v1/forecast"
+    + `?latitude=${lats}&longitude=${lons}`
+    + "&hourly=temperature_2m,precipitation_probability,precipitation,cloud_cover,"
+    + "wind_speed_10m,wind_direction_10m,wind_gusts_10m,is_day,weather_code"
+    + "&daily=sunrise,sunset&timezone=auto&forecast_days=16&past_days=2";
+  const r = await fetch(url);
+  if (!r.ok) throw new Error("Route forecast request failed");
+  const j = await r.json();
+  return Array.isArray(j) ? j : [j];      // one location comes back unwrapped
+}
+
+/* Build the weather for a single leg: the forecast at its position, at its
+   clock time, corrected for its height, with only the headwind counted. */
+function legWeather(fc, leg, opts){
+  const t = leg.startTime;
+  const key = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}`
+            + `T${String(t.getHours()).padStart(2,"0")}:00`;
+  const h = fc.hourly;
+  let i = h.time.indexOf(key);
+  if (i < 0) i = 0;
+  const j = Math.min(h.time.length - 1, i + Math.max(0, Math.ceil(leg.hours) - 1));
+
+  const airRaw = h.temperature_2m[i];
+  const air = lapseAdjust(airRaw, leg.ele, fc.elevation);
+  const airEnd = lapseAdjust(h.temperature_2m[j], leg.ele, fc.elevation);
+  const wind = h.wind_speed_10m[i], dir = h.wind_direction_10m[i];
+  const comp = headwindComponent(wind, dir, leg.heading);
+
+  const dayIdx = fc.daily.time.indexOf(key.slice(0,10));
+  const sunrise = dayIdx >= 0 ? fc.daily.sunrise[dayIdx] : null;
+  const sunset  = dayIdx >= 0 ? fc.daily.sunset[dayIdx]  : null;
+  let dark = h.is_day[i] === 0 ? 1 : 0;
+  if (sunrise && sunset){
+    const lit = Math.max(0, Math.min(leg.endTime, new Date(sunset)) - Math.max(leg.startTime, new Date(sunrise)));
+    dark = clamp(1 - lit / Math.max(1, leg.endTime - leg.startTime), 0, 1);
+  }
+
+  return {
+    startDT: leg.startTime, endDT: leg.endTime,
+    times: [h.time[i]],
+    tStart: air, tEnd: airEnd, tMin: Math.min(air, airEnd), tMax: Math.max(air, airEnd),
+    // Only the part of the wind you ride into does the chilling.
+    wind: Math.max(0, comp), gust: h.wind_gusts_10m[i], dir,
+    headwind: comp, ambient: wind,
+    precipTotal: h.precipitation[i] || 0, precipPeak: h.precipitation[i] || 0,
+    prob: h.precipitation_probability[i] || 0, cloud: h.cloud_cover[i] || 0,
+    dark, wetHours: (h.precipitation[i] || 0) >= 0.1 ? 1 : 0, hoursCount: 1,
+    sunrise, sunset, dirLate: dir, code: h.weather_code[i], day: h.is_day[i],
+    hourly: [{time:h.time[i], t:air, wind, precip:h.precipitation[i]||0,
+              prob:h.precipitation_probability[i]||0, dir, gust:h.wind_gusts_10m[i],
+              code:h.weather_code[i], day:h.is_day[i]}],
+    outlook: []
+  };
+}
+
+/* Does one outfit differ from another in a way worth mentioning? */
+const outfitKey = out => out.wear.map(i => i.name).sort().join("|");
+
+async function analyseRoute(route, opts){
+  const legs = legTiming(sampleRoute(route.points, route.stats, opts), opts.startDT, opts.speed);
+  const blocks = await forecastMany(legs);
+
+  legs.forEach((leg, k) => {
+    const fc = blocks[Math.min(k, blocks.length - 1)];
+    leg.modelEle = fc.elevation;
+    const w = legWeather(fc, leg, opts);
+    // Up and down are opposite problems, and treating them the same was wrong.
+    // Climbing at 7% is the warmest you will be all day: hard effort, low speed,
+    // almost no airflow. The descent that follows is the cold one.
+    const climbing = leg.gradient > 0.03, descending = leg.gradient < -0.03;
+    const legOpts = Object.assign({}, opts, {
+      speed: leg.speed, hours: leg.hours, dist: leg.toKm - leg.fromKm,
+      terrain: descending ? "exposed" : opts.terrain,
+      pace: climbing ? "hard" : opts.pace
+    });
+    leg.climbing = climbing; leg.descending = descending;
+    leg.w = w;
+    leg.f = rideFeel(w, legOpts);
+    leg.out = state.mode === "wardrobe" ? pickOutfit(leg.f, w, legOpts, gear)
+                                        : genericOutfit(leg.f, w, legOpts);
+    leg.key = outfitKey(leg.out);
+  });
+
+  const feels = legs.map(l => l.f.feel);
+  const coldest = legs[feels.indexOf(Math.min(...feels))];
+  const warmest = legs[feels.indexOf(Math.max(...feels))];
+  const spread = Math.max(...feels) - Math.min(...feels);
+
+  // Compare by what you'd have to put on or take off, not by garment names.
+  // Two near-equivalent jerseys swapping over a degree is the model breaking a
+  // tie, not the ride needing different kit, and reporting it as a change
+  // would cry wolf on every route.
+  const coldSlots = new Map(coldest.out.wear.map(i => [i.slot, i.name]));
+  const warmSlots = new Map(warmest.out.wear.map(i => [i.slot, i.name]));
+  const extra = [...coldSlots].filter(([s]) => !warmSlots.has(s)).map(([,n]) => n);
+  const shed  = [...warmSlots].filter(([s]) => !coldSlots.has(s)).map(([,n]) => n);
+  const swaps = [...coldSlots].filter(([s, n]) => warmSlots.has(s) && warmSlots.get(s) !== n)
+                              .map(([s, n]) => `${warmSlots.get(s)} → ${n}`);
+
+  const changes = extra.length > 0 || shed.length > 0 || spread >= 3;
+
+  return {legs, coldest, warmest, extra, shed, swaps, changes, spread};
+}
+
+/* ---------------------------------------------------------------
    Render
 ----------------------------------------------------------------*/
 const fmtDay = s => new Date(s + "T12:00").toLocaleDateString(undefined, {weekday:"long", day:"numeric", month:"long"});
 const hhmm = d => `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
 
-function render(f, w, opts, place){
+function render(f, w, opts, place, analysis){
   const out = state.mode === "wardrobe" ? pickOutfit(f, w, opts, gear) : genericOutfit(f, w, opts);
   const watch = watchFor(f, w, opts);
   const band = bandFor(f.feel);
@@ -321,6 +481,69 @@ function render(f, w, opts, place){
   </section>`;
   })()}
 
+  ${(() => {
+    if (!analysis) return "";
+    if (analysis.error)
+      return `<p class="wx-alert"><b>Route check failed.</b> ${analysis.error}
+        The advice above still stands for the start point.</p>`;
+
+    const {legs, coldest, warmest, extra, shed, swaps, changes, spread} = analysis;
+    const consistent = !changes;
+    const km = n => `${Math.round(n)} km`;
+
+    return `
+  <section class="wx-card ${consistent ? ramp : rampFor(coldest.f.feel)}">
+    <div class="wx-card__head">
+      <h2 class="wx-heading">Along the route</h2>
+      <span class="wx-eyebrow" style="margin:0">${legs.length} legs &middot; ${km(route.stats.distance)}${
+        route.stats.hasElevation ? ` &middot; ${Math.round(route.stats.ascent)} m up` : ""}</span>
+    </div>
+
+    <div class="wx-scroll">
+      <div class="wx-legs">${legs.map(l => `
+        <div class="wx-leg ${rampFor(l.f.feel)}">
+          <div class="wx-leg__km">${km(l.fromKm)}</div>
+          ${skyIcon(l.w.code, l.w.day, 22)}
+          <div class="wx-leg__feel">${l.f.feel}&deg;</div>
+          <div class="wx-leg__air">${r1(l.w.tStart)}&deg; air</div>
+          <div class="wx-leg__wind" title="${Math.round(l.w.ambient)} km/h wind, ${Math.round(Math.abs(l.w.headwind))} km/h of it ${windLabel(l.w.headwind)}">
+            ${l.heading != null ? windArrow(l.w.dir) : ""}
+            <span class="wx-num">${l.w.headwind > 0 ? "+" : ""}${Math.round(l.w.headwind)}</span>
+          </div>
+          ${l.ele != null ? `<div class="wx-leg__ele">${Math.round(l.ele)} m</div>` : ""}
+          <div class="wx-leg__time">${hhmm(l.startTime)}</div>
+        </div>`).join("")}</div>
+    </div>
+
+    ${consistent ? `
+      <p class="wx-startdir"><b>The same kit works the whole way.</b>
+        Ride-feel moves ${spread <= 1 ? "barely at all" : `about ${Math.round(spread)}&deg;`}
+        between the legs, and nothing in that range changes what you'd put on or take off.</p>
+      ${swaps.length ? `<p class="wx-note">Borderline either way: ${swaps.join("; ")}. Same
+        warmth, so it isn't worth carrying both.</p>` : ""}`
+    : `
+      <p class="wx-startdir"><b>The kit doesn't hold for the whole ride.</b>
+        Coldest is ${coldest.f.feel}&deg; around ${km(coldest.fromKm)}${
+          coldest.ele != null && route.stats.hasElevation ? ` at ${Math.round(coldest.ele)} m` : ""},
+        warmest ${warmest.f.feel}&deg; around ${km(warmest.fromKm)}.</p>
+      ${extra.length ? `<p class="wx-note"><b>The cold end wants</b> ${extra.join(", ")} —
+        carry what you can rather than starting in it.</p>` : ""}
+      ${shed.length ? `<p class="wx-note"><b>The warm end doesn't want</b> ${shed.join(", ")}.</p>` : ""}`}
+
+    ${(() => {
+      const hard = legs.filter(l => l.w.headwind >= 15);
+      if (!hard.length) return "";
+      return `<p class="wx-note">Into the wind from ${hard.map(l => km(l.fromKm)).join(", ")} —
+        ${Math.round(Math.max(...hard.map(l => l.w.headwind)))} km/h of headwind at the worst of it.</p>`;
+    })()}
+    ${(() => {
+      const wet = legs.filter(l => l.w.prob >= 50);
+      if (!wet.length) return "";
+      return `<p class="wx-note">Rain most likely around ${wet.map(l => km(l.fromKm)).join(", ")}.</p>`;
+    })()}
+  </section>`;
+  })()}
+
   ${out.notes.map(n => `<p class="wx-alert">${n}</p>`).join("")}
   ${watch.map(x => `<p class="wx-alert"><b>Watch.</b> ${x}</p>`).join("")}
 
@@ -385,8 +608,18 @@ $("#go").onclick = async () => {
   try{
     const fc = await forecast(state.place.latitude, state.place.longitude);
     const w = rideWindow(fc, date, time, hours);
+    let analysis = null;
+    if (route){
+      status("Checking the kit along the route…");
+      try{
+        analysis = await analyseRoute(route, Object.assign({}, opts, {startDT: w.startDT}));
+      }catch(err){
+        // A route that fails shouldn't cost you the advice for the start point.
+        analysis = {error: err.message};
+      }
+    }
     status("");
-    render(rideFeel(w, opts), w, opts, state.place);
+    render(rideFeel(w, opts), w, opts, state.place, analysis);
   }catch(e){
     status(e.message, true);
     $("#out").innerHTML = "";
