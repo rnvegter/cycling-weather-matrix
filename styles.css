@@ -674,10 +674,40 @@ input[type="checkbox"] { accent-color: var(--temp); width: auto; min-height: 0; 
 .wx-gear { min-width: 40rem; }
 .wx-gear tbody tr { cursor: pointer; }
 .wx-gear tbody tr:hover td { background: var(--surface-2); }
-.wx-gear tr.is-off td { opacity: .4; }
+.wx-gear tr.is-off td { opacity: .38; }
+.wx-gear tr.is-off td:first-child { opacity: 1; }
+.wx-gear tr.is-off .wx-item { text-decoration: line-through; }
 .wx-gear tr.is-sel td { background: var(--surface-2); }
 .wx-gear tr.is-sel td:first-child { box-shadow: inset var(--edge) 0 0 var(--temp); }
-.wx-gear td:first-child { text-align: center; width: 3rem; }
+.wx-gear td:first-child { text-align: center; width: 4.4rem; }
+
+/* In or out of the advice. A labelled two-state button rather than a tick box:
+   the state is readable without decoding it, and it is a real tap target. */
+.wx-toggle {
+  min-width: 3.2rem;
+  min-height: 32px;
+  padding: 0 var(--sp-2);
+  font-family: var(--display);
+  font-size: var(--step--1);
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+/* One consistent "on", not the row's temperature tint. Colour is data
+   everywhere else in this app; a control that borrowed the ramp would turn the
+   column into a chart and make the state harder to read, not easier. */
+.wx-toggle[aria-pressed="true"] {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--bg);
+}
+.wx-toggle:hover { border-color: var(--text); }
+[data-touch="gloves"] .wx-toggle { min-height: var(--tap); min-width: 4rem; }
 .wx-gear .wx-item { font-weight: 500; color: var(--text); }
 .wx-gear .wx-flagcell { font-family: var(--data); font-size: .62rem; color: var(--text-dim); white-space: nowrap; }
 

@@ -360,21 +360,7 @@ function render(f, w, opts, place){
     </table></div>
   </details>
 
-  <details class="wx-more">
-    <summary>Hour by hour</summary>
-    <div class="wx-scroll"><table class="wx-table">
-      <thead><tr><th>Time</th><th class="wx-right">Air</th><th class="wx-right">Wind</th>
-        <th class="wx-right">Rain</th><th class="wx-right">mm</th></tr></thead>
-      <tbody>${w.hourly.map(h => `
-        <tr class="${rampFor(h.t)}">
-          <td class="wx-num">${fmtTime(h.time)}</td>
-          <td class="wx-right wx-feel">${r1(h.t)}&deg;</td>
-          <td class="wx-right wx-num">${Math.round(h.wind)}</td>
-          <td class="wx-right wx-num">${Math.round(h.prob)}%</td>
-          <td class="wx-right wx-num">${h.precip ? r1(h.precip) : "—"}</td>
-        </tr>`).join("")}</tbody>
-    </table></div>
-  </details>`;
+`;
   $("#out").scrollIntoView({behavior:"smooth", block:"start"});
 }
 

@@ -108,9 +108,10 @@
       <span class="wx-eyebrow" style="margin:0" id="gearcount"></span>
     </div>
     <p class="wx-note" style="margin-top:0">
-      What the advice is drawn from. The bar is the ride-feel range a garment covers —
-      your calibration, not the maker's air-temperature claim. <b class="wx-num">clo</b> is
-      insulation, where a business suit is 1.0.
+      What the advice is drawn from. <b>In</b> means a garment is considered when picking kit;
+      <b>Out</b> leaves it in the wardrobe — for anything lent out, in the wash, or not packed
+      for a trip. Click a row anywhere else to select it for editing. The bar is the ride-feel
+      range it covers, which is your calibration rather than the maker's air-temperature claim.
     </p>
 
     <div class="wx-bar-row">
@@ -118,6 +119,9 @@
       <button id="gearedit" class="wx-btn" disabled>Edit</button>
       <button id="geardel" class="wx-btn wx-btn--quiet" disabled>Remove</button>
       <span class="wx-spacer"></span>
+      <span class="wx-label" style="margin:0 var(--sp-1) 0 0">All</span>
+      <button id="gearall" class="wx-btn wx-btn--quiet">In</button>
+      <button id="gearnone" class="wx-btn wx-btn--quiet">Out</button>
       <button id="gearexport" class="wx-btn wx-btn--quiet">Export</button>
       <label class="wx-file" for="gearimport">Import</label>
       <input type="file" id="gearimport" accept="application/json" class="wx-hidden">
@@ -176,7 +180,7 @@
       <table class="wx-table wx-gear" id="geartable">
         <thead>
           <tr>
-            <th title="In the wardrobe">Have</th><th>Item</th><th>Slot</th>
+            <th title="Counted when picking kit">In advice</th><th>Item</th><th>Slot</th>
             <th>Ride-feel range</th><th class="wx-right">clo</th>
             <th class="wx-right">Wind</th><th class="wx-right">Water</th><th></th>
           </tr>

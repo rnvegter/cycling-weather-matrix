@@ -55,7 +55,10 @@ packable and rain-only.
 calibration rather than any maker's air-temperature claim, so they stay in charge — the
 heat balance is a check on top, allowed to add a gilet only when it is genuinely cold.
 
-The gear screen (`#gear`) adds, edits and removes items. Both the add and edit flows offer a
+The gear screen (`#gear`) adds, edits and removes items. Each row carries an **In / Out**
+toggle deciding whether that garment is considered when picking kit — for anything lent out,
+in the wash, or not packed for a trip — with All In / All Out for the packing case. Clicking a
+row anywhere else selects it for editing, so the two actions never fight each other. Both the add and edit flows offer a
 lookup that fetches manufacturer and retailer pages through the local service and extracts
 the quoted temperature range and fabric technology. Found values are shown next to yours with
 per-field checkboxes — nothing is overwritten silently.

@@ -54,8 +54,11 @@ function renderGear(){
     const bar = it.slot === "eyes"
       ? `<div class="wx-bar wx-bar--empty" style="left:0;right:0">any</div>`
       : `<div class="wx-bar" style="left:${lo}%;right:${100 - hi}%"></div>`;
+    const inUse = !it.off;
     return `<tr data-i="${i}" class="${rampFor(mid)}${it.off ? " is-off" : ""}${i === selected ? " is-sel" : ""}">
-      <td><input type="checkbox" class="have" ${it.off ? "" : "checked"} title="In the wardrobe"></td>
+      <td><button class="wx-toggle" data-act="use" aria-pressed="${inUse}"
+            title="${inUse ? "Counted in the advice. Click to leave it out." : "Left out of the advice. Click to put it back."}"
+          >${inUse ? "In" : "Out"}</button></td>
       <td class="wx-item">${escHtml(it.name)}</td>
       <td class="wx-dim">${SLOT_LABEL[it.slot] || it.slot}</td>
       <td><div class="wx-lane" title="${it.tmin} to ${it.tmax}&deg;C">${bar}</div></td>
@@ -65,18 +68,32 @@ function renderGear(){
       <td class="wx-flagcell">${flags}</td>
     </tr>`;
   }).join("");
-  document.getElementById("gearcount").textContent =
-    `${gear.filter(g => !g.off).length} of ${gear.length} in use`;
+
+  const using = gear.filter(g => !g.off).length;
+  document.getElementById("gearcount").innerHTML =
+    `<b class="wx-num">${using}</b> of ${gear.length} counted in the advice`;
   document.getElementById("gearedit").disabled = selected < 0;
   document.getElementById("geardel").disabled = selected < 0;
+  document.getElementById("gearall").disabled = using === gear.length;
+  document.getElementById("gearnone").disabled = using === 0;
 }
+
+/* Bulk in/out. Packing for a trip is the case that needs it: turn everything
+   off, then switch on the few things going in the bag. */
+document.getElementById("gearall").onclick = () => {
+  gear.forEach(g => g.off = false); saveGear(gear); renderGear();
+};
+document.getElementById("gearnone").onclick = () => {
+  gear.forEach(g => g.off = true); saveGear(gear); renderGear();
+};
 
 document.getElementById("geartable").addEventListener("click", e => {
   const tr = e.target.closest("tr[data-i]");
   if (!tr) return;
   const i = +tr.dataset.i;
-  if (e.target.classList.contains("have")){
-    gear[i].off = !e.target.checked;
+  // In/out is its own control; clicking anywhere else picks the row to edit.
+  if (e.target.closest('[data-act="use"]')){
+    gear[i].off = !gear[i].off;
     saveGear(gear);
     renderGear();
     return;
