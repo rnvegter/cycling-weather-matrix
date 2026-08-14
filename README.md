@@ -142,6 +142,18 @@ The verdict compares what you'd have to **put on or take off**, not garment name
 near-equivalent jerseys swapping over a single degree is the model breaking a tie, not the ride
 needing different kit, and reporting that as a change would cry wolf on every route.
 
+When the kit doesn't hold, it says what to bring. The distinction that decides everything is
+what you can change at the roadside: arm warmers, a gilet, gloves and overshoes go on and come
+off in a layby, while a base layer, a jersey and bib tights mean stripping. So the
+unchangeable things are chosen for the **warmest** leg — anything warmer would cook you on the
+climb with no way out — and the cold end is covered by what goes in a pocket, with the
+kilometre and clock time each item goes on.
+
+That plan is then checked rather than assumed: worn plus carried is run back through the heat
+balance at the coldest leg. If a pocket can't close it, the conflict is named as one garment
+with the trade either way, plus any workaround the wardrobe has — the shorts-and-warmers route
+to where tights reach. If nothing closes it, it says so and suggests shortening the ride.
+
 ## Look
 
 An instrument rather than a lifestyle app: it gets read on a phone at 06:40 in December,

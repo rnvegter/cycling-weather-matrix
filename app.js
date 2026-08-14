@@ -302,6 +302,102 @@ function legWeather(fc, leg, opts){
   };
 }
 
+/* ---------------------------------------------------------------
+   What to carry when one outfit won't cover the whole route.
+
+   The distinction that matters is what you can actually change at the
+   roadside. Arm warmers, a gilet, gloves and overshoes go on and come off in a
+   layby. A base layer, a jersey and bib tights do not — changing those means
+   stripping, so they have to be right from the start or not at all.
+----------------------------------------------------------------*/
+const POCKETABLE_SLOTS = new Set(["arms","hands","head","feet","legextra","eyes","vest"]);
+const canCarry = it => !!it.pack || POCKETABLE_SLOTS.has(it.slot);
+
+function packingPlan(analysis, opts){
+  const {legs, coldest, warmest} = analysis;
+  const km = n => `${Math.round(n)} km`;
+  const bySlotWarmest = items => {
+    const m = new Map();
+    items.forEach(it => { const c = m.get(it.slot); if (!c || it.clo > c.clo) m.set(it.slot, it); });
+    return [...m.values()];
+  };
+
+  /* You can add a layer at the roadside; you cannot take off a jersey. So the
+     things you can't change are chosen for the WARMEST leg — anything warmer
+     would cook you on the climb with no way out — and the cold end is covered
+     by what you carry. */
+  const wear = warmest.out.wear.filter(i => !canCarry(i));
+
+  /* Carry one item per slot: the warmest anything asks for. Carrying both knee
+     warmers and leg warmers is just carrying knee warmers you won't use. */
+  const carryCandidates = bySlotWarmest(legs.flatMap(l => l.out.wear.filter(canCarry)));
+  const wornNames = new Set(wear.map(i => i.name));
+
+  const carry = [];
+  const wornOn = it => legs.filter(l => l.out.wear.some(x => x.name === it.name));
+  carryCandidates.forEach(it => {
+    if (wornNames.has(it.name)) return;
+    // On when the model first actually picks it, not merely when the temperature
+    // touches the top of its range — those are different moments on a climb.
+    const used = wornOn(it);
+    const leg = used[0] || coldest;
+    carry.push({item: it, leg, fromStart: leg === legs[0],
+                at: km(leg.fromKm), time: hhmm(leg.startTime)});
+  });
+
+  /* Does what you're wearing plus everything you're carrying actually cover the
+     coldest leg? Check it rather than assume it. */
+  const combined = [...wear, ...carry.map(c => c.item)];
+  const hb = heatBalance(coldest.f, coldest.w, coldest.opts, combined);
+  const holds = hb.ratio >= 0.8;
+
+  /* Where it doesn't hold, the conflict is in a slot you can't change: name the
+     one garment, the trade either way, and any workaround the wardrobe has. */
+  const conflicts = [];
+  if (!holds){
+    const warmBySlot = new Map(wear.map(i => [i.slot, i]));
+    coldest.out.wear.filter(i => !canCarry(i)).forEach(cold => {
+      const warm = warmBySlot.get(cold.slot);
+      if (warm && warm.name === cold.name) return;
+      let fix;
+      if (cold.slot === "legs" && warm && warm.short){
+        const bridge = gear.filter(x => !x.off && x.slot === "legextra"
+                          && coldest.f.feel >= x.tmin && coldest.f.feel <= x.tmax)
+                        .sort((a, b) => b.clo - a.clo)[0];
+        fix = bridge
+          ? `Stay in the ${warm.name.toLowerCase()} and carry ${bridge.name.toLowerCase()} — same reach, and they roll into a pocket.`
+          : `Nothing you own bridges this mid-ride. Start in them and run warm early, or take the cold end as it comes.`;
+      } else if (warm && warmest.f.feel <= cold.tmax){
+        fix = `Wear the ${cold.name} from the start instead — the warmest leg is still inside its range, so it won't cook you.`;
+      } else {
+        fix = `Starting in it means running warm until ${km(coldest.fromKm)}. That is the trade, and on a long climb it is usually the wrong side of it.`;
+      }
+      conflicts.push({cold, warm, fix});
+    });
+  }
+
+  /* Anything worn from the start that the route stops wanting, and that can
+     actually come off. */
+  const lastNeed = new Map();
+  legs.forEach(leg => leg.out.wear.forEach(it => lastNeed.set(it.name, leg)));
+  const shedAt = [];
+  [...wear, ...carry.filter(c => c.fromStart).map(c => c.item)].forEach(it => {
+    if (!canCarry(it)) return;
+    const last = lastNeed.get(it.name);
+    if (!last || last === legs[legs.length - 1]) return;
+    const next = legs[legs.indexOf(last) + 1];
+    // Only shed into warmth. The model dropping a garment because it swapped to
+    // a warmer one is not a reason to take a layer off — and on this route that
+    // read as "shed the wind jacket" at the coldest point of the day.
+    if (next && next.f.feel > last.f.feel) {
+      shedAt.push({item: it, at: km(next.fromKm), time: hhmm(next.startTime)});
+    }
+  });
+
+  return {wear, carry, conflicts, shedAt, holds,
+          worn: r2(hb.worn), required: r2(hb.required)};
+}
+
 /* Does one outfit differ from another in a way worth mentioning? */
 const outfitKey = out => out.wear.map(i => i.name).sort().join("|");
 
@@ -324,6 +420,7 @@ async function analyseRoute(route, opts){
     });
     leg.climbing = climbing; leg.descending = descending;
     leg.w = w;
+    leg.opts = legOpts;
     leg.f = rideFeel(w, legOpts);
     leg.out = state.mode === "wardrobe" ? pickOutfit(leg.f, w, legOpts, gear)
                                         : genericOutfit(leg.f, w, legOpts);
@@ -348,7 +445,10 @@ async function analyseRoute(route, opts){
 
   const changes = extra.length > 0 || shed.length > 0 || spread >= 3;
 
-  return {legs, coldest, warmest, extra, shed, swaps, changes, spread};
+  const result = {legs, coldest, warmest, extra, shed, swaps, changes, spread};
+  // Only the wardrobe knows what packs; the generic list has no such detail.
+  if (changes && state.mode === "wardrobe") result.plan = packingPlan(result, opts);
+  return result;
 }
 
 /* ---------------------------------------------------------------
@@ -526,9 +626,55 @@ function render(f, w, opts, place, analysis){
         Coldest is ${coldest.f.feel}&deg; around ${km(coldest.fromKm)}${
           coldest.ele != null && route.stats.hasElevation ? ` at ${Math.round(coldest.ele)} m` : ""},
         warmest ${warmest.f.feel}&deg; around ${km(warmest.fromKm)}.</p>
-      ${extra.length ? `<p class="wx-note"><b>The cold end wants</b> ${extra.join(", ")} —
-        carry what you can rather than starting in it.</p>` : ""}
-      ${shed.length ? `<p class="wx-note"><b>The warm end doesn't want</b> ${shed.join(", ")}.</p>` : ""}`}
+
+      ${analysis.plan ? (() => {
+        const {wear: pWear, carry, conflicts, shedAt, holds, worn, required} = analysis.plan;
+        return `
+        <h3 class="wx-heading" style="margin-top:var(--sp-4)">To make it hold</h3>
+        <div class="wx-kit">
+          ${pWear.length ? `
+          <div class="wx-kit__row">
+            <div class="wx-kit__zone">Wear</div>
+            <p class="wx-kit__items">${pWear.map(i => i.name).join(", ")}
+              <em>Chosen for the warmest leg, because a jersey can't come off at the roadside.</em></p>
+          </div>` : ""}
+          ${carry.map(c => `
+            <div class="wx-kit__row">
+              <div class="wx-kit__zone">${c.fromStart ? "On now" : "Carry"}</div>
+              <p class="wx-kit__items">${c.item.name}
+                <em>${c.fromStart
+                  ? "Wanted from the off."
+                  : `On around ${c.at}, about ${c.time}, where it reads ${c.leg.f.feel}&deg;.`}${
+                  c.item.pack ? " Packs into a pocket." : ""}</em></p>
+            </div>`).join("")}
+          ${shedAt.map(sd => `
+            <div class="wx-kit__row">
+              <div class="wx-kit__zone">Shed</div>
+              <p class="wx-kit__items">${sd.item.name}
+                <em>Off around ${sd.at}, about ${sd.time} — into a pocket, not left behind.</em></p>
+            </div>`).join("")}
+          ${conflicts.map(c => `
+            <div class="wx-kit__row">
+              <div class="wx-kit__zone">Decide</div>
+              <p class="wx-kit__items">${c.cold.name} against ${c.warm ? c.warm.name : "nothing"}
+                <em>${c.fix}</em></p>
+            </div>`).join("")}
+        </div>
+
+        ${holds
+          ? `<p class="wx-note">Everything the cold end needs goes in a pocket, so start in what
+             the warm legs want and add as the route cools. Worn and carried together come to
+             ${worn} clo against ${required} required at the coldest point.</p>`
+          : `<p class="wx-alert"><b>Carrying isn't enough on its own.</b> Even with everything
+             above on, the coldest leg wants ${required} clo and this gives ${worn}. ${
+               conflicts.length
+                 ? "The decision above is the one that closes it."
+                 : "And nothing else in your gear closes it — this route is colder than what you have with you. Shorten it, start later when it has warmed, or go back for more kit."
+             }</p>`}`;
+      })() : `
+        ${extra.length ? `<p class="wx-note"><b>The cold end wants</b> ${extra.join(", ")} —
+          carry what you can rather than starting in it.</p>` : ""}
+        ${shed.length ? `<p class="wx-note"><b>The warm end doesn't want</b> ${shed.join(", ")}.</p>` : ""}`}`}
 
     ${(() => {
       const hard = legs.filter(l => l.w.headwind >= 15);
