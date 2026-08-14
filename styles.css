@@ -777,3 +777,97 @@ input[type="checkbox"] { accent-color: var(--temp); width: auto; min-height: 0; 
 .wx-hidden { display: none !important; }
 
 @media print { .wx-tabs, .wx-bar-row, .wx-form, .wx-suggest { display: none; } }
+
+/* ---------- 16. Sky, wind and the hours ahead ---------------- */
+
+/* The hourly strip. Ride hours are lit; the hours after are dimmed but
+   present, because a shower that lands twenty minutes after you'd be home
+   is worth seeing before you decide how long to go out for. */
+
+.wx-hours { display: flex; gap: 1px; min-width: min-content; }
+
+.wx-hour {
+  flex: 0 0 3.9rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: var(--sp-2) var(--sp-1);
+  background: var(--surface-2);
+  border-top: var(--edge) solid transparent;
+  opacity: .45;
+}
+.wx-hour.is-riding { opacity: 1; border-top-color: var(--temp); }
+
+.wx-hour__time {
+  font-family: var(--data);
+  font-size: .68rem;
+  letter-spacing: .04em;
+  color: var(--text-dim);
+}
+.wx-hour__temp {
+  font-family: var(--data);
+  font-weight: 600;
+  font-size: var(--step-0);
+  color: var(--temp);
+}
+.wx-hour__wind {
+  display: flex; align-items: center; gap: 2px;
+  font-size: .66rem; color: var(--text-dim);
+}
+.wx-hour__rain { font-family: var(--data); font-size: .64rem; color: var(--text-dim); }
+.wx-hour__rain.is-wet { color: var(--minus); font-weight: 600; }
+
+.wx-ico { display: block; }
+.wx-windarrow { color: var(--text-dim); flex: 0 0 auto; }
+
+/* --- Wind and route --- */
+
+.wx-windgrid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--sp-5);
+  align-items: center;
+}
+@media (max-width: 30rem) {
+  .wx-windgrid { grid-template-columns: 1fr; gap: var(--sp-3); justify-items: center; }
+  .wx-windgrid > div:last-child { justify-self: stretch; }
+}
+.wx-rosewrap { line-height: 0; }
+.wx-rose { display: block; }
+
+/* Beaufort, because that is the unit the forecast gets discussed in here,
+   and the number carries more than a speed does. */
+.wx-bft { display: flex; align-items: baseline; gap: var(--sp-2); flex-wrap: wrap; }
+.wx-bft__n {
+  font-family: var(--data);
+  font-weight: 600;
+  font-size: var(--step-3);
+  line-height: .9;
+  color: var(--minus);
+}
+.wx-bft__u {
+  font-family: var(--display);
+  font-size: var(--step-0);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--text-dim);
+}
+.wx-bft__name {
+  font-family: var(--display);
+  font-size: var(--step-1);
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+
+.wx-startdir {
+  margin: var(--sp-3) 0 0;
+  padding-left: var(--sp-3);
+  border-left: var(--edge) solid var(--temp);
+  font-size: var(--step-0);
+}
+.wx-startdir b { color: var(--temp); }
+
+[data-touch="gloves"] .wx-hour { flex-basis: 4.8rem; }
+
+@media print { .wx-hour { opacity: 1; } }

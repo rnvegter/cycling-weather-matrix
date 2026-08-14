@@ -83,6 +83,24 @@ The inference fallback is fitted against the seeded wardrobe: mean error 0.016 c
 The fallback means the button always returns something, but treat a low-confidence result as
 a starting point rather than an answer.
 
+## The hours ahead, and which way to set off
+
+The forecast runs from the start hour to a few hours past the planned finish, so a shower
+landing twenty minutes after you would be home is visible before you decide how long to go
+out for. Riding hours are lit; the rest are dimmed but present. Each hour carries its sky as
+an inline SVG icon tinted from the ramp, its temperature, an arrow pointing the way the wind
+is blowing, and the chance of rain.
+
+Wind gets a compass rose, a **Beaufort** force with what that force means on a bike, and a
+bearing to set off on. The rule is out into it, home with it: the return leg is the one ridden
+tired, and a headwind there is what actually makes people cold. The bearing follows the wind
+in the **second half** of the ride rather than the average, because that is the wind the way
+home is ridden in — and when the two differ by more than 40° the app says so rather than
+quietly picking one.
+
+Below force 3 it says the wind isn't worth planning a route around, instead of inventing
+advice.
+
 ## Look
 
 An instrument rather than a lifestyle app: it gets read on a phone at 06:40 in December,

@@ -116,7 +116,7 @@ async function forecast(lat, lon){
   const url = "https://api.open-meteo.com/v1/forecast"
     + `?latitude=${lat}&longitude=${lon}`
     + "&hourly=temperature_2m,precipitation_probability,precipitation,cloud_cover,"
-    + "wind_speed_10m,wind_direction_10m,wind_gusts_10m,is_day"
+    + "wind_speed_10m,wind_direction_10m,wind_gusts_10m,is_day,weather_code,apparent_temperature"
     + "&daily=sunrise,sunset&timezone=auto&forecast_days=16&past_days=2";
   const r = await fetch(url);
   if (!r.ok) throw new Error("Forecast request failed");
@@ -133,11 +133,19 @@ function rideWindow(fc, dateStr, timeStr, hours){
 
   const temps=g("temperature_2m"), winds=g("wind_speed_10m"), gusts=g("wind_gusts_10m"),
         precip=g("precipitation"), probs=g("precipitation_probability"),
-        cloud=g("cloud_cover"), day=g("is_day"), dirs=g("wind_direction_10m");
+        cloud=g("cloud_cover"), day=g("is_day"), dirs=g("wind_direction_10m"),
+        codes=g("weather_code");
 
-  let sx=0, sy=0;
-  dirs.forEach(d => { const rad=d*Math.PI/180; sx+=Math.cos(rad); sy+=Math.sin(rad); });
-  const dirMean = ((Math.atan2(sy,sx)*180/Math.PI)+360)%360;
+  // Directions are angles, so they average on the unit circle — a naive mean of
+  // 350° and 10° gives 180°, which is the exact opposite of the truth.
+  const meanDir = list => {
+    let sx=0, sy=0;
+    list.forEach(d => { const rad=d*Math.PI/180; sx+=Math.cos(rad); sy+=Math.sin(rad); });
+    return ((Math.atan2(sy,sx)*180/Math.PI)+360)%360;
+  };
+  const dirMean = meanDir(dirs);
+  // The return leg is ridden in the later wind, and that is the leg that hurts.
+  const dirLate = meanDir(dirs.slice(Math.floor(dirs.length/2)));
 
   const dayIdx = fc.daily.time.indexOf(dateStr);
   const sunrise = dayIdx>=0 ? fc.daily.sunrise[dayIdx] : null;
@@ -160,8 +168,26 @@ function rideWindow(fc, dateStr, timeStr, hours){
     precipTotal: precip.reduce((a,b)=>a+b,0), precipPeak: Math.max(...precip),
     prob: Math.max(...probs), cloud: cloud.reduce((a,b)=>a+b,0)/cloud.length,
     dark: darkFrac, wetHours: precip.filter(p => p >= 0.1).length, hoursCount: idx.length,
-    sunrise, sunset,
-    hourly: idx.map((k,n) => ({time:times[k], t:temps[n], wind:winds[n], precip:precip[n], prob:probs[n]}))
+    sunrise, sunset, dirLate,
+    hourly: idx.map((k,n) => ({
+      time:times[k], t:temps[n], wind:winds[n], precip:precip[n], prob:probs[n],
+      dir:dirs[n], gust:gusts[n], code:codes[n], day:day[n], cloud:cloud[n]
+    })),
+    // What is coming: the ride hours plus a few beyond, so a shower arriving
+    // just after the planned finish is visible rather than a surprise.
+    outlook: (() => {
+      const out = [];
+      for (let k = i; k <= Math.min(times.length - 1, last + 3); k++){
+        const h = fc.hourly;
+        out.push({
+          time: times[k], t: h.temperature_2m[k], wind: h.wind_speed_10m[k],
+          gust: h.wind_gusts_10m[k], dir: h.wind_direction_10m[k],
+          precip: h.precipitation[k], prob: h.precipitation_probability[k],
+          code: h.weather_code[k], day: h.is_day[k], riding: k <= last
+        });
+      }
+      return out;
+    })()
   };
 }
 
@@ -216,6 +242,27 @@ function render(f, w, opts, place){
     <div class="wx-scale"><span>&minus;5&deg;</span><span>5&deg;</span><span>15&deg;</span><span>25&deg;</span></div>
   </section>
 
+  <section class="wx-card wx-card--flat ${ramp}">
+    <div class="wx-card__head">
+      <h2 class="wx-heading">The next hours</h2>
+      <span class="wx-eyebrow" style="margin:0">Riding hours lit</span>
+    </div>
+    <div class="wx-scroll">
+      <div class="wx-hours">${w.outlook.map(h => `
+        <div class="wx-hour${h.riding ? " is-riding" : ""} ${rampFor(h.t)}">
+          <div class="wx-hour__time">${fmtTime(h.time)}</div>
+          ${skyIcon(h.code, h.day, 26)}
+          <div class="wx-hour__temp">${Math.round(h.t)}&deg;</div>
+          <div class="wx-hour__wind">${windArrow(h.dir)}<span class="wx-num">${Math.round(h.wind)}</span></div>
+          <div class="wx-hour__rain${h.prob >= 40 ? " is-wet" : ""}">${Math.round(h.prob)}%</div>
+        </div>`).join("")}</div>
+    </div>
+    <p class="wx-note">${skyFor(w.outlook[0].code)[1]} at the start${
+      w.outlook.some(h => !h.riding && h.prob >= 50)
+        ? `, and it turns wet after you would be home, around ${fmtTime(w.outlook.find(h => !h.riding && h.prob >= 50).time)}`
+        : ""}. Arrows point the way the wind is blowing.</p>
+  </section>
+
   <section class="wx-card ${ramp}">
     <div class="wx-card__head">
       <h2 class="wx-heading">Wear</h2>
@@ -233,6 +280,46 @@ function render(f, w, opts, place){
         <p class="wx-kit__items">${it.name}${why ? ` <em>${why}</em>` : ""}</p>
       </div>`).join("")}</div>
   </section>` : ""}
+
+  ${(() => {
+    const bft = beaufort(w.wind), gustBft = beaufort(w.gust);
+    // Ride out into the wind so the way home has it behind: the return leg is
+    // ridden tired, and a headwind there is what actually makes people cold.
+    const outbound = w.dirLate;
+    const shifts = angleGap(w.dir, w.dirLate) > 40;
+    const matters = bft.force >= 3;
+    return `
+  <section class="wx-card ${ramp}">
+    <div class="wx-card__head">
+      <h2 class="wx-heading">Wind, and which way to go</h2>
+      <span class="wx-eyebrow" style="margin:0">Out into it, home with it</span>
+    </div>
+    <div class="wx-windgrid">
+      <div class="wx-rosewrap">${compassRose(w.dir, outbound, 148)}</div>
+      <div>
+        <div class="wx-bft">
+          <span class="wx-bft__n">${bft.force}</span>
+          <span class="wx-bft__u">Bft</span>
+          <span class="wx-bft__name">${bft.name}</span>
+        </div>
+        <p class="wx-note" style="margin-top:var(--sp-2)">
+          From the <b>${compass(w.dir)}</b>, ${Math.round(w.wind)} km/h${
+            w.gust >= w.wind + 12 ? `, gusting ${Math.round(w.gust)} which is force ${gustBft.force}` : ""}.
+          ${bft.note}
+        </p>
+        ${matters ? `
+        <p class="wx-startdir"><b>Set off towards the ${compass(outbound)}.</b>
+          That puts the wind in your face going out and behind you coming back,
+          which is the leg you ride tired.</p>
+        ${shifts ? `<p class="wx-note">It veers from ${compass(w.dir)} to ${compass(w.dirLate)}
+          across the ride, so this bearing follows the later wind, which is what
+          you will actually be riding home in.</p>` : ""}`
+        : `<p class="wx-note">Force ${bft.force} is not worth planning a route around.
+           Go whichever way you like.</p>`}
+      </div>
+    </div>
+  </section>`;
+  })()}
 
   ${out.notes.map(n => `<p class="wx-alert">${n}</p>`).join("")}
   ${watch.map(x => `<p class="wx-alert"><b>Watch.</b> ${x}</p>`).join("")}
