@@ -671,7 +671,7 @@ input[type="checkbox"] { accent-color: var(--temp); width: auto; min-height: 0; 
 
 /* --- Gear list --- */
 
-.wx-gear { min-width: 40rem; }
+.wx-gear { min-width: 48rem; }
 .wx-gear tbody tr { cursor: pointer; }
 .wx-gear tbody tr:hover td { background: var(--surface-2); }
 .wx-gear tr.is-off td { opacity: .38; }
@@ -901,3 +901,68 @@ input[type="checkbox"] { accent-color: var(--temp); width: auto; min-height: 0; 
 [data-touch="gloves"] .wx-hour { flex-basis: 4.8rem; }
 
 @media print { .wx-hour { opacity: 1; } }
+
+/* ---------- 17. Gear table header controls ------------------- */
+
+.wx-th { display: flex; align-items: center; gap: var(--sp-2); white-space: nowrap; }
+.wx-right .wx-th { justify-content: flex-end; }
+
+.wx-th__label { cursor: help; border-bottom: 1px dotted var(--line); }
+.wx-th__label:hover, .wx-th__label:focus-visible { color: var(--text); border-bottom-color: var(--text-dim); }
+
+.wx-th__btns { display: flex; gap: 1px; }
+
+.wx-hbtn {
+  width: 22px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0;
+  font-size: 11px;
+  line-height: 1;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.wx-hbtn:hover { color: var(--text); border-color: var(--line); }
+.wx-hbtn svg { display: block; }
+.wx-hbtn.is-on { color: var(--bg); background: var(--text); border-color: var(--text); }
+[data-touch="gloves"] .wx-hbtn { width: 30px; height: 30px; font-size: 13px; }
+
+.wx-empty { text-align: center; color: var(--text-dim); padding: var(--sp-5) var(--sp-3); }
+.wx-link {
+  background: none; border: 0; padding: 0;
+  color: var(--text); text-decoration: underline; cursor: pointer; font: inherit;
+}
+
+/* --- Tooltip and filter popover --- */
+
+.wx-tip, .wx-pop {
+  position: fixed;
+  z-index: 50;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 6px 24px rgba(0,0,0,.35);
+}
+.wx-tip {
+  max-width: 22rem;
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--step--1);
+  line-height: 1.45;
+  color: var(--text);
+  pointer-events: none;
+}
+.wx-pop {
+  width: min(20rem, calc(100vw - 2rem));
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: var(--sp-3);
+  border-left: var(--edge) solid var(--temp);
+}
+.wx-poplist { max-height: 14rem; overflow-y: auto; display: flex; flex-direction: column; gap: var(--sp-1); }
+.wx-poprow { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); }
+.wx-pop .wx-check { padding: var(--sp-1) 0; }
+.wx-pop .wx-input { min-height: 36px; }
+
+@media print { .wx-th__btns, .wx-tip, .wx-pop { display: none; } }

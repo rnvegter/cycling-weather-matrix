@@ -58,7 +58,17 @@ heat balance is a check on top, allowed to add a gilet only when it is genuinely
 The gear screen (`#gear`) adds, edits and removes items. Each row carries an **In / Out**
 toggle deciding whether that garment is considered when picking kit — for anything lent out,
 in the wash, or not packed for a trip — with All In / All Out for the packing case. Clicking a
-row anywhere else selects it for editing, so the two actions never fight each other. Both the add and edit flows offer a
+row anywhere else selects it for editing, so the two actions never fight each other.
+
+Brand and model are separate fields, so the table sorts and filters by maker. Every column
+header carries its description on hover or keyboard focus, plus a sort button cycling
+ascending, descending and off, and a filter shaped to the column: a checklist for brand and
+slot, contains-text for model, min and max for the numbers, and for the range a single
+temperature that asks the question actually worth asking — *what covers 8°C?* Filters stack,
+and the row count says how many are showing.
+
+Columns are declared once in `GEAR_COLS`, which carries each label, description, sort
+accessor and filter type, so the header controls can't drift out of step with the data. Both the add and edit flows offer a
 lookup that fetches manufacturer and retailer pages through the local service and extracts
 the quoted temperature range and fabric technology. Found values are shown next to yours with
 per-field checkboxes — nothing is overwritten silently.

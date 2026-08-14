@@ -125,6 +125,7 @@
       <button id="gearexport" class="wx-btn wx-btn--quiet">Export</button>
       <label class="wx-file" for="gearimport">Import</label>
       <input type="file" id="gearimport" accept="application/json" class="wx-hidden">
+      <button id="gearclearall" class="wx-btn wx-btn--quiet wx-hidden">Clear sort &amp; filters</button>
       <button id="gearreset" class="wx-btn wx-btn--quiet">Reset</button>
     </div>
 
@@ -132,9 +133,12 @@
     <div id="gearform" class="wx-form wx-hidden">
       <h3 class="wx-heading" id="formtitle">Add gear</h3>
 
-      <div class="wx-grid wx-grid--2">
-        <div><label class="wx-label" for="f-name">Item</label>
-          <input id="f-name" class="wx-input" placeholder="Oakley Radar EV photochromic"></div>
+      <div class="wx-grid wx-grid--3">
+        <div><label class="wx-label" for="f-brand">Brand</label>
+          <input id="f-brand" class="wx-input" placeholder="Oakley" list="brandlist">
+          <datalist id="brandlist"></datalist></div>
+        <div><label class="wx-label" for="f-model">Model</label>
+          <input id="f-model" class="wx-input" placeholder="Radar EV photochromic"></div>
         <div><label class="wx-label" for="f-slot">Slot</label>
           <select id="f-slot" class="wx-input"></select></div>
       </div>
@@ -178,13 +182,7 @@
 
     <div class="wx-scroll" style="margin-top:var(--sp-4)">
       <table class="wx-table wx-gear" id="geartable">
-        <thead>
-          <tr>
-            <th title="Counted when picking kit">In advice</th><th>Item</th><th>Slot</th>
-            <th>Ride-feel range</th><th class="wx-right">clo</th>
-            <th class="wx-right">Wind</th><th class="wx-right">Water</th><th></th>
-          </tr>
-        </thead>
+        <thead></thead>
         <tbody></tbody>
       </table>
     </div>
@@ -197,6 +195,11 @@
   <a href="https://pacompendium.com/bicycling/">Compendium of Physical Activities</a>,
   wind correction after ISO 11079 / 9920.
 </footer>
+
+<!-- Fixed-position, on the body: the table scrolls horizontally and would clip
+     anything positioned inside it. -->
+<div id="geartip" class="wx-tip wx-hidden" role="tooltip"></div>
+<div id="gearpop" class="wx-pop wx-hidden"></div>
 
 </div>
 
