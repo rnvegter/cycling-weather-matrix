@@ -17,15 +17,28 @@ let originalItem = null;    // snapshot, to detect edits
 
 /* --- Screens ---------------------------------------------------- */
 function showScreen(name){
-  document.getElementById("screen-ride").classList.toggle("hidden", name !== "ride");
-  document.getElementById("screen-gear").classList.toggle("hidden", name !== "gear");
-  document.querySelectorAll(".tab").forEach(t =>
+  document.getElementById("screen-ride").classList.toggle("wx-hidden", name !== "ride");
+  document.getElementById("screen-gear").classList.toggle("wx-hidden", name !== "gear");
+  document.querySelectorAll(".wx-tab[data-screen]").forEach(t =>
     t.setAttribute("aria-pressed", t.dataset.screen === name ? "true" : "false"));
   if (location.hash !== "#" + name) history.replaceState(null, "", "#" + name);
   window.scrollTo(0, 0);
 }
-document.querySelectorAll(".tab").forEach(t => t.onclick = () => showScreen(t.dataset.screen));
+// Only the tabs that name a screen — the glove toggle sits in the same row.
+document.querySelectorAll(".wx-tab[data-screen]").forEach(t =>
+  t.onclick = () => showScreen(t.dataset.screen));
 window.addEventListener("hashchange", () => showScreen(location.hash === "#gear" ? "gear" : "ride"));
+
+/* Glove mode: bigger targets and type. Not an accessibility afterthought —
+   it's the intended winter state, so it persists between rides. */
+function setGloves(on){
+  document.documentElement.dataset.touch = on ? "gloves" : "";
+  document.getElementById("gloves").setAttribute("aria-pressed", String(on));
+  try{ localStorage.setItem("cwem-gloves", on ? "1" : ""); }catch(e){}
+}
+document.getElementById("gloves").onclick = () =>
+  setGloves(document.documentElement.dataset.touch !== "gloves");
+try{ if (localStorage.getItem("cwem-gloves")) setGloves(true); }catch(e){}
 
 /* --- List ------------------------------------------------------- */
 const escHtml = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");
@@ -33,16 +46,23 @@ const escHtml = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replac
 function renderGear(){
   const tbody = document.querySelector("#geartable tbody");
   tbody.innerHTML = gear.map((it, i) => {
-    const flags = [it.short && "SS", it.pack && "pack", it.rainOnly && "rain"].filter(Boolean).join(" · ");
-    return `<tr data-i="${i}" class="${it.off ? "gear-off" : ""} ${i === selected ? "gear-sel" : ""}">
+    const flags = [it.short && "SS", it.pack && "PACK", it.rainOnly && "RAIN"].filter(Boolean).join(" ");
+    // The range drawn rather than written: the same band chart as the ride
+    // screen, so a hole in the wardrobe shows up as a hole in the column.
+    const lo = rampPos(it.tmin), hi = rampPos(it.tmax);
+    const mid = (it.tmin + it.tmax) / 2;
+    const bar = it.slot === "eyes"
+      ? `<div class="wx-bar wx-bar--empty" style="left:0;right:0">any</div>`
+      : `<div class="wx-bar" style="left:${lo}%;right:${100 - hi}%"></div>`;
+    return `<tr data-i="${i}" class="${rampFor(mid)}${it.off ? " is-off" : ""}${i === selected ? " is-sel" : ""}">
       <td><input type="checkbox" class="have" ${it.off ? "" : "checked"} title="In the wardrobe"></td>
-      <td class="gname">${escHtml(it.name)}</td>
-      <td>${SLOT_LABEL[it.slot] || it.slot}</td>
-      <td class="num">${it.tmin} to ${it.tmax}</td>
-      <td class="num">${it.clo}</td>
-      <td class="num">${it.wind}</td>
-      <td class="num">${it.water}</td>
-      <td class="flags">${flags}</td>
+      <td class="wx-item">${escHtml(it.name)}</td>
+      <td class="wx-dim">${SLOT_LABEL[it.slot] || it.slot}</td>
+      <td><div class="wx-lane" title="${it.tmin} to ${it.tmax}&deg;C">${bar}</div></td>
+      <td class="wx-right wx-num">${it.clo}</td>
+      <td class="wx-right wx-num">${it.wind}</td>
+      <td class="wx-right wx-num">${it.water}</td>
+      <td class="wx-flagcell">${flags}</td>
     </tr>`;
   }).join("");
   document.getElementById("gearcount").textContent =
@@ -102,19 +122,19 @@ function openForm(mode, index){
     ? normaliseItem({name:"", slot:"mid", tmin:5, tmax:15, clo:0.2, wind:0.3, water:0})
     : gear[editIndex]);
   originalItem = JSON.stringify(readForm());
-  document.getElementById("gearform").classList.remove("hidden");
-  document.getElementById("f-result").classList.add("hidden");
+  document.getElementById("gearform").classList.remove("wx-hidden");
+  document.getElementById("f-result").classList.add("wx-hidden");
   document.getElementById("f-result").innerHTML = "";
   document.getElementById("f-lookupnote").textContent = "";
   // Add offers the lookup straight away; edit only offers it once something changed.
-  F("lookup").classList.toggle("hidden", mode !== "add");
-  F("update").classList.add("hidden");
+  F("lookup").classList.toggle("wx-hidden", mode !== "add");
+  F("update").classList.add("wx-hidden");
   document.getElementById("f-dirty").textContent = "";
   F("name").focus();
 }
 function closeForm(){
   formMode = null; editIndex = -1; lastLookup = null; originalItem = null;
-  document.getElementById("gearform").classList.add("hidden");
+  document.getElementById("gearform").classList.add("wx-hidden");
 }
 
 /* In edit mode, changing anything reveals the Update button — pressing it
@@ -122,7 +142,7 @@ function closeForm(){
 document.getElementById("gearform").addEventListener("input", () => {
   if (formMode !== "edit" || !originalItem) return;
   const changed = JSON.stringify(readForm()) !== originalItem;
-  F("update").classList.toggle("hidden", !changed);
+  F("update").classList.toggle("wx-hidden", !changed);
   document.getElementById("f-dirty").textContent = changed ? "Unsaved changes" : "";
 });
 
@@ -186,31 +206,30 @@ function renderLookup(d){
     ["wind",  "Wind",  cur.wind,  d.wind],
     ["water", "Water", cur.water, d.water]
   ];
-
   const rangeDiffers = d.tmin !== cur.tmin || d.tmax !== cur.tmax;
 
   box.innerHTML = `
-    <div class="lookupres">
-      <div class="lookuphead">
-        <strong>Found</strong>
-        <span class="badge badge-${d.confidence}">${d.confidence} confidence</span>
-        <span class="hint">via ${escHtml(d.source)}</span>
+    <div class="wx-found ${rampFor((d.tmin + d.tmax) / 2)}">
+      <div class="wx-found__head">
+        <span class="wx-eyebrow" style="margin:0">Found</span>
+        <span class="wx-badge wx-badge--${d.confidence}">${d.confidence}</span>
+        <span class="wx-note" style="margin:0">via ${escHtml(d.source)}</span>
       </div>
 
-      <table class="cmp">
-        <thead><tr><th>Property</th><th class="num">Yours</th><th class="num">Found</th><th>Use</th></tr></thead>
+      <table class="wx-table wx-cmp">
+        <thead><tr><th>Property</th><th class="wx-right">Yours</th><th class="wx-right">Found</th><th>Use</th></tr></thead>
         <tbody>
-          ${rows.map(([k,label,mine,found]) => `
+          ${rows.map(([k, label, mine, found]) => `
             <tr>
               <td>${label}</td>
-              <td class="num">${mine}</td>
-              <td class="num ${found !== mine ? "changed" : ""}">${found}</td>
+              <td class="wx-right wx-num">${mine}</td>
+              <td class="wx-right wx-num ${found !== mine ? "wx-new" : ""}">${found}</td>
               <td><input type="checkbox" class="use" data-k="${k}" ${found !== mine ? "checked" : ""}></td>
             </tr>`).join("")}
           <tr>
-            <td>Range °C${d.rangeQuoted ? "" : " <span class='hint'>(derived, not quoted)</span>"}</td>
-            <td class="num">${cur.tmin} to ${cur.tmax}</td>
-            <td class="num ${rangeDiffers ? "changed" : ""}">${d.tmin} to ${d.tmax}</td>
+            <td>Range${d.rangeQuoted ? "" : " <span class='wx-dim'>(derived)</span>"}</td>
+            <td class="wx-right wx-num">${cur.tmin} to ${cur.tmax}</td>
+            <td class="wx-right wx-num ${rangeDiffers ? "wx-new" : ""}">${d.tmin} to ${d.tmax}</td>
             <!-- Left unticked on purpose: a maker's air-temperature claim is weaker
                  evidence than the rider's own ride-feel calibration. -->
             <td><input type="checkbox" class="use" data-k="range"></td>
@@ -218,24 +237,24 @@ function renderLookup(d){
         </tbody>
       </table>
 
-      ${d.rangeQuoted ? `<p class="hint" style="margin:10px 0 0">
-        That range is the maker's own claim, in air temperature. Yours is ride-feel and runs a few
-        degrees colder because you run hot — keep yours unless you've no better evidence.</p>` : ""}
+      ${d.rangeQuoted ? `<p class="wx-note">That range is the maker's claim, in air temperature.
+        Yours is ride-feel and runs colder because you run hot — keep yours unless you have
+        better evidence.</p>` : ""}
 
-      <details style="margin-top:12px" open>
+      <details class="wx-more" open>
         <summary>What this was based on</summary>
-        <ul class="plain">${d.evidence.map(e => `<li>${escHtml(e)}</li>`).join("")}</ul>
-        ${d.sources && d.sources.length ? `<p class="hint" style="margin-top:10px">Read: ${
+        <ul class="wx-why">${d.evidence.map(e => `<li>${escHtml(e)}</li>`).join("")}</ul>
+        ${d.sources && d.sources.length ? `<p class="wx-note">Read: ${
           d.sources.map(u => `<a href="${escHtml(u)}" target="_blank" rel="noreferrer">${escHtml(new URL(u).hostname)}</a>`).join(", ")
         }</p>` : ""}
       </details>
 
-      <div class="gearbar" style="margin-top:12px">
-        <button id="f-apply" class="primary-sm">Apply selected</button>
-        <button id="f-discard">Discard</button>
+      <div class="wx-bar-row">
+        <button id="f-apply" class="wx-btn wx-btn--primary">Apply ticked</button>
+        <button id="f-discard" class="wx-btn wx-btn--quiet">Discard</button>
       </div>
     </div>`;
-  box.classList.remove("hidden");
+  box.classList.remove("wx-hidden");
 
   document.getElementById("f-apply").onclick = () => {
     box.querySelectorAll(".use").forEach(cb => {
@@ -246,10 +265,10 @@ function renderLookup(d){
     });
     if (d.short) F("short").checked = true;
     if (d.pack) F("pack").checked = true;
-    box.classList.add("hidden");
+    box.classList.add("wx-hidden");
     document.getElementById("gearform").dispatchEvent(new Event("input", {bubbles:true}));
   };
-  document.getElementById("f-discard").onclick = () => box.classList.add("hidden");
+  document.getElementById("f-discard").onclick = () => box.classList.add("wx-hidden");
 }
 
 /* --- Import / export / reset ------------------------------------ */

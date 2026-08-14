@@ -23,6 +23,22 @@ const BANDS = [
 ];
 const bandFor = t => BANDS.find(b => t >= b.min) || BANDS[BANDS.length-1];
 
+/* The temperature ramp used for colour. Kept separate from BANDS, which decide
+   what to wear: these are the seven steps of the visual scale, and a garment's
+   colour should not shift just because an advice threshold moved. */
+const RAMP_MIN = -5, RAMP_MAX = 30;
+function rampFor(t){
+  if (t <  -2) return "t-frozen";
+  if (t <   4) return "t-cold";
+  if (t <  10) return "t-cool";
+  if (t <  15) return "t-mild";
+  if (t <  20) return "t-warm";
+  if (t <  25) return "t-hot";
+  return "t-baking";
+}
+/* Position on the ramp, 0–100%, for markers and range bars. */
+const rampPos = t => clamp((t - RAMP_MIN) / (RAMP_MAX - RAMP_MIN) * 100, 0, 100);
+
 const BASE_SPEED = {road:27, gravel:22, mtb:16};
 const PACE_SPEED = {easy:0.85, steady:1, hard:1.12};
 

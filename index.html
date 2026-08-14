@@ -3,167 +3,182 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cycling Weather Effect Matrix</title>
+<title>Weather Effect — cycling kit</title>
+<meta name="color-scheme" content="dark light">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div class="wrap">
+<div class="wx-shell">
 
-<header>
-  <h1>Cycling Weather Effect Matrix</h1>
-  <p>Ride-feel temperature for the hours you're actually on the bike, and the kit that goes with it.</p>
-  <nav class="tabs">
-    <button class="tab" data-screen="ride" aria-pressed="true">Ride</button>
-    <button class="tab" data-screen="gear" aria-pressed="false">My gear</button>
-  </nav>
-</header>
+<p class="wx-eyebrow">Cycling kit</p>
+<h1 class="wx-title">Weather effect</h1>
 
-<!-- ================= RIDE SCREEN ================= -->
+<nav class="wx-tabs">
+  <button class="wx-tab" data-screen="ride" aria-pressed="true">Ride</button>
+  <button class="wx-tab" data-screen="gear" aria-pressed="false">Gear</button>
+</nav>
+
+<!-- ================= RIDE ================= -->
 <section id="screen-ride">
-  <div class="panel">
-    <h2>The ride</h2>
-    <div class="grid">
-      <div>
-        <label for="loc">Location</label>
-        <div class="row">
-          <div><input id="loc" placeholder="Utrecht, Girona, Dordogne…" autocomplete="off"></div>
-          <button id="search">Search</button>
-          <button id="here" title="Use current position">📍</button>
-        </div>
-        <div id="geo" class="geo-results hidden"></div>
-        <div id="picked" class="hint"></div>
-      </div>
+  <div class="wx-card wx-card--flat">
+    <h2 class="wx-heading">The ride</h2>
 
-      <div class="grid g4">
-        <div><label for="date">Date</label><input type="date" id="date"></div>
-        <div><label for="time">Start time</label><input type="time" id="time" step="900"></div>
-        <div><label for="dist">Distance (km)</label><input type="number" id="dist" min="1" max="600" step="1" placeholder="60"></div>
-        <div><label for="dur">Duration (h)</label><input type="number" id="dur" min="0.25" max="24" step="0.25" placeholder="2.5"></div>
+    <div class="wx-field">
+      <label class="wx-label" for="loc">Where</label>
+      <div class="wx-row">
+        <div class="wx-grow"><input id="loc" class="wx-input" placeholder="Utrecht, Girona, Dordogne" autocomplete="off"></div>
+        <button id="search" class="wx-btn wx-btn--quiet">Find</button>
+        <button id="here" class="wx-btn wx-btn--quiet" title="Use current position">Here</button>
       </div>
-      <div class="hint" id="speedhint"></div>
-
-      <div class="grid g3">
-        <div><label>Ride type</label>
-          <div class="pill-row" data-group="type">
-            <button class="pill" data-v="road">Road</button>
-            <button class="pill" data-v="gravel">Gravel</button>
-            <button class="pill" data-v="mtb">MTB</button>
-          </div></div>
-        <div><label>Pace</label>
-          <div class="pill-row" data-group="pace">
-            <button class="pill" data-v="easy">Easy / stops</button>
-            <button class="pill" data-v="steady">Steady</button>
-            <button class="pill" data-v="hard">Hard / group</button>
-          </div></div>
-        <div><label>Terrain</label>
-          <div class="pill-row" data-group="terrain">
-            <button class="pill" data-v="flat">Flat / sheltered</button>
-            <button class="pill" data-v="exposed">Exposed or hilly</button>
-          </div></div>
-        <div><label>Rider runs</label>
-          <div class="pill-row" data-group="rider">
-            <button class="pill" data-v="cold">Cold</button>
-            <button class="pill" data-v="normal">Normal</button>
-            <button class="pill" data-v="hot">Hot</button>
-          </div></div>
-        <div><label>Gear list</label>
-          <div class="pill-row" data-group="mode">
-            <button class="pill" data-v="wardrobe">My gear</button>
-            <button class="pill" data-v="generic">Generic</button>
-          </div></div>
-      </div>
-
-      <button class="primary" id="go">Get kit advice</button>
+      <div id="geo" class="wx-suggest wx-hidden"></div>
+      <p id="picked" class="wx-eyebrow" style="margin:var(--sp-2) 0 0"></p>
     </div>
-    <div id="status" class="hidden"></div>
+
+    <div class="wx-grid wx-grid--4">
+      <div><label class="wx-label" for="date">Date</label><input type="date" id="date" class="wx-input"></div>
+      <div><label class="wx-label" for="time">Start</label><input type="time" id="time" class="wx-input" step="900"></div>
+      <div><label class="wx-label" for="dist">Distance km</label><input type="number" id="dist" class="wx-input" min="1" max="600" step="1" placeholder="60"></div>
+      <div><label class="wx-label" for="dur">Hours</label><input type="number" id="dur" class="wx-input" min="0.25" max="24" step="0.25" placeholder="2.5"></div>
+    </div>
+    <p id="speedhint" class="wx-note"></p>
+
+    <div class="wx-grid wx-grid--2" style="margin-top:var(--sp-4)">
+      <div>
+        <span class="wx-label">Surface</span>
+        <div class="wx-choice" data-group="type">
+          <button class="wx-chip" data-v="road">Road</button>
+          <button class="wx-chip" data-v="gravel">Gravel</button>
+          <button class="wx-chip" data-v="mtb">MTB</button>
+        </div>
+      </div>
+      <div>
+        <span class="wx-label">Pace</span>
+        <div class="wx-choice" data-group="pace">
+          <button class="wx-chip" data-v="easy">Easy</button>
+          <button class="wx-chip" data-v="steady">Steady</button>
+          <button class="wx-chip" data-v="hard">Hard</button>
+        </div>
+      </div>
+      <div>
+        <span class="wx-label">Ground</span>
+        <div class="wx-choice" data-group="terrain">
+          <button class="wx-chip" data-v="flat">Sheltered</button>
+          <button class="wx-chip" data-v="exposed">Exposed</button>
+        </div>
+      </div>
+      <div>
+        <span class="wx-label">You run</span>
+        <div class="wx-choice" data-group="rider">
+          <button class="wx-chip" data-v="cold">Cold</button>
+          <button class="wx-chip" data-v="normal">Normal</button>
+          <button class="wx-chip" data-v="hot">Hot</button>
+        </div>
+      </div>
+      <div>
+        <span class="wx-label">Kit from</span>
+        <div class="wx-choice" data-group="mode">
+          <button class="wx-chip" data-v="wardrobe">My gear</button>
+          <button class="wx-chip" data-v="generic">Generic</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="wx-bar-row">
+      <button class="wx-btn wx-btn--primary" id="go">Read the weather</button>
+      <span class="wx-spacer"></span>
+      <!-- A display state, not a destination — so it sits with the controls
+           rather than in the tab row, and only where it gets used. -->
+      <button class="wx-btn wx-btn--quiet" id="gloves" aria-pressed="false"
+              title="Bigger targets and type, for reading this with cold hands">Glove mode</button>
+    </div>
+    <div id="status" class="wx-hidden"></div>
   </div>
 
   <div id="out"></div>
 </section>
 
-<!-- ================= GEAR SCREEN ================= -->
-<section id="screen-gear" class="hidden">
-  <div class="panel">
-    <div class="gear-head">
-      <div>
-        <h2 style="margin-bottom:4px">My gear</h2>
-        <p class="hint" style="margin:0">
-          The inventory the advice is drawn from. <strong>Range</strong> is the coldest and warmest
-          ride-feel °C a garment works at. <strong>clo</strong> is thermal insulation (a business suit
-          is 1.0); <strong>wind</strong> and <strong>water</strong> run 0–1.
-        </p>
-      </div>
-      <span id="gearcount" class="hint"></span>
+<!-- ================= GEAR ================= -->
+<section id="screen-gear" class="wx-hidden">
+  <div class="wx-card wx-card--flat">
+    <div class="wx-card__head">
+      <h2 class="wx-heading">Gear</h2>
+      <span class="wx-eyebrow" style="margin:0" id="gearcount"></span>
+    </div>
+    <p class="wx-note" style="margin-top:0">
+      What the advice is drawn from. The bar is the ride-feel range a garment covers —
+      your calibration, not the maker's air-temperature claim. <b class="wx-num">clo</b> is
+      insulation, where a business suit is 1.0.
+    </p>
+
+    <div class="wx-bar-row">
+      <button id="gearadd" class="wx-btn wx-btn--primary">Add</button>
+      <button id="gearedit" class="wx-btn" disabled>Edit</button>
+      <button id="geardel" class="wx-btn wx-btn--quiet" disabled>Remove</button>
+      <span class="wx-spacer"></span>
+      <button id="gearexport" class="wx-btn wx-btn--quiet">Export</button>
+      <label class="wx-file" for="gearimport">Import</label>
+      <input type="file" id="gearimport" accept="application/json" class="wx-hidden">
+      <button id="gearreset" class="wx-btn wx-btn--quiet">Reset</button>
     </div>
 
-    <div class="gearbar">
-      <button id="gearadd" class="primary-sm">+ Add gear</button>
-      <button id="gearedit" disabled>Edit</button>
-      <button id="geardel" disabled>Delete</button>
-      <span class="spacer"></span>
-      <button id="gearexport">Export</button>
-      <label class="filelabel" for="gearimport">Import</label>
-      <input type="file" id="gearimport" accept="application/json" class="hidden">
-      <button id="gearreset">Reset to defaults</button>
-    </div>
+    <!-- ---- Add / edit ---- -->
+    <div id="gearform" class="wx-form wx-hidden">
+      <h3 class="wx-heading" id="formtitle">Add gear</h3>
 
-    <!-- ---- Add / edit form ---- -->
-    <div id="gearform" class="gearform hidden">
-      <h3 id="formtitle">Add gear</h3>
-
-      <div class="grid g2">
-        <div>
-          <label for="f-name">Item</label>
-          <input id="f-name" placeholder="e.g. Oakley Radar EV photochromic">
-        </div>
-        <div>
-          <label for="f-slot">Slot</label>
-          <select id="f-slot"></select>
-        </div>
+      <div class="wx-grid wx-grid--2">
+        <div><label class="wx-label" for="f-name">Item</label>
+          <input id="f-name" class="wx-input" placeholder="Oakley Radar EV photochromic"></div>
+        <div><label class="wx-label" for="f-slot">Slot</label>
+          <select id="f-slot" class="wx-input"></select></div>
       </div>
 
-      <div class="lookupbar">
-        <button id="f-lookup">🔎 Look up insulation data</button>
-        <button id="f-update" class="hidden">↻ Update from web</button>
-        <span id="f-lookupnote" class="hint"></span>
+      <div class="wx-bar-row">
+        <button id="f-lookup" class="wx-btn">Look up</button>
+        <button id="f-update" class="wx-btn wx-hidden">Update from web</button>
+        <span id="f-lookupnote" class="wx-note" style="margin:0"></span>
       </div>
 
-      <div id="f-result" class="hidden"></div>
+      <div id="f-result" class="wx-hidden"></div>
 
-      <div class="grid g4" style="margin-top:14px">
-        <div><label for="f-tmin">Min °C</label><input id="f-tmin" type="number" step="1"></div>
-        <div><label for="f-tmax">Max °C</label><input id="f-tmax" type="number" step="1"></div>
-        <div><label for="f-clo">clo</label><input id="f-clo" type="number" step="0.01" min="0"></div>
-        <div><label for="f-wind">Wind 0–1</label><input id="f-wind" type="number" step="0.05" min="0" max="1"></div>
-        <div><label for="f-water">Water 0–1</label><input id="f-water" type="number" step="0.05" min="0" max="1"></div>
-        <div><label>Flags</label>
-          <div class="flagrow">
-            <label class="inline"><input id="f-short" type="checkbox"> Short sleeve / shorts</label>
-            <label class="inline"><input id="f-pack" type="checkbox"> Packs into a pocket</label>
-            <label class="inline"><input id="f-rainonly" type="checkbox"> Rain only</label>
+      <div class="wx-grid wx-grid--4" style="margin-top:var(--sp-4)">
+        <div><label class="wx-label" for="f-tmin">Min °C</label><input id="f-tmin" class="wx-input" type="number" step="1"></div>
+        <div><label class="wx-label" for="f-tmax">Max °C</label><input id="f-tmax" class="wx-input" type="number" step="1"></div>
+        <div><label class="wx-label" for="f-clo">clo</label><input id="f-clo" class="wx-input" type="number" step="0.01" min="0"></div>
+        <div><label class="wx-label" for="f-wind">Wind</label><input id="f-wind" class="wx-input" type="number" step="0.05" min="0" max="1"></div>
+        <div><label class="wx-label" for="f-water">Water</label><input id="f-water" class="wx-input" type="number" step="0.05" min="0" max="1"></div>
+        <div style="grid-column:span 3">
+          <span class="wx-label">Flags</span>
+          <div class="wx-flags">
+            <label class="wx-check"><input id="f-short" type="checkbox"> Short sleeve or shorts</label>
+            <label class="wx-check"><input id="f-pack" type="checkbox"> Packs into a pocket</label>
+            <label class="wx-check"><input id="f-rainonly" type="checkbox"> Rain only</label>
           </div>
         </div>
       </div>
 
-      <div style="margin-top:14px">
-        <label for="f-notes">Notes</label>
-        <input id="f-notes" placeholder="What makes this garment the right or wrong call">
+      <div class="wx-field" style="margin-top:var(--sp-4)">
+        <label class="wx-label" for="f-notes">Note</label>
+        <input id="f-notes" class="wx-input" placeholder="What makes this the right or wrong call">
       </div>
 
-      <div class="gearbar" style="margin-top:16px">
-        <button id="f-save" class="primary-sm">Save</button>
-        <button id="f-cancel">Cancel</button>
-        <span class="spacer"></span>
-        <span id="f-dirty" class="hint"></span>
+      <div class="wx-bar-row">
+        <button id="f-save" class="wx-btn wx-btn--primary">Save</button>
+        <button id="f-cancel" class="wx-btn wx-btn--quiet">Cancel</button>
+        <span class="wx-spacer"></span>
+        <span id="f-dirty" class="wx-note" style="margin:0"></span>
       </div>
     </div>
 
-    <div class="scroll" style="margin-top:16px">
-      <table id="geartable">
+    <div class="wx-scroll" style="margin-top:var(--sp-4)">
+      <table class="wx-table wx-gear" id="geartable">
         <thead>
           <tr>
             <th title="In the wardrobe">Have</th><th>Item</th><th>Slot</th>
-            <th>Range °C</th><th>clo</th><th>Wind</th><th>Water</th><th>Flags</th>
+            <th>Ride-feel range</th><th class="wx-right">clo</th>
+            <th class="wx-right">Wind</th><th class="wx-right">Water</th><th></th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -172,11 +187,11 @@
   </div>
 </section>
 
-<footer>
-  Forecast: <a href="https://open-meteo.com/">Open-Meteo</a> — no account, no key.
-  Insulation model: required clo = 0.148 × (33 − T) ÷ MET, with cycling MET from the
-  <a href="https://pacompendium.com/bicycling/">Compendium of Physical Activities</a>
-  and wind correction after <a href="https://www.iso.org/standard/38900.html">ISO 11079 / 9920</a>.
+<footer class="wx-foot">
+  Forecast from <a href="https://open-meteo.com/">Open-Meteo</a>, no key.
+  Insulation sized as required clo = 0.148 × (33 − T) ÷ MET, work rate from the
+  <a href="https://pacompendium.com/bicycling/">Compendium of Physical Activities</a>,
+  wind correction after ISO 11079 / 9920.
 </footer>
 
 </div>

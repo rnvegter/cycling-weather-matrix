@@ -1,145 +1,779 @@
-:root{
-  --bg:#f6f7f9; --panel:#ffffff; --ink:#14181d; --muted:#63707f;
-  --line:#e3e7ec; --accent:#0b6b5e; --accent-soft:#e2f1ee;
-  --warm:#b4531a; --cold:#1d5fa8; --warn:#a3341f; --warn-soft:#fbeae6;
-  --hi:#fff6d9; --hi-line:#e8cf82; --radius:12px;
+/* ============================================================
+   WEATHER EFFECT — stylesheet for the cycling kit app
+   ------------------------------------------------------------
+   Design brief: an instrument, not a lifestyle app. Read on a
+   phone at 06:40 in December, outdoors, in poor light, often
+   with cold hands. Dark-first for that reason; light mode is
+   for daylight and print, not the other way round.
+
+   Fonts (add to <head>):
+   <link rel="preconnect" href="https://fonts.googleapis.com">
+   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+   ============================================================ */
+
+/* ---------- 1. Tokens ---------------------------------------- */
+
+:root {
+  /* Temperature ramp. This is data, not decoration: every colour
+     in the app that isn't chrome comes from this scale. */
+  --t-frozen:  #2E6C9E;   /* below -2 */
+  --t-cold:    #4A8299;   /*  -2 – 4  */
+  --t-cool:    #6E9A93;   /*   4 – 10 */
+  --t-mild:    #A3A075;   /*  10 – 15 */
+  --t-warm:    #C9A03F;   /*  15 – 20 */
+  --t-hot:     #DF8B26;   /*  20 – 25 */
+  --t-baking:  #C85A2B;   /*  above 25 */
+
+  --ramp: linear-gradient(90deg,
+    var(--t-frozen) 0%, var(--t-cold) 20%, var(--t-cool) 38%,
+    var(--t-mild) 54%, var(--t-warm) 70%, var(--t-hot) 86%, var(--t-baking) 100%);
+
+  /* Set per component to tint its edge. Defaults to mild. */
+  --temp: var(--t-mild);
+
+  /* Semantic */
+  --signal:  #C8452C;   /* gaps, warnings, "your kit runs out here" */
+  --plus:    #D9A441;   /* adjustments that add degrees */
+  --minus:   #6FA8C7;   /* adjustments that subtract */
+
+  /* Type */
+  --display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --body: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --data: "IBM Plex Mono", ui-monospace, "SF Mono", monospace;
+
+  --step--1: 0.78rem;
+  --step-0:  0.95rem;
+  --step-1:  1.15rem;
+  --step-2:  1.6rem;
+  --step-3:  2.4rem;
+  --step-4:  clamp(3rem, 14vw, 4.6rem);   /* the ride-feel number */
+
+  /* Space — 4px base */
+  --sp-1: 0.25rem; --sp-2: 0.5rem;  --sp-3: 0.75rem;
+  --sp-4: 1rem;    --sp-5: 1.5rem;  --sp-6: 2rem;    --sp-7: 3rem;
+
+  --tap: 44px;              /* minimum touch target */
+  --edge: 3px;              /* the temperature edge on surfaces */
+  --radius: 2px;            /* nearly square: instrument, not app-store */
+
+  --ease: cubic-bezier(.2, .7, .3, 1);
 }
-@media (prefers-color-scheme: dark){
-  :root{
-    --bg:#0f1216; --panel:#171b21; --ink:#e8ecf1; --muted:#95a1b0;
-    --line:#272d36; --accent:#4fd1bb; --accent-soft:#12302c;
-    --warm:#f0a25f; --cold:#7ab6f2; --warn:#f08c72; --warn-soft:#3a1e18;
-    --hi:#3a3520; --hi-line:#7d6c33;
+
+/* Dark is the default. */
+:root,
+[data-theme="dark"] {
+  --bg:        #0E1A24;
+  --surface:   #16242F;
+  --surface-2: #1E303C;
+  --line:      #2A3E4B;
+  --text:      #E8EDEB;
+  --text-dim:  #8CA3AF;
+  --shadow: 0 1px 0 rgba(255,255,255,.04) inset;
+}
+
+[data-theme="light"] {
+  --bg:        #E7EAE8;
+  --surface:   #FFFFFF;
+  --surface-2: #F2F5F4;
+  --line:      #D2D8D9;
+  --text:      #14202A;
+  --text-dim:  #5E6D78;
+  --shadow: none;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --bg:        #E7EAE8;
+    --surface:   #FFFFFF;
+    --surface-2: #F2F5F4;
+    --line:      #D2D8D9;
+    --text:      #14202A;
+    --text-dim:  #5E6D78;
+    --shadow: none;
   }
 }
-*{box-sizing:border-box}
-body{
-  margin:0; background:var(--bg); color:var(--ink);
-  font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  -webkit-font-smoothing:antialiased;
+
+/* Temperature utility classes — put on any element to set its
+   --temp, which tints edges, markers and bars beneath it. */
+.t-frozen { --temp: var(--t-frozen); }
+.t-cold   { --temp: var(--t-cold); }
+.t-cool   { --temp: var(--t-cool); }
+.t-mild   { --temp: var(--t-mild); }
+.t-warm   { --temp: var(--t-warm); }
+.t-hot    { --temp: var(--t-hot); }
+.t-baking { --temp: var(--t-baking); }
+
+/* ---------- 2. Base ------------------------------------------ */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--body);
+  font-size: var(--step-0);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
-.wrap{max-width:1080px;margin:0 auto;padding:24px 18px 72px}
-header h1{font-size:22px;margin:0 0 4px;letter-spacing:-.01em}
-header p{margin:0 0 22px;color:var(--muted);font-size:14px}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
-.panel + .panel{margin-top:16px}
-h2{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:0 0 14px;font-weight:600}
-h3{font-size:14px;margin:20px 0 8px;letter-spacing:-.01em}
-label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px}
-input,select,button{font:inherit;color:inherit}
-input,select{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
-input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px}
-input[type=checkbox]{width:auto;accent-color:var(--accent)}
-.grid{display:grid;gap:14px}
-.g2{grid-template-columns:repeat(2,1fr)}
-.g3{grid-template-columns:repeat(3,1fr)}
-.g4{grid-template-columns:repeat(4,1fr)}
-@media (max-width:720px){.g3,.g4{grid-template-columns:repeat(2,1fr)}}
-@media (max-width:460px){.g2,.g3,.g4{grid-template-columns:1fr}}
-.row{display:flex;gap:8px;align-items:flex-end}
-.row > div{flex:1}
-button{padding:9px 16px;border:1px solid var(--line);border-radius:8px;background:var(--panel);cursor:pointer;font-weight:600;white-space:nowrap}
-button:hover{border-color:var(--accent)}
-button.primary{background:var(--accent);border-color:var(--accent);color:#fff;width:100%;padding:12px}
-@media (prefers-color-scheme: dark){button.primary{color:#08201d}}
-button.primary:disabled{opacity:.55;cursor:default}
-.geo-results{margin-top:8px;border:1px solid var(--line);border-radius:8px;overflow:hidden}
-.geo-results button{display:block;width:100%;text-align:left;border:0;border-radius:0;font-weight:400;border-bottom:1px solid var(--line);background:var(--panel);padding:9px 11px;font-size:14px}
-.geo-results button:last-child{border-bottom:0}
-.geo-results button:hover{background:var(--accent-soft)}
-.pill-row{display:flex;flex-wrap:wrap;gap:6px}
-.pill{padding:6px 12px;border:1px solid var(--line);border-radius:99px;background:var(--bg);cursor:pointer;font-size:13px;font-weight:500}
-.pill[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
-@media (prefers-color-scheme: dark){.pill[aria-pressed="true"]{color:#08201d}}
-.hint{font-size:12px;color:var(--muted);margin-top:6px}
-.status{padding:12px 14px;border-radius:8px;background:var(--accent-soft);font-size:14px;margin-top:16px}
-.status.err{background:var(--warn-soft);color:var(--warn)}
 
-.headline{display:flex;flex-wrap:wrap;align-items:baseline;gap:12px;margin-bottom:4px}
-.headline strong{font-size:19px;letter-spacing:-.02em}
-.headline span{color:var(--muted);font-size:14px}
-.condline{color:var(--muted);font-size:14px;margin-bottom:18px}
-.feelbox{display:flex;flex-wrap:wrap;gap:24px;align-items:center;padding:16px 18px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
-.feelnum{font-size:40px;font-weight:700;letter-spacing:-.03em;line-height:1}
-.feelnum small{font-size:16px;font-weight:600;color:var(--muted);margin-left:2px}
-.feellabel{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;font-weight:600}
-.feelsep{width:1px;align-self:stretch;background:var(--line)}
-@media (max-width:520px){.feelsep{display:none}}
+.wx-shell {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: var(--sp-5) var(--sp-4) var(--sp-7);
+}
 
-table{width:100%;border-collapse:collapse;font-size:14px}
-.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
-th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
-th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600}
-td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:600}
-.pos{color:var(--warm)} .neg{color:var(--cold)}
-tr.total td{border-top:2px solid var(--line);border-bottom:0;font-weight:700}
-tr.hi td{background:var(--hi);box-shadow:inset 2px 0 0 var(--hi-line)}
-.matrix td:first-child{white-space:nowrap;font-weight:600;font-variant-numeric:tabular-nums}
+:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 3px;
+}
 
-ul.kit{list-style:none;padding:0;margin:0}
-ul.kit li{padding:7px 0;border-bottom:1px solid var(--line);display:flex;gap:12px}
-ul.kit li:last-child{border-bottom:0}
-ul.kit .slot{flex:0 0 96px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;padding-top:3px}
-ul.kit .item{flex:1}
-ul.kit .why{display:block;color:var(--muted);font-size:13px;margin-top:1px}
-ul.plain{margin:0;padding-left:20px}
-ul.plain li{margin-bottom:6px}
-ul.plain li:last-child{margin-bottom:0}
-.warnbox{background:var(--warn-soft);color:var(--warn);border-radius:8px;padding:12px 14px;font-size:14px;margin-top:12px}
-details{margin-top:16px;border-top:1px solid var(--line);padding-top:14px}
-summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.06em}
-details[open] summary{margin-bottom:14px}
-footer{margin-top:28px;font-size:12px;color:var(--muted);text-align:center}
-footer a{color:inherit}
-.hidden{display:none}
+/* ---------- 3. Type roles ------------------------------------ */
 
-/* --- Screens and tabs --- */
-.tabs{display:flex;gap:6px;margin-bottom:22px}
-.tab{padding:7px 16px;border-radius:99px;font-size:14px;background:var(--panel)}
-.tab[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
-@media (prefers-color-scheme: dark){.tab[aria-pressed="true"]{color:#08201d}}
+.wx-title {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: var(--step-3);
+  line-height: .98;
+  letter-spacing: .01em;
+  text-transform: uppercase;
+  margin: 0 0 var(--sp-3);
+}
 
-/* --- Gear screen --- */
-.gear-head{display:flex;gap:16px;align-items:flex-start;justify-content:space-between;margin-bottom:16px}
-.gear-head h2{margin:0}
-#geartable{font-size:14px;min-width:760px}
-#geartable th{white-space:nowrap}
-#geartable tbody tr{cursor:pointer}
-#geartable tbody tr:hover{background:var(--accent-soft)}
-#geartable .gname{font-weight:600}
-#geartable .flags{font-size:12px;color:var(--muted);white-space:nowrap}
-#geartable td:first-child{text-align:center;width:52px}
-#geartable tr.gear-off{opacity:.42}
-#geartable tr.gear-sel td{background:var(--hi);box-shadow:inset 2px 0 0 var(--hi-line)}
-#geartable tr.gear-sel:hover td{background:var(--hi)}
+.wx-heading {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: var(--step-1);
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  margin: 0 0 var(--sp-2);
+}
 
-.gearbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.gearbar .spacer{flex:1}
-.gearbar > span{font-size:12px;color:var(--muted)}
-button.primary-sm{background:var(--accent);border-color:var(--accent);color:#fff}
-@media (prefers-color-scheme: dark){button.primary-sm{color:#08201d}}
-button:disabled{opacity:.4;cursor:default}
-button:disabled:hover{border-color:var(--line)}
-.filelabel{padding:9px 16px;border:1px solid var(--line);border-radius:8px;background:var(--panel);cursor:pointer;font-weight:600;font-size:15px;display:inline-block}
-.filelabel:hover{border-color:var(--accent)}
+/* Eyebrow: always says what kind of thing follows, never decorative. */
+.wx-eyebrow {
+  font-family: var(--data);
+  font-size: var(--step--1);
+  font-weight: 500;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: 0 0 var(--sp-2);
+}
+
+.wx-dim { color: var(--text-dim); }
+
+.wx-num {
+  font-family: var(--data);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* ---------- 4. Signature: the ride-feel readout --------------- */
+/* The one number the whole app exists to produce. Oversized,
+   monospaced so it doesn't jump as it counts, sitting directly
+   on the temperature ramp that produced it. */
+
+.wx-readout {
+  position: relative;
+  padding: var(--sp-4) 0 var(--sp-5);
+}
+
+.wx-readout__row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+
+.wx-readout__value {
+  font-family: var(--data);
+  font-weight: 600;
+  font-size: var(--step-4);
+  line-height: .84;
+  letter-spacing: -.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--temp);
+  transition: color .3s var(--ease);
+}
+
+.wx-readout__unit {
+  font-family: var(--display);
+  font-size: var(--step-1);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--text-dim);
+}
+
+.wx-readout__air {
+  font-family: var(--data);
+  font-size: var(--step--1);
+  color: var(--text-dim);
+  text-align: right;
+  line-height: 1.6;
+}
+
+/* The ramp rule. Also usable on its own as a divider. */
+.wx-strip {
+  height: 6px;
+  background: var(--ramp);
+  margin-top: var(--sp-4);
+  position: relative;
+}
+
+.wx-strip__mark {
+  position: absolute;
+  top: -5px;
+  bottom: -5px;
+  width: 2px;
+  background: var(--text);
+  transform: translateX(-50%);
+  transition: left .3s var(--ease);
+}
+
+.wx-scale {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--data);
+  font-size: .62rem;
+  color: var(--text-dim);
+  margin-top: var(--sp-1);
+}
+
+/* ---------- 5. Surfaces -------------------------------------- */
+/* Every card carries a temperature edge on its left. The chrome
+   itself encodes the reading. */
+
+.wx-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: var(--edge) solid var(--temp);
+  border-radius: var(--radius);
+  padding: var(--sp-4);
+  margin-bottom: var(--sp-4);
+  box-shadow: var(--shadow);
+}
+
+.wx-card--flat { background: none; border-color: var(--line); }
+
+.wx-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+
+/* ---------- 6. Kit list -------------------------------------- */
+/* Head to feet, in that order, because that is how you get dressed. */
+
+.wx-kit { margin: 0; }
+
+.wx-kit__row {
+  display: flex;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-top: 1px solid var(--line);
+}
+.wx-kit__row:first-child { border-top: 0; }
+
+.wx-kit__zone {
+  flex: 0 0 4.6rem;
+  font-family: var(--data);
+  font-size: var(--step--1);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding-top: .15em;
+}
+
+.wx-kit__items { flex: 1; margin: 0; }
+
+.wx-kit__items em {
+  font-style: normal;
+  color: var(--text-dim);
+}
+
+/* ---------- 7. Adjustment chips ------------------------------ */
+/* Air temperature → ride-feel. Sign is carried by colour so the
+   arithmetic scans without reading. */
+
+.wx-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wx-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--sp-1) var(--sp-3);
+  font-size: var(--step--1);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.wx-chip b {
+  font-family: var(--data);
+  font-weight: 600;
+  color: var(--minus);
+}
+
+.wx-chip--plus b { color: var(--plus); }
+
+.wx-chip[aria-pressed="true"] {
+  border-color: var(--text);
+  color: var(--text);
+}
+
+/* ---------- 8. Garment bars ---------------------------------- */
+/* A band chart: bars overlap because the wardrobe overlaps.
+   Position encodes the range; colour encodes the midpoint. */
+
+.wx-lane {
+  position: relative;
+  height: 28px;
+  background: var(--surface-2);
+  margin-bottom: 3px;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.wx-bar {
+  position: absolute;
+  inset-block: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--sp-2);
+  background: var(--temp);
+  color: #0E1A24;
+  font-size: var(--step--1);
+  font-weight: 500;
+  white-space: nowrap;
+  transition: opacity .2s var(--ease);
+}
+
+.wx-bar--dark-text { color: #0E1A24; }
+.wx-bar--light-text { color: #F5F7F6; }
+
+.wx-bar[data-active="false"] { opacity: .25; }
+
+.wx-bar__range {
+  font-family: var(--data);
+  font-size: .62rem;
+  opacity: .7;
+  margin-left: var(--sp-2);
+}
+
+/* ---------- 9. Controls -------------------------------------- */
+
+.wx-btn {
+  font-family: var(--display);
+  font-size: var(--step-0);
+  font-weight: 600;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  min-height: var(--tap);
+  padding: 0 var(--sp-5);
+  border: 1px solid var(--text);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  transition: background .15s var(--ease), color .15s var(--ease);
+}
+
+.wx-btn:hover { background: var(--text); color: var(--bg); }
+
+.wx-btn--primary {
+  background: var(--temp);
+  border-color: var(--temp);
+  color: #0E1A24;
+}
+.wx-btn--primary:hover { filter: brightness(1.12); background: var(--temp); color: #0E1A24; }
+
+.wx-btn--quiet {
+  border-color: var(--line);
+  color: var(--text-dim);
+  padding: 0 var(--sp-4);
+}
+
+/* Slider — the ramp is the track, so dragging feels like moving
+   along the temperature itself rather than an abstract control. */
+.wx-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: var(--tap);
+  background: none;
+  margin: 0;
+  display: block;
+  cursor: ew-resize;
+}
+.wx-slider::-webkit-slider-runnable-track {
+  height: 6px; background: var(--ramp); border-radius: var(--radius);
+}
+.wx-slider::-moz-range-track {
+  height: 6px; background: var(--ramp); border-radius: var(--radius);
+}
+.wx-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 6px; height: 30px; margin-top: -12px;
+  background: var(--text); border: 0; border-radius: 1px;
+}
+.wx-slider::-moz-range-thumb {
+  width: 6px; height: 30px;
+  background: var(--text); border: 0; border-radius: 1px;
+}
+
+/* ---------- 10. Data table ----------------------------------- */
+
+.wx-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--step--1);
+}
+
+.wx-table th {
+  font-family: var(--data);
+  font-weight: 500;
+  font-size: .64rem;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  text-align: left;
+  padding-bottom: var(--sp-2);
+}
+
+.wx-table td {
+  border-top: 1px solid var(--line);
+  padding: var(--sp-2) var(--sp-3) var(--sp-2) 0;
+  vertical-align: top;
+}
+
+.wx-table td:last-child { padding-right: 0; color: var(--text-dim); }
+
+.wx-table .wx-feel {
+  font-family: var(--data);
+  font-weight: 600;
+  color: var(--temp);
+}
+
+/* ---------- 11. Alert ---------------------------------------- */
+/* For the honest bits: where the wardrobe runs out. Never used
+   for anything the user can simply dismiss. */
+
+.wx-alert {
+  border-left: var(--edge) solid var(--signal);
+  padding: var(--sp-1) 0 var(--sp-1) var(--sp-4);
+  margin: var(--sp-4) 0;
+  font-size: var(--step--1);
+}
+
+.wx-alert b { color: var(--signal); }
+
+/* ---------- 12. Glove mode ----------------------------------- */
+/* Not an accessibility afterthought — the intended winter state.
+   Bigger targets, bigger type, more contrast, fewer taps. */
+
+[data-touch="gloves"] {
+  --step--1: 0.9rem;
+  --step-0:  1.1rem;
+  --step-1:  1.35rem;
+  --tap: 60px;
+}
+[data-touch="gloves"] .wx-lane { height: 38px; }
+[data-touch="gloves"] .wx-kit__row { padding: var(--sp-3) 0; }
+[data-touch="gloves"] .wx-chip { padding: var(--sp-2) var(--sp-4); }
+[data-touch="gloves"] .wx-slider::-webkit-slider-thumb { height: 44px; width: 10px; margin-top: -19px; }
+[data-touch="gloves"] .wx-slider::-moz-range-thumb { height: 44px; width: 10px; }
+
+/* ---------- 13. Responsive ----------------------------------- */
+
+@media (max-width: 30rem) {
+  .wx-kit__zone { flex-basis: 3.6rem; }
+  .wx-bar__range { display: none; }
+  .wx-readout__row { align-items: flex-start; }
+}
+
+/* ---------- 14. Motion and print ----------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+
+@media print {
+  :root { --bg: #fff; --surface: #fff; --text: #000; --text-dim: #444; --line: #bbb; }
+  body { background: #fff; }
+  .wx-slider, .wx-btn { display: none; }
+  .wx-bar[data-active="false"] { opacity: 1; }
+  .wx-card { break-inside: avoid; }
+}
+
+/* ---------- 15. App chrome ----------------------------------- */
+/* Everything the design system doesn't cover, built from its own
+   tokens: the form that describes a ride, the gear screen, and
+   the lookup comparison. Nothing here introduces a new colour. */
+
+.wx-tabs {
+  display: flex;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-5);
+  border-bottom: 1px solid var(--line);
+}
+
+.wx-tab {
+  font-family: var(--display);
+  font-size: var(--step-1);
+  font-weight: 600;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  min-height: var(--tap);
+  padding: 0 var(--sp-4);
+  background: none;
+  border: 0;
+  border-bottom: var(--edge) solid transparent;
+  margin-bottom: -1px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.wx-tab[aria-pressed="true"] { color: var(--text); border-bottom-color: var(--temp); }
+
+/* --- Fields --- */
+
+.wx-field { display: block; margin-bottom: var(--sp-4); }
+
+.wx-label {
+  display: block;
+  font-family: var(--data);
+  font-size: var(--step--1);
+  font-weight: 500;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: var(--sp-2);
+}
+
+.wx-input {
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0 var(--sp-3);
+  font-family: var(--data);
+  font-size: var(--step-0);
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.wx-input:focus { outline: 2px solid var(--temp); outline-offset: -1px; border-color: var(--temp); }
+select.wx-input { font-family: var(--body); cursor: pointer; }
+input[type="checkbox"] { accent-color: var(--temp); width: auto; min-height: 0; }
+
+.wx-grid { display: grid; gap: var(--sp-3); }
+.wx-grid--2 { grid-template-columns: repeat(2, 1fr); }
+.wx-grid--3 { grid-template-columns: repeat(3, 1fr); }
+.wx-grid--4 { grid-template-columns: repeat(4, 1fr); }
+.wx-row { display: flex; gap: var(--sp-2); align-items: flex-end; }
+.wx-row > .wx-grow { flex: 1; }
+
+@media (max-width: 34rem) {
+  .wx-grid--3, .wx-grid--4 { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 22rem) {
+  .wx-grid--2, .wx-grid--3, .wx-grid--4 { grid-template-columns: 1fr; }
+}
+
+/* Choice chips reuse the adjustment chip, pressed state and all. */
+.wx-choice { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.wx-choice .wx-chip {
+  min-height: var(--tap);
+  align-items: center;
+  cursor: pointer;
+  background: none;
+  font-family: var(--body);
+}
+.wx-choice .wx-chip[aria-pressed="true"] {
+  background: var(--temp);
+  border-color: var(--temp);
+  color: var(--bg);
+}
+
+/* --- Location suggestions --- */
+
+.wx-suggest {
+  border: 1px solid var(--line);
+  border-top: 0;
+  border-radius: 0 0 var(--radius) var(--radius);
+  overflow: hidden;
+}
+.wx-suggest button {
+  display: block;
+  width: 100%;
+  min-height: var(--tap);
+  padding: var(--sp-2) var(--sp-3);
+  text-align: left;
+  font-family: var(--body);
+  font-size: var(--step-0);
+  color: var(--text);
+  background: var(--surface);
+  border: 0;
+  border-top: 1px solid var(--line);
+  cursor: pointer;
+}
+.wx-suggest button:first-child { border-top: 0; }
+.wx-suggest button:hover:not(:disabled) { background: var(--surface-2); }
+.wx-suggest button:disabled { color: var(--text-dim); cursor: default; }
+
+/* --- Status --- */
+
+.wx-status {
+  border-left: var(--edge) solid var(--temp);
+  padding: var(--sp-2) 0 var(--sp-2) var(--sp-4);
+  margin-top: var(--sp-4);
+  font-size: var(--step--1);
+  color: var(--text-dim);
+}
+.wx-status--err { border-left-color: var(--signal); color: var(--signal); }
+
+/* --- Disclosure --- */
+
+.wx-more { margin-top: var(--sp-4); border-top: 1px solid var(--line); padding-top: var(--sp-3); }
+.wx-more > summary {
+  cursor: pointer;
+  font-family: var(--data);
+  font-size: var(--step--1);
+  font-weight: 500;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+}
+.wx-more > summary:hover { color: var(--text); }
+.wx-more[open] > summary { color: var(--text); margin-bottom: var(--sp-3); }
+
+/* --- Tables that must scroll rather than squash the page --- */
+
+.wx-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.wx-table td.wx-right, .wx-table th.wx-right { text-align: right; }
+.wx-table tr.is-here td { background: var(--surface-2); }
+.wx-table tr.is-here td:first-child { box-shadow: inset var(--edge) 0 0 var(--temp); }
+.wx-table .wx-total td { border-top: 2px solid var(--line); font-weight: 600; color: var(--text); }
+
+/* --- Gear list --- */
+
+.wx-gear { min-width: 40rem; }
+.wx-gear tbody tr { cursor: pointer; }
+.wx-gear tbody tr:hover td { background: var(--surface-2); }
+.wx-gear tr.is-off td { opacity: .4; }
+.wx-gear tr.is-sel td { background: var(--surface-2); }
+.wx-gear tr.is-sel td:first-child { box-shadow: inset var(--edge) 0 0 var(--temp); }
+.wx-gear td:first-child { text-align: center; width: 3rem; }
+.wx-gear .wx-item { font-weight: 500; color: var(--text); }
+.wx-gear .wx-flagcell { font-family: var(--data); font-size: .62rem; color: var(--text-dim); white-space: nowrap; }
+
+/* The range column drawn rather than written: same band chart as the
+   torso lanes, so a gap in the wardrobe is visible as a gap. */
+.wx-gear .wx-lane { height: 18px; min-width: 8rem; margin: 0; }
+.wx-gear .wx-bar { font-size: .62rem; padding: 0 var(--sp-1); }
+
+.wx-bar--empty { background: none; border: 1px dashed var(--line); color: var(--text-dim); }
+
+/* --- Toolbar --- */
+
+.wx-bar-row { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; margin-top: var(--sp-4); }
+.wx-bar-row .wx-spacer { flex: 1; }
+.wx-file {
+  display: inline-flex; align-items: center;
+  font-family: var(--display); font-size: var(--step-0); font-weight: 600;
+  letter-spacing: .05em; text-transform: uppercase;
+  min-height: var(--tap); padding: 0 var(--sp-4);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  color: var(--text-dim); cursor: pointer;
+}
+.wx-file:hover { border-color: var(--text); color: var(--text); }
+/* A toggle needs to show its state, not just respond to hover. */
+.wx-btn[aria-pressed="true"] {
+  background: var(--text); color: var(--bg); border-color: var(--text);
+}
+.wx-btn:disabled { opacity: .35; cursor: default; }
+.wx-btn:disabled:hover { background: none; color: var(--text); }
 
 /* --- Add / edit form --- */
-.gearform{margin-top:18px;padding:18px;border:1px solid var(--accent);border-radius:10px;background:var(--bg)}
-.gearform h3{margin:0 0 14px}
-.lookupbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:14px}
-.lookupbar .hint{margin:0}
-.flagrow{display:flex;flex-direction:column;gap:4px}
-label.inline{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:400;
-  color:var(--ink);text-transform:none;letter-spacing:0;margin:0}
-label.inline input{width:auto}
 
-.lookupres{margin-top:14px;padding:14px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
-.lookuphead{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}
-.badge{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
-  padding:3px 9px;border-radius:99px}
-.badge-high{background:var(--accent-soft);color:var(--accent)}
-.badge-medium{background:var(--hi);color:var(--warm)}
-.badge-low{background:var(--warn-soft);color:var(--warn)}
-table.cmp{font-size:14px}
-table.cmp td.changed{color:var(--accent);font-weight:700}
-table.cmp td:last-child,table.cmp th:last-child{text-align:center;width:52px}
+.wx-form {
+  border: 1px solid var(--line);
+  border-left: var(--edge) solid var(--temp);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: var(--sp-4);
+  margin-top: var(--sp-4);
+}
+
+.wx-flags { display: flex; flex-direction: column; gap: var(--sp-1); }
+.wx-check {
+  display: flex; align-items: center; gap: var(--sp-2);
+  font-size: var(--step--1); color: var(--text); cursor: pointer;
+}
+
+/* --- Lookup result --- */
+
+.wx-found {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  padding: var(--sp-3);
+  margin-top: var(--sp-3);
+}
+.wx-found__head { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; margin-bottom: var(--sp-3); }
+
+.wx-badge {
+  font-family: var(--data);
+  font-size: .62rem; font-weight: 600;
+  letter-spacing: .12em; text-transform: uppercase;
+  padding: 2px var(--sp-2);
+  border: 1px solid currentColor;
+  border-radius: var(--radius);
+}
+.wx-badge--high { color: var(--t-cool); }
+.wx-badge--medium { color: var(--plus); }
+.wx-badge--low { color: var(--signal); }
+
+.wx-cmp td.wx-new { color: var(--temp); font-weight: 600; }
+.wx-cmp td:last-child, .wx-cmp th:last-child { text-align: center; width: 3rem; }
+
+.wx-note { font-size: var(--step--1); color: var(--text-dim); margin: var(--sp-3) 0 0; }
+
+/* Why a lookup returned what it did — a reading trail, so it wants to be
+   compact and quiet rather than spaced like the kit list. */
+.wx-why { margin: 0; padding: 0; list-style: none; font-size: var(--step--1); }
+.wx-why li {
+  padding: var(--sp-1) 0 var(--sp-1) var(--sp-3);
+  border-left: 1px solid var(--line);
+  color: var(--text-dim);
+}
+.wx-why li:first-child { color: var(--text); }
+
+/* --- Footer --- */
+
+.wx-foot {
+  margin-top: var(--sp-7);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--line);
+  font-size: var(--step--1);
+  color: var(--text-dim);
+}
+.wx-foot a { color: inherit; }
+
+.wx-hidden { display: none !important; }
+
+@media print { .wx-tabs, .wx-bar-row, .wx-form, .wx-suggest { display: none; } }

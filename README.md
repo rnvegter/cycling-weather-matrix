@@ -9,7 +9,8 @@ garments — from your own inventory, or from a generic list.
 node server.js          # http://localhost:8765
 ```
 
-No build step, no dependencies, no API key. To put it on a server, see [INSTALL.md](INSTALL.md).
+No build step, no npm dependencies, no API key. To put it on a server, see
+[INSTALL.md](INSTALL.md).
 
 ## Why ride-feel rather than "feels like"
 
@@ -82,6 +83,25 @@ The inference fallback is fitted against the seeded wardrobe: mean error 0.016 c
 The fallback means the button always returns something, but treat a low-confidence result as
 a starting point rather than an answer.
 
+## Look
+
+An instrument rather than a lifestyle app: it gets read on a phone at 06:40 in December,
+outdoors, in poor light, often with cold hands. So it is dark by default, nearly square-
+cornered, and set in a condensed display face with a monospace for anything numeric — figures
+that don't shift width as they count.
+
+Colour is data. A seven-step temperature ramp runs from frozen blue to baking rust, and every
+non-chrome colour comes from it: the ride-feel figure, the mark on the scale beneath it, the
+left edge of each card, and the range bars on the gear screen, which are the same band chart
+in miniature — a gap in the wardrobe reads as a gap in the column.
+
+**Glove mode** enlarges tap targets and type for cold hands. It lives on the ride screen,
+where it is needed, rather than in the tab row, where it would read as a destination.
+
+The three fonts load from Google Fonts. They degrade to Arial Narrow, the system sans and the
+system monospace if that request fails or you are offline, so nothing breaks — but see
+INSTALL.md if you want to self-host them for a genuinely offline install.
+
 ## Files
 
 | File | |
@@ -93,6 +113,7 @@ a starting point rather than an answer.
 | `server.js` | Static files plus `/api/lookup` |
 | `app.js` | Forecast, form wiring, rendering |
 | `gearui.js` | Gear screen: add, edit, delete, lookup |
+| `styles.css` | The Weather Effect design system, plus app chrome |
 
 Forecast data from [Open-Meteo](https://open-meteo.com/). Wind correction after
 ISO 11079 / 9920.

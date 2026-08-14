@@ -24,17 +24,17 @@ function load(){
   syncPills();
 }
 function syncPills(){
-  document.querySelectorAll(".pill-row").forEach(row => {
+  document.querySelectorAll(".wx-choice").forEach(row => {
     const g = row.dataset.group;
-    row.querySelectorAll(".pill").forEach(p =>
+    row.querySelectorAll(".wx-chip").forEach(p =>
       p.setAttribute("aria-pressed", p.dataset.v === state[g] ? "true" : "false"));
   });
 }
-document.querySelectorAll(".pill-row").forEach(row => {
+document.querySelectorAll(".wx-choice").forEach(row => {
   row.addEventListener("click", e => {
-    const b = e.target.closest(".pill");
+    const b = e.target.closest(".wx-chip");
     if (!b) return;
-    row.querySelectorAll(".pill").forEach(p => p.setAttribute("aria-pressed", p === b ? "true" : "false"));
+    row.querySelectorAll(".wx-chip").forEach(p => p.setAttribute("aria-pressed", p === b ? "true" : "false"));
     state[row.dataset.group] = b.dataset.v;
     save();
     if (["type","pace"].includes(row.dataset.group)) updateSpeedHint();
@@ -79,7 +79,7 @@ async function doSearch(){
   if (!q) return;
   const box = $("#geo");
   box.innerHTML = "<button disabled>Searching…</button>";
-  box.classList.remove("hidden");
+  box.classList.remove("wx-hidden");
   try{
     const res = await geocode(q);
     if (!res.length){ box.innerHTML = "<button disabled>No match</button>"; return; }
@@ -87,7 +87,7 @@ async function doSearch(){
     res.forEach(p => {
       const b = document.createElement("button");
       b.textContent = placeLabel(p);
-      b.onclick = () => { state.place = p; showPlace(p); box.classList.add("hidden"); save(); };
+      b.onclick = () => { state.place = p; showPlace(p); box.classList.add("wx-hidden"); save(); };
       box.appendChild(b);
     });
   }catch(e){ box.innerHTML = `<button disabled>${e.message}</button>`; }
@@ -104,8 +104,8 @@ $("#here").onclick = () => {
 };
 function status(msg, isErr){
   const el = $("#status");
-  if (!msg){ el.classList.add("hidden"); el.textContent = ""; return; }
-  el.className = "status" + (isErr ? " err" : "");
+  if (!msg){ el.className = "wx-hidden"; el.textContent = ""; return; }
+  el.className = "wx-status" + (isErr ? " wx-status--err" : "");
   el.textContent = msg;
 }
 
@@ -176,94 +176,118 @@ function render(f, w, opts, place){
   const watch = watchFor(f, w, opts);
   const band = bandFor(f.feel);
   const hb = out.hb;
+  const ramp = rampFor(f.feel);
 
-  const kitList = items => items.map(it => `
-    <li><span class="slot">${it._label || SLOT_LABEL[it.slot] || ""}</span>
-    <span class="item">${it.name}${it._why || it.notes ? `<span class="why">${it._why || it.notes}</span>` : ""}</span></li>`).join("");
+  // Head to feet, because that is the order you get dressed in.
+  const byZone = items => items.slice().sort((a, b) => {
+    const ia = ZONE_ORDER.indexOf(a.slot), ib = ZONE_ORDER.indexOf(b.slot);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+  });
+  const kitRows = items => byZone(items).map(it => `
+    <div class="wx-kit__row">
+      <div class="wx-kit__zone">${it._label || ZONE_LABEL[it.slot] || ""}</div>
+      <p class="wx-kit__items">${it.name}${it._why || it.notes
+        ? ` <em>${it._why || it.notes}</em>` : ""}</p>
+    </div>`).join("");
+
+  // Air -> ride-feel, as chips. Sign is carried by colour so the arithmetic
+  // scans without being read.
+  const chips = f.rows.filter(r => !r.base).map(r => `
+    <li class="wx-chip${r.v > 0 ? " wx-chip--plus" : ""}">
+      <b>${r.v > 0 ? "+" : "−"}${Math.abs(r1(r.v))}</b> ${r.label.toLowerCase()}
+    </li>`).join("");
 
   $("#out").innerHTML = `
-  <div class="panel">
-    <div class="headline">
-      <strong>${placeLabel(place)}</strong>
-      <span>${fmtDay(w.times[0].slice(0,10))} · ${hhmm(w.startDT)}–${hhmm(w.endDT)} · ${r1(opts.dist)} km</span>
+  <section class="wx-readout ${ramp}">
+    <p class="wx-eyebrow">${placeLabel(place)} &middot; ${fmtDay(w.times[0].slice(0,10))}
+       &middot; ${hhmm(w.startDT)}–${hhmm(w.endDT)} &middot; ${r1(opts.dist)} km</p>
+    <div class="wx-readout__row">
+      <div>
+        <span class="wx-readout__value">${f.feel}</span>
+        <span class="wx-readout__unit">&deg;C felt</span>
+      </div>
+      <div class="wx-readout__air">
+        ${r1(w.tStart)}&deg;C air, ${r1(w.tEnd)}&deg; by the end<br>
+        wind ${compass(w.dir)} ${Math.round(w.wind)} km/h${w.gust >= 40 ? `, gusts ${Math.round(w.gust)}` : ""}<br>
+        rain ${Math.round(w.prob)}%${w.precipTotal >= 0.1 ? `, ${r1(w.precipTotal)} mm` : ""}
+      </div>
     </div>
-    <div class="condline">
-      ${r1(w.tStart)}°C → ${r1(w.tEnd)}°C · wind ${Math.round(w.wind)} km/h ${compass(w.dir)}${w.gust>=40?`, gusts ${Math.round(w.gust)}`:""} ·
-      ${Math.round(w.prob)}% rain${w.precipTotal>=0.1?` (${r1(w.precipTotal)} mm)`:""} · ${Math.round(w.cloud)}% cloud
+    <div class="wx-strip"><span class="wx-strip__mark" style="left:${rampPos(f.feel)}%"></span></div>
+    <div class="wx-scale"><span>&minus;5&deg;</span><span>5&deg;</span><span>15&deg;</span><span>25&deg;</span></div>
+  </section>
+
+  <section class="wx-card ${ramp}">
+    <div class="wx-card__head">
+      <h2 class="wx-heading">Wear</h2>
+      <span class="wx-eyebrow" style="margin:0">Head to feet</span>
     </div>
+    <div class="wx-kit">${kitRows(out.wear)}</div>
+  </section>
 
-    <div class="feelbox">
-      <div><div class="feellabel">Feels like riding</div><div class="feelnum">${f.feel}<small>°C</small></div></div>
-      <div class="feelsep"></div>
-      <div><div class="feellabel">Hands &amp; feet</div><div class="feelnum">${f.extFeel}<small>°C</small></div></div>
-      <div class="feelsep"></div>
-      <div><div class="feellabel">Band</div>
-        <div style="font-size:17px;font-weight:600">${band.label}${/\d$/.test(band.label)?"°C":""}</div>
-        <div style="color:var(--muted);font-size:13px">${r1(opts.speed)} km/h avg over ${r1(opts.hours)} h</div></div>
-      ${hb ? `<div class="feelsep"></div>
-      <div><div class="feellabel">Insulation</div>
-        <div style="font-size:17px;font-weight:600">${r2(hb.worn)} / ${r2(hb.required)} clo</div>
-        <div style="color:var(--muted);font-size:13px">${hb.verdict}</div></div>` : ""}
-    </div>
+  ${out.pocket.length ? `
+  <section class="wx-card wx-card--flat ${ramp}">
+    <h2 class="wx-heading">Carry</h2>
+    <div class="wx-kit">${out.pocket.map(([it, why]) => `
+      <div class="wx-kit__row">
+        <div class="wx-kit__zone">Pocket</div>
+        <p class="wx-kit__items">${it.name}${why ? ` <em>${why}</em>` : ""}</p>
+      </div>`).join("")}</div>
+  </section>` : ""}
 
-    <h3>Wear</h3>
-    <ul class="kit">${kitList(out.wear)}</ul>
+  ${out.notes.map(n => `<p class="wx-alert">${n}</p>`).join("")}
+  ${watch.map(x => `<p class="wx-alert"><b>Watch.</b> ${x}</p>`).join("")}
 
-    ${out.pocket.length ? `<h3>Pocket</h3><ul class="kit">${out.pocket.map(([it,why]) => `
-      <li><span class="slot">Carry</span><span class="item">${it.name}${why?`<span class="why">${why}</span>`:""}</span></li>`).join("")}</ul>` : ""}
+  <h2 class="wx-heading" style="margin-top:var(--sp-6)">Air &rarr; ride-feel</h2>
+  <p class="wx-eyebrow">${r1(f.air)}&deg;C air, ${f.feel}&deg; felt${
+    f.extFeel !== f.feel ? ` &middot; hands and feet ${f.extFeel}&deg;` : ""}</p>
+  <ul class="wx-chips">${chips}</ul>
+  <p class="wx-note">Hands and feet sit still in the airflow, and running hot does not apply
+     to fingers — so they are read on ${f.extFeel}&deg;, not ${f.feel}&deg;.</p>
 
-    ${out.notes.length ? `<h3>Notes</h3><ul class="plain">${out.notes.map(n=>`<li>${n}</li>`).join("")}</ul>` : ""}
-    ${watch.length ? `<h3>Watch for</h3><ul class="plain">${watch.map(x=>`<li>${x}</li>`).join("")}</ul>` : ""}
-    ${hb && hb.detail ? `<div class="warnbox">Insulation reads <strong>${hb.verdict}</strong>: ${r2(hb.worn)} clo effective against ${r2(hb.required)} required. ${hb.detail}</div>` : ""}
-  </div>
-
-  <div class="panel">
-    <h2>Effect matrix — how the air temperature became ride-feel</h2>
-    <div class="scroll"><table>
-      <thead><tr><th>Factor</th><th style="text-align:right">Effect</th></tr></thead>
+  ${hb ? `
+  <details class="wx-more">
+    <summary>Heat balance &middot; ${r2(hb.worn)} of ${r2(hb.required)} clo, ${hb.verdict}</summary>
+    <div class="wx-scroll"><table class="wx-table ${ramp}">
       <tbody>
-        ${f.rows.map(r => `<tr><td>${r.label}</td>
-          <td class="num ${r.base?"":(r.v>0?"pos":"neg")}">${r.base?r1(r.v)+"°C":(r.v>0?"+":"")+r1(r.v)+"°C"}</td></tr>`).join("")}
-        <tr class="total"><td>Ride-feel</td><td class="num">${f.feel}°C</td></tr>
-        <tr><td style="color:var(--muted);font-size:13px">Hands and feet — the rider calibration doesn't apply to them; they sit still in the airflow</td>
-            <td class="num">${f.extFeel}°C</td></tr>
+        <tr><td>Work rate at ${r1(opts.speed)} km/h</td><td class="wx-right wx-num">${hb.met} MET</td></tr>
+        <tr><td>Insulation required, 0.148 &times; (33 &minus; ${r1(f.envTemp)}) &divide; ${hb.met}</td>
+            <td class="wx-right wx-num">${r2(hb.required)}</td></tr>
+        <tr><td>Worn on the torso, catalogue value</td><td class="wx-right wx-num">${r2(hb.staticClo)}</td></tr>
+        <tr><td>Apparent wind ${r1(hb.vApparent)} m/s against a ${Math.round(hb.outerWind*100)}% windproof outer layer</td>
+            <td class="wx-right wx-num">&times;${r2(hb.shelter)}</td></tr>
+        <tr class="wx-total"><td>Effective</td><td class="wx-right wx-feel">${r2(hb.worn)} clo</td></tr>
       </tbody>
     </table></div>
+    <p class="wx-note">A windproof outer layer keeps the stack beneath it; a permeable one lets
+       the airflow strip it. That is why 75&nbsp;g of gilet can beat a much thicker fleece.</p>
+  </details>` : ""}
 
-    ${hb ? `
-    <details open>
-      <summary>Heat balance</summary>
-      <div class="scroll"><table>
-        <tbody>
-          <tr><td>Work rate at ${r1(opts.speed)} km/h</td><td class="num">${hb.met} MET</td></tr>
-          <tr><td>Insulation required — 0.148 × (33 − ${r1(f.air)}) ÷ ${hb.met}</td><td class="num">${r2(hb.required)} clo</td></tr>
-          <tr><td>Garments on the torso, catalogue value</td><td class="num">${r2(hb.staticClo)} clo</td></tr>
-          <tr><td>Apparent wind ${r1(hb.vApparent)} m/s, outer layer ${Math.round(hb.outerWind*100)}% windproof</td><td class="num">×${r2(hb.shelter)}</td></tr>
-          <tr class="total"><td>Effective insulation</td><td class="num">${r2(hb.worn)} clo — ${hb.verdict}</td></tr>
-        </tbody>
-      </table></div>
-      <div class="hint">A windproof outer layer preserves the stack beneath it; a permeable one lets the airflow strip it. That is why a 75&nbsp;g gilet can beat a much thicker fleece.</div>
-    </details>` : ""}
+  <details class="wx-more">
+    <summary>The whole scale</summary>
+    <div class="wx-scroll"><table class="wx-table">
+      <thead><tr><th>Ride-feel</th><th>Core</th><th>Legs</th><th>Extremities</th></tr></thead>
+      <tbody>${BANDS.map(b => `
+        <tr class="${rampFor(b.min + 1)}${b === band ? " is-here" : ""}">
+          <td class="wx-num">${b.label}</td><td>${b.core}</td><td>${b.legs}</td><td>${b.ext}</td>
+        </tr>`).join("")}</tbody>
+    </table></div>
+  </details>
 
-    <details>
-      <summary>Full band matrix</summary>
-      <div class="scroll"><table class="matrix">
-        <thead><tr><th>Ride-feel</th><th>Core</th><th>Legs</th><th>Extremities</th></tr></thead>
-        <tbody>${BANDS.map(b => `<tr class="${b===band?"hi":""}"><td>${b.label}</td><td>${b.core}</td><td>${b.legs}</td><td>${b.ext}</td></tr>`).join("")}</tbody>
-      </table></div>
-      <div class="hint">Your band is highlighted. Where one of your own garments gives a range, that range wins — this table is the generic fallback.</div>
-    </details>
-
-    <details>
-      <summary>Hour by hour</summary>
-      <div class="scroll"><table>
-        <thead><tr><th>Time</th><th style="text-align:right">Temp</th><th style="text-align:right">Wind</th><th style="text-align:right">Rain</th><th style="text-align:right">Amount</th></tr></thead>
-        <tbody>${w.hourly.map(h => `<tr><td>${fmtTime(h.time)}</td><td class="num">${r1(h.t)}°C</td>
-          <td class="num">${Math.round(h.wind)} km/h</td><td class="num">${Math.round(h.prob)}%</td>
-          <td class="num">${h.precip?r1(h.precip)+" mm":"—"}</td></tr>`).join("")}</tbody>
-      </table></div>
-    </details>
-  </div>`;
+  <details class="wx-more">
+    <summary>Hour by hour</summary>
+    <div class="wx-scroll"><table class="wx-table">
+      <thead><tr><th>Time</th><th class="wx-right">Air</th><th class="wx-right">Wind</th>
+        <th class="wx-right">Rain</th><th class="wx-right">mm</th></tr></thead>
+      <tbody>${w.hourly.map(h => `
+        <tr class="${rampFor(h.t)}">
+          <td class="wx-num">${fmtTime(h.time)}</td>
+          <td class="wx-right wx-feel">${r1(h.t)}&deg;</td>
+          <td class="wx-right wx-num">${Math.round(h.wind)}</td>
+          <td class="wx-right wx-num">${Math.round(h.prob)}%</td>
+          <td class="wx-right wx-num">${h.precip ? r1(h.precip) : "—"}</td>
+        </tr>`).join("")}</tbody>
+    </table></div>
+  </details>`;
   $("#out").scrollIntoView({behavior:"smooth", block:"start"});
 }
 

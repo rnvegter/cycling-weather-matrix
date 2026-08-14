@@ -25,6 +25,12 @@ page" behaviour.
 - **No npm install.** There are zero dependencies, so there is no `node_modules`, no
   lockfile to audit and nothing to keep patched but Node itself.
 - About 300 KB of disk, and very little memory — one process, no workers.
+- **Fonts load from Google Fonts.** They fall back to Arial Narrow, the system sans and the
+  system monospace, so a blocked or offline request costs you the typeface and nothing else.
+  To remove the dependency entirely, download Barlow Condensed, IBM Plex Sans and IBM Plex
+  Mono into the app directory, drop the two `<link>` tags from `index.html`, and add
+  `@font-face` rules at the top of `styles.css`. Worth doing if the server has no egress, or
+  if you'd rather not have every page load reach a third party.
 
 ## Which server to use
 

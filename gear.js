@@ -112,6 +112,14 @@ const SLOTS = [
 ];
 const SLOT_LABEL = Object.fromEntries(SLOTS);
 
+/* Short zone words for the kit list, and the order you actually get dressed in:
+   head down to feet, base layer before what goes over it. */
+const ZONE_LABEL = {
+  head:"Head", eyes:"Eyes", base:"Base", mid:"Torso", shell:"Shell", vest:"Gilet",
+  arms:"Arms", hands:"Hands", legs:"Legs", legextra:"Legs", feet:"Feet"
+};
+const ZONE_ORDER = ["head","eyes","base","mid","shell","vest","arms","hands","legs","legextra","feet"];
+
 /* --- Storage ---------------------------------------------------- */
 const GEAR_KEY = "cwem-gear-v1";
 
