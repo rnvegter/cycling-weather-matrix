@@ -162,6 +162,17 @@ function renderGear(){
   if (clear) clear.onclick = clearFilters;
 }
 
+/* A short-lived note under the gear toolbar, for things the user needs told
+   but shouldn't have to dismiss. */
+let statusTimer = null;
+function status2(msg){
+  const el = document.getElementById("gearstatus");
+  el.textContent = msg;
+  el.classList.toggle("wx-hidden", !msg);
+  clearTimeout(statusTimer);
+  if (msg) statusTimer = setTimeout(() => el.classList.add("wx-hidden"), 6000);
+}
+
 function clearFilters(){
   gearFilters = {}; gearSort = {key:null, dir:1}; closePop(); renderGear();
 }
@@ -401,8 +412,17 @@ F("save").onclick = () => {
   const it = readForm();
   if (it.model === "Unnamed"){ F("model").focus(); return; }
   if (formMode === "add"){ gear.push(it); selected = gear.length - 1; }
-  else gear[editIndex] = it;
-  saveGear(gear); renderGear(); closeForm();
+  else { gear[editIndex] = it; selected = editIndex; }
+  saveGear(gear);
+  // Saving something an active filter would hide looks exactly like the save
+  // failing. Drop the filters so the item you just wrote is the one you see.
+  if (!passesFilters(it)){
+    clearFilters();
+    status2(`Filters cleared — ${it.name} didn't match them.`);
+  }
+  renderGear(); closeForm();
+  const row = document.querySelector(`#geartable tr[data-i="${selected}"]`);
+  if (row) row.scrollIntoView({block:"nearest"});
 };
 
 /* --- Lookup ----------------------------------------------------- */
