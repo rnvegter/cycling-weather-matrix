@@ -53,6 +53,10 @@
   --sp-1: 0.25rem; --sp-2: 0.5rem;  --sp-3: 0.75rem;
   --sp-4: 1rem;    --sp-5: 1.5rem;  --sp-6: 2rem;    --sp-7: 3rem;
 
+  /* The ride screen is a reading column and wants to stay narrow; the gear
+     table is a spreadsheet and does not. Set per screen. */
+  --shell: 44rem;
+
   --tap: 44px;              /* minimum touch target */
   --edge: 3px;              /* the temperature edge on surfaces */
   --radius: 2px;            /* nearly square: instrument, not app-store */
@@ -121,7 +125,8 @@ body {
 }
 
 .wx-shell {
-  max-width: 44rem;
+  max-width: var(--shell);
+  transition: max-width .2s var(--ease);
   margin: 0 auto;
   padding: var(--sp-5) var(--sp-4) var(--sp-7);
 }
@@ -130,6 +135,8 @@ body {
   outline: 2px solid var(--text);
   outline-offset: 3px;
 }
+
+body[data-screen="gear"] { --shell: 82rem; }
 
 /* ---------- 3. Type roles ------------------------------------ */
 
@@ -671,7 +678,7 @@ input[type="checkbox"] { accent-color: var(--temp); width: auto; min-height: 0; 
 
 /* --- Gear list --- */
 
-.wx-gear { min-width: 48rem; }
+.wx-gear { min-width: 46rem; }
 .wx-gear tbody tr { cursor: pointer; }
 .wx-gear tbody tr:hover td { background: var(--surface-2); }
 .wx-gear tr.is-off td { opacity: .38; }
@@ -905,12 +912,20 @@ input[type="checkbox"] { accent-color: var(--temp); width: auto; min-height: 0; 
 /* ---------- 17. Gear table header controls ------------------- */
 
 .wx-th { display: flex; align-items: center; gap: var(--sp-2); white-space: nowrap; }
+/* On a right-aligned column the buttons are rendered before the label, so they
+   sit inside the cell rather than hard against the next column's heading. */
 .wx-right .wx-th { justify-content: flex-end; }
+/* Space to the left of each control group, so one column's buttons never crowd
+   the previous column's values. */
+#geartable thead th { padding-left: var(--sp-3); padding-right: var(--sp-3); }
+#geartable thead th:first-child { padding-left: var(--sp-2); }
+#geartable tbody td:first-child { padding-left: var(--sp-2); }
+#geartable tbody td { padding-left: var(--sp-3); }
 
 .wx-th__label { cursor: help; border-bottom: 1px dotted var(--line); }
 .wx-th__label:hover, .wx-th__label:focus-visible { color: var(--text); border-bottom-color: var(--text-dim); }
 
-.wx-th__btns { display: flex; gap: 1px; }
+.wx-th__btns { display: flex; gap: 1px; flex: 0 0 auto; }
 
 .wx-hbtn {
   width: 22px; height: 22px;

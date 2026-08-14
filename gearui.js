@@ -21,6 +21,7 @@ function showScreen(name){
   document.getElementById("screen-gear").classList.toggle("wx-hidden", name !== "gear");
   document.querySelectorAll(".wx-tab[data-screen]").forEach(t =>
     t.setAttribute("aria-pressed", t.dataset.screen === name ? "true" : "false"));
+  document.body.dataset.screen = name;
   if (location.hash !== "#" + name) history.replaceState(null, "", "#" + name);
   window.scrollTo(0, 0);
 }
@@ -101,16 +102,17 @@ function renderGearHead(){
     const arrow = !sorted ? "↕" : (gearSort.dir === 1 ? "↑" : "↓");
     const filtered = gearFilters[c.key] != null && gearFilters[c.key] !== ""
       && !(Array.isArray(gearFilters[c.key]) && !gearFilters[c.key].length);
-    return `<th class="${c.align === "right" ? "wx-right" : ""}">
-      <div class="wx-th">
-        <span class="wx-th__label" data-tip="${escHtml(c.desc)}" tabindex="0">${c.label}</span>
-        <span class="wx-th__btns">
+    const label = `<span class="wx-th__label" data-tip="${escHtml(c.desc)}" tabindex="0">${c.label}</span>`;
+    const btns = `<span class="wx-th__btns">
           <button class="wx-hbtn${sorted ? " is-on" : ""}" data-sort="${c.key}"
             aria-label="Sort by ${c.label}" title="Sort by ${escHtml(c.label)}">${arrow}</button>
           <button class="wx-hbtn${filtered ? " is-on" : ""}" data-filter="${c.key}"
             aria-label="Filter ${c.label}" title="Filter ${escHtml(c.label)}">${FUNNEL}</button>
-        </span>
-      </div>
+        </span>`;
+    // Controls always lead the column. With the label first they ended up at the
+    // cell's right edge, reading as though they belonged to the next heading.
+    return `<th class="${c.align === "right" ? "wx-right" : ""}">
+      <div class="wx-th">${btns}${label}</div>
     </th>`;
   }).join("") + "</tr>";
 }
