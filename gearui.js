@@ -347,6 +347,18 @@ document.getElementById("geartable").addEventListener("click", e => {
   renderGear();
 });
 
+/* Double-click anywhere on a row to edit it, so a garment near the bottom of a
+   33-row table doesn't mean a trip back up to the toolbar. */
+document.getElementById("geartable").addEventListener("dblclick", e => {
+  const tr = e.target.closest("tr[data-i]");
+  if (!tr || e.target.closest('[data-act="use"]')) return;
+  // Two clicks would otherwise leave a word highlighted behind the form.
+  window.getSelection().removeAllRanges();
+  selected = +tr.dataset.i;
+  renderGear();
+  openForm("edit", selected);
+});
+
 /* --- Form ------------------------------------------------------- */
 const F = id => document.getElementById("f-" + id);
 const FIELDS = ["name","slot","tmin","tmax","clo","wind","water","short","pack","rainonly","notes"];
@@ -400,6 +412,9 @@ function openForm(mode, index){
     [...new Set(gear.map(g => g.brand).filter(Boolean))]
       .sort().map(b => `<option value="${escHtml(b)}">`).join("");
   F("brand").focus();
+  // Opened from a row far down the table, the form is otherwise off-screen
+  // above and the click looks like it did nothing.
+  document.getElementById("gearform").scrollIntoView({behavior:"smooth", block:"nearest"});
 }
 function closeForm(){
   formMode = null; editIndex = -1; lastLookup = null; originalItem = null;

@@ -58,7 +58,9 @@ heat balance is a check on top, allowed to add a gilet only when it is genuinely
 The gear screen (`#gear`) adds, edits and removes items. Each row carries an **In / Out**
 toggle deciding whether that garment is considered when picking kit — for anything lent out,
 in the wash, or not packed for a trip — with All In / All Out for the packing case. Clicking a
-row anywhere else selects it for editing, so the two actions never fight each other.
+row anywhere else selects it; double-clicking it opens the editor, which saves a trip back up
+to the toolbar for anything near the bottom of a long list. Opening the editor either way
+scrolls it into view.
 
 Brand and model are separate fields, so the table sorts and filters by maker. Every column
 header carries its description on hover or keyboard focus, plus a sort button cycling
