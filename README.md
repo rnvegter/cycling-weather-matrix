@@ -166,6 +166,12 @@ non-chrome colour comes from it: the ride-feel figure, the mark on the scale ben
 left edge of each card, and the range bars on the gear screen, which are the same band chart
 in miniature — a gap in the wardrobe reads as a gap in the column.
 
+The mark is the app rather than a picture of a bicycle: the temperature ramp wrapped into a
+wheel and cut into its seven bands, with a needle reading off it. It is drawn from the same
+gradient stops as `--ramp`, so the logo and the scale under the ride-feel figure cannot drift
+apart, and it takes the theme's ink for the needle so it inverts with everything else. The
+favicon is the same mark with the colours baked in, inline as a data URI — no image file.
+
 **Glove mode** enlarges tap targets and type for cold hands. It lives on the ride screen,
 where it is needed, rather than in the tab row, where it would read as a destination.
 

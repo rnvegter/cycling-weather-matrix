@@ -1055,3 +1055,30 @@ input[type="checkbox"] { accent-color: var(--temp); width: auto; min-height: 0; 
 
 [data-touch="gloves"] .wx-leg { flex-basis: 5.4rem; }
 @media print { .wx-leg { break-inside: avoid; } }
+
+/* ---------- 19. The mark ------------------------------------- */
+/* The temperature ramp wrapped into a wheel and cut into its seven bands,
+   with a needle reading off it. A gauge rather than a bicycle: the app is an
+   instrument, and the one number it exists to produce is a needle position. */
+
+.wx-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-5);
+}
+.wx-brand > div { min-width: 0; }
+.wx-brand .wx-eyebrow { margin-bottom: 2px; }
+.wx-brand .wx-title { margin: 0; }
+
+.wx-logo {
+  width: 3.1rem;
+  height: 3.1rem;
+  flex: 0 0 auto;
+  display: block;
+}
+
+@media (max-width: 26rem) {
+  .wx-logo { width: 2.5rem; height: 2.5rem; }
+}
+@media print { .wx-logo { width: 2.2rem; height: 2.2rem; } }
