@@ -110,7 +110,12 @@ out for. Riding hours are lit; the rest are dimmed but present. Each hour carrie
 an inline SVG icon tinted from the ramp, its temperature, an arrow pointing the way the wind
 is blowing, and the chance of rain.
 
-Wind gets a compass rose, a **Beaufort** force with what that force means on a bike, and a
+Distance, time and speed are one triangle: give any two and the third follows. Speed is the
+one you can state from experience when you have no idea how long a route will take, which is
+the usual case for a route you have not ridden. Give all three and the two facts win, and it
+says so rather than quietly ignoring what you typed.
+
+Wind gets a map, a compass rose, a **Beaufort** force with what that force means on a bike, and a
 bearing to set off on. The rule is out into it, home with it: the return leg is the one ridden
 tired, and a headwind there is what actually makes people cold. The bearing follows the wind
 in the **second half** of the ride rather than the average, because that is the wind the way
@@ -119,6 +124,13 @@ quietly picking one.
 
 Below force 3 it says the wind isn't worth planning a route around, instead of inventing
 advice.
+
+The map is what makes the bearing usable: "set off towards the WSW" means nothing until you
+can see which way that is from where you're standing. It draws the route, or the start point,
+north-up with the wind and the outbound bearing over the top. Tiles come from OpenStreetMap —
+no key, but it does need crediting, and the credit is on the map. **Everything except the
+tiles is drawn locally**, so a blocked host or an offline server costs you the basemap and
+leaves the route, arrows, north arrow and scale bar intact.
 
 ## Checking a route
 
@@ -191,6 +203,7 @@ INSTALL.md if you want to self-host them for a genuinely offline install.
 | `app.js` | Forecast, form wiring, rendering |
 | `gearui.js` | Gear screen: add, edit, delete, lookup |
 | `gpx.js` | Route parsing, leg sampling, headwind and lapse rate |
+| `map.js` | Slippy-map projection, tiles, and the drawn overlay |
 | `styles.css` | The Weather Effect design system, plus app chrome |
 
 Forecast data from [Open-Meteo](https://open-meteo.com/). Wind correction after

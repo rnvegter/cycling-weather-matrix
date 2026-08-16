@@ -588,14 +588,16 @@ input[type="checkbox"] { accent-color: var(--temp); width: auto; min-height: 0; 
 .wx-grid--2 { grid-template-columns: repeat(2, 1fr); }
 .wx-grid--3 { grid-template-columns: repeat(3, 1fr); }
 .wx-grid--4 { grid-template-columns: repeat(4, 1fr); }
+.wx-grid--5 { grid-template-columns: repeat(5, 1fr); }
 .wx-row { display: flex; gap: var(--sp-2); align-items: flex-end; }
 .wx-row > .wx-grow { flex: 1; }
 
+@media (max-width: 46rem) { .wx-grid--5 { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 34rem) {
-  .wx-grid--3, .wx-grid--4 { grid-template-columns: repeat(2, 1fr); }
+  .wx-grid--3, .wx-grid--4, .wx-grid--5 { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 22rem) {
-  .wx-grid--2, .wx-grid--3, .wx-grid--4 { grid-template-columns: 1fr; }
+  .wx-grid--2, .wx-grid--3, .wx-grid--4, .wx-grid--5 { grid-template-columns: 1fr; }
 }
 
 /* Choice chips reuse the adjustment chip, pressed state and all. */
@@ -1082,3 +1084,50 @@ input[type="checkbox"] { accent-color: var(--temp); width: auto; min-height: 0; 
   .wx-logo { width: 2.5rem; height: 2.5rem; }
 }
 @media print { .wx-logo { width: 2.2rem; height: 2.2rem; } }
+
+/* ---------- 20. Map ------------------------------------------ */
+/* Tiles underneath, everything meaningful drawn on top — so a blocked or
+   offline tile server costs the basemap and nothing else. */
+
+.wx-map {
+  position: relative;
+  margin: 0 0 var(--sp-3);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.wx-map__tiles { position: absolute; inset: 0; }
+.wx-map__tiles img {
+  position: absolute;
+  width: 256px; height: 256px;
+  /* OSM's raster tiles are drawn for light backgrounds; damp them down so the
+     route and arrows stay the brightest things on a dark screen. */
+  filter: grayscale(.55) brightness(.72) contrast(1.05);
+}
+:root[data-theme="light"] .wx-map__tiles img,
+:root:not([data-theme="dark"]) .wx-map__tiles img { filter: grayscale(.35) contrast(1.02); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .wx-map__tiles img { filter: grayscale(.55) brightness(.72) contrast(1.05); }
+}
+
+.wx-map__ink { position: relative; display: block; }
+.wx-map__credit {
+  position: absolute; right: 0; bottom: 0;
+  margin: 0; padding: 1px 5px;
+  font-size: .58rem;
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+}
+.wx-map__credit a { color: inherit; }
+
+.wx-maplegend {
+  display: flex; flex-wrap: wrap; gap: var(--sp-3);
+  font-size: var(--step--1); color: var(--text-dim);
+  margin: 0 0 var(--sp-3);
+}
+.wx-maplegend span { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.wx-maplegend i { width: 20px; height: 0; border-top-width: 3px; border-top-style: solid; }
+.wx-maplegend .k-wind { border-top-color: var(--minus); }
+.wx-maplegend .k-go { border-top-color: var(--temp); border-top-style: dashed; }
+.wx-maplegend .k-route { border-top-color: var(--temp); }

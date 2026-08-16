@@ -32,6 +32,12 @@ page" behaviour.
   `@font-face` rules at the top of `styles.css`. Worth doing if the server has no egress, or
   if you'd rather not have every page load reach a third party.
 
+- **Map tiles come from OpenStreetMap** at `tile.openstreetmap.org`, keyless but subject to
+  their [tile usage policy](https://operations.osmfoundation.org/policies/tiles/). A ride view
+  loads four to nine tiles, which is well within reasonable personal use; if you put this in
+  front of many people, switch `TILE_URL` in `map.js` to your own tile source or a commercial
+  one. The map degrades to the drawn overlay alone if tiles can't be reached.
+
 ## Which server to use
 
 **Use [Caddy](https://caddyserver.com/) unless you already run something else.** It gets and

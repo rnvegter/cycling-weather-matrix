@@ -66,11 +66,12 @@
       <p id="picked" class="wx-eyebrow" style="margin:var(--sp-2) 0 0"></p>
     </div>
 
-    <div class="wx-grid wx-grid--4">
+    <div class="wx-grid wx-grid--5">
       <div><label class="wx-label" for="date">Date</label><input type="date" id="date" class="wx-input"></div>
       <div><label class="wx-label" for="time">Start</label><input type="time" id="time" class="wx-input" step="900"></div>
       <div><label class="wx-label" for="dist">Distance km</label><input type="number" id="dist" class="wx-input" min="1" max="600" step="1" placeholder="60"></div>
       <div><label class="wx-label" for="dur">Hours</label><input type="number" id="dur" class="wx-input" min="0.25" max="24" step="0.25" placeholder="2.5"></div>
+      <div><label class="wx-label" for="speed">Speed km/h</label><input type="number" id="speed" class="wx-input" min="5" max="60" step="0.5" placeholder="auto"></div>
     </div>
     <p id="speedhint" class="wx-note"></p>
 
@@ -245,6 +246,7 @@
 </div>
 
 <script src="gpx.js"></script>
+<script src="map.js"></script>
 <script src="weather.js"></script>
 <script src="insulation.js"></script>
 <script src="gear.js"></script>

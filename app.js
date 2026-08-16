@@ -48,18 +48,45 @@ document.querySelectorAll(".wx-choice").forEach(row => {
   $("#time").value = `${String(d.getHours()).padStart(2,"0")}:00`;
 })();
 
+/* Distance, time and speed: any two give the third. Speed is the one you can
+   state from experience when you don't know how long a route will take, which
+   is the usual case for a route you haven't ridden. */
+function rideNumbers(){
+  const dist = parseFloat($("#dist").value);
+  const hours = parseFloat($("#dur").value);
+  const typed = parseFloat($("#speed").value);
+  const assumed = BASE_SPEED[state.type] * PACE_SPEED[state.pace];
+
+  const has = v => v > 0;
+  let d = has(dist) ? dist : null, h = has(hours) ? hours : null, sp = has(typed) ? typed : null;
+  let source;
+
+  if (d && h){ sp = d / h; source = "measured"; }          // both facts: speed follows
+  else if (d && sp){ h = d / sp; source = "typed"; }
+  else if (h && sp){ d = h * sp; source = "typed"; }
+  else if (d){ sp = assumed; h = d / sp; source = "assumed"; }
+  else if (h){ sp = assumed; d = h * sp; source = "assumed"; }
+  else { sp = sp || assumed; h = 2; d = h * sp; source = sp === assumed ? "assumed" : "typed"; }
+
+  return {dist: d, hours: h, speed: sp, assumed, source};
+}
+
 function updateSpeedHint(){
-  const dist = parseFloat($("#dist").value), dur = parseFloat($("#dur").value), el = $("#speedhint");
-  if (dist > 0 && dur > 0)
-    el.textContent = `Average speed ${r1(dist/dur)} km/h — sets both the self-generated wind chill and the work rate.`;
-  else if (dist > 0 || dur > 0){
-    const sp = BASE_SPEED[state.type] * PACE_SPEED[state.pace];
-    el.textContent = dist > 0 ? `Estimating ${r1(dist/sp)} h at ${r1(sp)} km/h (${state.type}, ${state.pace}).`
-                              : `Estimating ${Math.round(dur*sp)} km at ${r1(sp)} km/h (${state.type}, ${state.pace}).`;
-  } else el.textContent = "Fill in either distance or duration — the other is estimated from your ride type and pace.";
+  const n = rideNumbers(), el = $("#speedhint");
+  const both = parseFloat($("#dist").value) > 0 && parseFloat($("#dur").value) > 0;
+  if (both && parseFloat($("#speed").value) > 0){
+    el.textContent = `Distance and time are both set, so speed comes from them: ${r1(n.speed)} km/h. Clear one of them to use the speed you typed.`;
+  } else if (n.source === "measured"){
+    el.textContent = `${r1(n.speed)} km/h average — that sets both the self-generated wind chill and the work rate.`;
+  } else if (n.source === "typed"){
+    el.textContent = `At ${r1(n.speed)} km/h that's ${r1(n.dist)} km in ${r1(n.hours)} h.`;
+  } else {
+    el.textContent = `Assuming ${r1(n.assumed)} km/h for ${state.type} at ${state.pace} pace — ${r1(n.dist)} km in ${r1(n.hours)} h. Type a speed if you know yours.`;
+  }
 }
 $("#dist").addEventListener("input", updateSpeedHint);
 $("#dur").addEventListener("input", updateSpeedHint);
+$("#speed").addEventListener("input", updateSpeedHint);
 
 /* ---------------------------------------------------------------
    Location
@@ -554,6 +581,24 @@ function render(f, w, opts, place, analysis){
       <h2 class="wx-heading">Wind, and which way to go</h2>
       <span class="wx-eyebrow" style="margin:0">Out into it, home with it</span>
     </div>
+    ${(() => {
+      // The bearing only means something if you can see where it points. With a
+      // route loaded that is the route itself; without one, the start point.
+      const box = document.querySelector(".wx-shell");
+      const width = Math.max(240, Math.min(560, (box ? box.clientWidth : 600) - 44));
+      const m = renderMap({
+        width, height: Math.round(width * (route ? 0.62 : 0.5)),
+        points: route ? route.points : null,
+        lat: place.latitude, lon: place.longitude,
+        windFrom: w.dir, outbound: matters ? outbound : null
+      });
+      return m + `<p class="wx-maplegend">
+        <span><i class="k-wind"></i> wind, blowing this way</span>
+        ${matters ? `<span><i class="k-go"></i> set off this way</span>` : ""}
+        ${route ? `<span><i class="k-route"></i> your route</span>` : ""}
+      </p>`;
+    })()}
+
     <div class="wx-windgrid">
       <div class="wx-rosewrap">${compassRose(w.dir, outbound, 148)}</div>
       <div>
@@ -741,13 +786,9 @@ $("#go").onclick = async () => {
   const date = $("#date").value, time = $("#time").value;
   if (!date || !time) return status("Set a date and start time.", true);
 
-  let dist = parseFloat($("#dist").value), hours = parseFloat($("#dur").value);
-  const assumed = BASE_SPEED[state.type] * PACE_SPEED[state.pace];
-  if (!(dist > 0) && !(hours > 0)){ hours = 2; dist = hours * assumed; }
-  else if (!(dist > 0)) dist = hours * assumed;
-  else if (!(hours > 0)) hours = dist / assumed;
-
-  const opts = {dist, hours, speed:dist/hours, pace:state.pace, terrain:state.terrain,
+  const n = rideNumbers();
+  const dist = n.dist, hours = n.hours;
+  const opts = {dist, hours, speed:n.speed, pace:state.pace, terrain:state.terrain,
                 rider:state.rider, type:state.type};
   status("Fetching forecast…");
   $("#go").disabled = true;
