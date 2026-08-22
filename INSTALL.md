@@ -135,11 +135,7 @@ docker run -d --name cwem --restart unless-stopped \
 Binding to `127.0.0.1:8765` rather than `8765` keeps the container off the public interface;
 put Caddy or nginx in front as above. Then point the proxy at `127.0.0.1:8765`.
 
-Updating is a rebuild:
-
-```bash
-git pull && docker build -t cycling-weather-matrix . && docker restart cwem
-```
+Updating is a rebuild — see [Updating](#updating) below.
 
 ## Option C — Static only, no Node.js
 
@@ -177,6 +173,161 @@ handle_path /kit/* {
 	reverse_proxy 127.0.0.1:8765
 }
 ```
+
+---
+
+## Updating
+
+### Your gear list is not on the server
+
+Worth knowing before anything else: the inventory lives in your browser's `localStorage`, not
+on the server. **Updating the app cannot touch it.** Whatever you have edited, switched Out,
+or added stays exactly as it was.
+
+Two caveats to that:
+
+- **Reset to defaults reads the new seed.** The button pulls from `gear.js`, which the update
+  replaces. Press it after an update and you get the new starting list, not the one you had
+  before — which is usually what you want, but it is not an undo.
+- **`localStorage` is per browser and per origin.** Moving the app to a different domain, or
+  opening it in a different browser, is a fresh empty-handed start.
+
+So before a big update, press **Export** on the gear screen and keep `cycling-gear.json`
+somewhere. It takes a second and Import restores it anywhere, including into a different
+browser or a rebuilt server.
+
+### See what you are about to get
+
+```bash
+cd /opt/cycling-weather-matrix
+git fetch
+git log --oneline HEAD..origin/main
+```
+
+Nothing is applied yet. If that list is empty you are already current. To see which commit is
+running right now:
+
+```bash
+git -C /opt/cycling-weather-matrix log -1 --oneline
+```
+
+### Option A — Caddy and systemd
+
+```bash
+cd /opt/cycling-weather-matrix
+sudo git pull
+sudo systemctl restart cycling-weather-matrix
+systemctl status cycling-weather-matrix --no-pager
+```
+
+There is nothing to build and nothing to install: no dependencies, no bundler, no migrations.
+
+The restart matters for exactly two files. `server.js` is the running process, and
+`insulation.js` is loaded into it at startup for the gear lookup — changes to either need one.
+Everything else is read from disk per request, so new HTML, CSS and the browser-side JavaScript
+are live the moment they land. Restarting regardless is the simpler habit than remembering
+which is which.
+
+Reload Caddy only if you changed the Caddyfile:
+
+```bash
+sudo systemctl reload caddy
+```
+
+### Option B — Docker
+
+```bash
+cd cycling-weather-matrix
+git pull
+docker build -t cycling-weather-matrix .
+docker restart cwem
+```
+
+If you want a way back, tag the image you are replacing before you build over it:
+
+```bash
+docker tag cycling-weather-matrix cycling-weather-matrix:previous
+```
+
+### Option C — Static only
+
+```bash
+cd cycling-weather-matrix
+git pull
+sudo cp index.html styles.css *.js /var/www/cycling-weather-matrix/
+```
+
+`cp` will not remove a file that the update deleted, so if a `.js` file is ever dropped from
+the project you would be left serving an orphan. `rsync --delete` avoids that — but list what
+goes in rather than what stays out:
+
+```bash
+sudo rsync -a --delete \
+  --exclude server.js \
+  --include '*.js' --include index.html --include styles.css --exclude '*' \
+  ./ /var/www/cycling-weather-matrix/
+```
+
+The `--exclude '*'` at the end is the important part. A deny-list of the things you happen to
+think of will sooner or later copy `.git` into your web root, which publishes the entire
+repository — every commit, every earlier version of every file — to anyone who asks for
+`/.git/config`. Denying everything and naming the ten files the browser actually needs cannot
+make that mistake. `server.js` is excluded ahead of the `*.js` include because there is no
+interpreter behind it here; `insulation.js` is not, because the browser runs it as the offline
+fallback for the gear lookup.
+
+### If you edited the files in place
+
+`git pull` will stop rather than overwrite your changes. Two things in this project invite
+local edits, and they are worth handling differently:
+
+- **Runtime settings — port, host, rate limit — are environment variables**, not file edits.
+  Set them in the systemd unit or the `docker run` line and updates never touch them.
+- **`TILE_URL` in `map.js`**, if you pointed the map at your own tile source, is a real code
+  edit and will conflict. So is editing `deploy/Caddyfile` in place rather than editing the
+  copy at `/etc/caddy/Caddyfile`.
+
+To get the update and keep your edit:
+
+```bash
+git stash          # put your changes aside
+git pull
+git stash pop      # replay them on top
+```
+
+If `stash pop` reports a conflict, the update changed the same lines you did. Open the file,
+keep the version you want, then `git add` it. To throw your edit away and take the new file
+wholesale, `git checkout -- map.js` before pulling.
+
+### Rolling back
+
+Every version is a commit, so going back is checking one out:
+
+```bash
+cd /opt/cycling-weather-matrix
+git log --oneline -10                  # find the one that worked
+sudo git checkout <commit>
+sudo systemctl restart cycling-weather-matrix
+```
+
+That leaves you on a detached HEAD, which is fine for running but not for pulling. When you
+want to move forward again:
+
+```bash
+sudo git checkout main && sudo git pull
+```
+
+### After updating
+
+```bash
+curl -sI https://kit.example.com | head -1
+curl -s "https://kit.example.com/api/lookup?name=Castelli%20Perfetto%20RoS&slot=shell" | head -c 200
+```
+
+Then open the app and run one ride. If the page loads but behaves oddly, the usual cause is a
+browser holding old JavaScript against new HTML — hard-reload once (Cmd/Ctrl + Shift + R). The
+supplied proxy configs send `Cache-Control: no-cache` on everything precisely so this does not
+happen; if you wrote your own and cached scripts aggressively, that is where to look.
 
 ---
 

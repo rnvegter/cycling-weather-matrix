@@ -10,11 +10,11 @@
 kit.example.com {
 	encode zstd gzip
 
-	# Static assets are safe to cache; index.html is not, so the app updates
-	# on the next load rather than the next cache expiry.
-	@static path *.css *.js *.svg *.ico
-	header @static Cache-Control "public, max-age=604800"
-	header /index.html Cache-Control "no-cache"
+	# Everything revalidates. The whole app is about 300 KB, so a conditional
+	# request costs a 304 and nothing else — whereas caching the JS for a week
+	# means an update serves new HTML against week-old scripts, which is a far
+	# worse problem than a few extra round trips.
+	header Cache-Control "no-cache"
 
 	header {
 		X-Content-Type-Options nosniff
