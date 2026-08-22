@@ -143,6 +143,27 @@ async function lookup(name, slot){
 
 /* --- Server ----------------------------------------------------- */
 
+/* Which files this may hand out.
+
+   The app directory is also a git checkout, a set of deploy templates and this
+   file. Serving the whole directory means a public deployment answers
+   /.git/config with its own remote, and /.git/index and the packed objects
+   behind it — enough to reconstruct every version of everything. So this is an
+   allow-list: dotted paths are refused outright, a few server-side files are
+   named, and what is left has to look like something a browser asked for. */
+const SERVABLE = /\.(html|css|js|svg|ico|png|jpe?g|webp|woff2?|webmanifest)$/i;
+const NEVER = new Set(["server.js", "package.json", "package-lock.json", "Dockerfile"]);
+
+function isServable(rel){
+  const parts = rel.split(path.sep).filter(Boolean);
+  if (!parts.length) return false;
+  if (parts.some(p => p.startsWith("."))) return false;            // .git, .env, .gitignore
+  if (parts.some(p => p === "deploy" || p === "node_modules")) return false;
+  const base = parts[parts.length - 1];
+  if (NEVER.has(base)) return false;
+  return SERVABLE.test(base);
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
 
@@ -169,11 +190,12 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Static files, confined to this directory.
+  // Static files, confined to this directory AND to the files a browser needs.
   let rel = decodeURIComponent(url.pathname);
   if (rel === "/" ) rel = "/index.html";
   const file = path.join(ROOT, path.normalize(rel).replace(/^(\.\.[/\\])+/, ""));
   if (!file.startsWith(ROOT)){ res.writeHead(403); return res.end("Forbidden"); }
+  if (!isServable(path.relative(ROOT, file))){ res.writeHead(404); return res.end("Not found"); }
 
   fs.readFile(file, (err, buf) => {
     if (err){ res.writeHead(404); return res.end("Not found"); }

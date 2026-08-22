@@ -1,0 +1,10 @@
+# Nothing here belongs in an image. .git especially: the server hands out its
+# own directory, so a copied repository is a published repository.
+.git
+.gitignore
+deploy/
+*.md
+Dockerfile
+.dockerignore
+node_modules/
+*.gpx

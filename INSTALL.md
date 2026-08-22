@@ -48,7 +48,7 @@ outage at 3am. The whole config is about ten lines, and one of them is your doma
 |---|---|
 | **Caddy** | Default recommendation. Automatic HTTPS, tiny config, one binary. |
 | **nginx** | You already run nginx, or you need its finer-grained rate limiting and caching. Add certbot for TLS. |
-| **Docker + Caddy** | You want the app isolated, or you deploy several things to the same box. |
+| **Docker or Podman + Caddy** | You want the app isolated, or you deploy several things to the same box. Podman if you would rather not run a root daemon. |
 | **Apache** | Only if it's already there. `mod_proxy` will do it, but neither of the above needs as much configuring. |
 | **Fly.io / Render / Railway** | You'd rather not run a server at all. A Node app with no dependencies deploys to these almost unchanged. |
 
@@ -122,7 +122,9 @@ The second should come back with `"source":"web"` and a quoted temperature range
 `inference (search unavailable)`, the server has no outbound internet — see
 [Troubleshooting](#troubleshooting).
 
-## Option B — Docker
+## Option B — Docker or Podman
+
+### Docker
 
 ```bash
 git clone https://github.com/rnvegter/cycling-weather-matrix.git
@@ -135,7 +137,84 @@ docker run -d --name cwem --restart unless-stopped \
 Binding to `127.0.0.1:8765` rather than `8765` keeps the container off the public interface;
 put Caddy or nginx in front as above. Then point the proxy at `127.0.0.1:8765`.
 
-Updating is a rebuild — see [Updating](#updating) below.
+### Podman
+
+Podman builds the same `Dockerfile` and takes the same arguments, so the commands look almost
+identical. What differs is what happens afterwards, and that part is worth reading rather than
+copying past.
+
+```bash
+sudo apt-get install -y podman          # or: sudo dnf install -y podman
+git clone https://github.com/rnvegter/cycling-weather-matrix.git
+cd cycling-weather-matrix
+podman build -t cycling-weather-matrix .
+podman run -d --name cwem -p 127.0.0.1:8765:8765 cycling-weather-matrix
+```
+
+Two differences that matter:
+
+**It runs as you, not as root.** There is no daemon and no socket owned by a privileged group,
+which is most of the reason to pick Podman. Port 8765 is above 1024, so a rootless container
+binds it with no extra permission — one of the reasons the default port is 8765 and not 80.
+
+**`--restart` is not enough to survive a reboot.** With no daemon there is nothing running at
+boot to start the container again. Docker's restart policy works because dockerd starts and
+restores its containers; Podman needs systemd for that, and the current way to arrange it is a
+Quadlet file rather than the old `podman generate systemd`, which is deprecated as of Podman 5.
+
+### Podman that survives a reboot
+
+Write `~/.config/containers/systemd/cwem.container`:
+
+```ini
+[Unit]
+Description=Cycling Weather Effect Matrix
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+Image=localhost/cycling-weather-matrix:latest
+ContainerName=cwem
+PublishPort=127.0.0.1:8765:8765
+Environment=HOST=0.0.0.0
+Environment=LOOKUP_RATE=12
+
+[Service]
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+```
+
+`HOST=0.0.0.0` binds inside the container, which is not the same as being public: `PublishPort`
+pins it to the host's loopback, so it is still only reachable through your proxy.
+
+Then, as your own user and **not** with `sudo`:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user start cwem.service
+systemctl --user status cwem.service
+```
+
+Quadlet names the service after the file, so `cwem.container` becomes `cwem.service`. There is
+no separate `enable` step — the `[Install]` section is handled at `daemon-reload`.
+
+**Then enable lingering, or it will not start until you log in:**
+
+```bash
+sudo loginctl enable-linger $USER
+```
+
+Without that, a rootless user service only runs while you have a session. The container comes
+up when you SSH in and disappears when you log out, which looks exactly like a container that
+randomly stops. It is the most common way a rootless Podman deployment appears broken.
+
+On Fedora, RHEL or anything else with SELinux enforcing, bind-mounted volumes need a `:Z`
+suffix. This app mounts nothing, so there is nothing to relabel — but if you add a volume
+later, that is the error you will hit.
+
+Updating either of these is a rebuild — see [Updating](#updating) below.
 
 ## Option C — Static only, no Node.js
 
@@ -247,6 +326,49 @@ If you want a way back, tag the image you are replacing before you build over it
 
 ```bash
 docker tag cycling-weather-matrix cycling-weather-matrix:previous
+```
+
+### Option B — Podman
+
+Same shape, and the same rollback trick:
+
+```bash
+cd cycling-weather-matrix
+git pull
+podman tag cycling-weather-matrix cycling-weather-matrix:previous
+podman build -t cycling-weather-matrix .
+```
+
+If you started it with `podman run`, replace the container:
+
+```bash
+podman stop cwem && podman rm cwem
+podman run -d --name cwem -p 127.0.0.1:8765:8765 cycling-weather-matrix
+```
+
+If you used the Quadlet unit, restart the service and let it pick up the rebuilt image instead.
+Do not `podman rm` a Quadlet container by hand — systemd owns it and will simply recreate it:
+
+```bash
+systemctl --user restart cwem.service
+systemctl --user status cwem.service
+```
+
+Rolling back means pointing the tag back at the image you kept:
+
+```bash
+podman tag cycling-weather-matrix:previous cycling-weather-matrix:latest
+systemctl --user restart cwem.service
+```
+
+`podman auto-update` is not much use here. It watches a registry for a newer digest, and this
+image is built locally from a git checkout, so there is no registry to watch. Rebuilding after
+a `git pull` is the equivalent step.
+
+Old images pile up with every rebuild. Once you are satisfied the update is good:
+
+```bash
+podman image prune
 ```
 
 ### Option C — Static only
