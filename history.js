@@ -125,3 +125,78 @@ const historyNewestFirst = list =>
   list.slice().sort((a, b) => String(b.startISO || b.savedAt).localeCompare(String(a.startISO || a.savedAt)));
 
 const ratedRides = list => list.filter(e => e.delta != null);
+
+
+/* ---------------------------------------------------------------
+   Export and import.
+
+   Import MERGES rather than replaces, which is the opposite of the gear list
+   and deliberately so. Gear is one inventory you keep in one place; rides
+   accumulate wherever you happen to open the app, so bringing a file in from
+   the laptop must not discard what the phone has recorded since.
+
+   Where the same ride exists on both sides, the rated one wins — a rating is
+   evidence and an empty slot is not. If both are rated, the more recent rating
+   is the one that stands.
+----------------------------------------------------------------*/
+
+/* Enough shape-checking to reject a file that isn't this, without being
+   precious about fields a future version might add. */
+function normaliseRide(e){
+  if (!e || typeof e !== "object") return null;
+  const startISO = typeof e.startISO === "string" ? e.startISO : null;
+  const place = typeof e.place === "string" ? e.place : "";
+  if (!startISO && !e.id) return null;
+  const num = v => (Number.isFinite(+v) ? +v : null);
+  const v = e.verdict && verdictById(e.verdict) ? e.verdict : null;
+  return {
+    id: typeof e.id === "string" && e.id ? e.id : rideId(startISO, place),
+    savedAt: typeof e.savedAt === "string" ? e.savedAt : new Date().toISOString(),
+    startISO, place,
+    dist: num(e.dist), hours: num(e.hours), speed: num(e.speed),
+    feel: num(e.feel), extFeel: num(e.extFeel), air: num(e.air),
+    wet: !!e.wet, raining: !!e.raining,
+    rider: typeof e.rider === "string" ? e.rider : null,
+    mode: typeof e.mode === "string" ? e.mode : null,
+    routeName: typeof e.routeName === "string" ? e.routeName : null,
+    kit: Array.isArray(e.kit) ? e.kit.filter(k => typeof k === "string") : [],
+    verdict: v,
+    delta: v ? verdictById(v).delta : null,
+    ratedAt: typeof e.ratedAt === "string" ? e.ratedAt : null,
+    legacy: !!e.legacy
+  };
+}
+
+function exportHistory(){
+  return JSON.stringify(loadHistory(), null, 2);
+}
+
+function importHistory(text){
+  let parsed;
+  try{ parsed = JSON.parse(text); }
+  catch(e){ throw new Error("That isn't valid JSON."); }
+  if (!Array.isArray(parsed)) throw new Error("Expected a list of rides.");
+
+  const incoming = parsed.map(normaliseRide).filter(Boolean);
+  if (!incoming.length) throw new Error("No rides in that file that this recognises.");
+
+  const list = loadHistory();
+  const byId = new Map(list.map(e => [e.id, e]));
+  let added = 0, updated = 0, unchanged = 0;
+
+  incoming.forEach(inc => {
+    const existing = byId.get(inc.id);
+    if (!existing){ list.push(inc); byId.set(inc.id, inc); added++; return; }
+
+    const incRated = inc.delta != null, hasRated = existing.delta != null;
+    const incWins = incRated && !hasRated
+      || (incRated && hasRated && String(inc.ratedAt || "") > String(existing.ratedAt || ""));
+    if (incWins){
+      Object.assign(existing, inc);
+      updated++;
+    } else unchanged++;
+  });
+
+  saveHistory(list);
+  return {added, updated, unchanged, total: list.length};
+}

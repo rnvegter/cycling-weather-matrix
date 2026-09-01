@@ -243,6 +243,8 @@
       Every ride the model has worked out. Rate the ones you've actually ridden — that is what
       corrects the rider setting, and it is a question you can only answer afterwards. Rides
       still in the future wait here until their start time passes.
+      Import <strong>merges</strong> rather than replaces, so bringing a file over from another
+      browser adds to what's here instead of overwriting it.
     </p>
 
     <div class="wx-bar-row">
@@ -252,10 +254,14 @@
         <button class="wx-chip" data-filter="rated" aria-pressed="false">Rated</button>
       </div>
       <span class="wx-spacer"></span>
+      <button id="histexport" class="wx-btn wx-btn--quiet">Export</button>
+      <label class="wx-file" for="histimport">Import</label>
+      <input type="file" id="histimport" accept="application/json" class="wx-hidden">
       <button id="histclear" class="wx-btn wx-btn--quiet">Clear all</button>
     </div>
 
     <p class="wx-note" id="histlearned"></p>
+    <div id="histstatus" class="wx-status wx-hidden"></div>
     <div id="histlist" class="wx-rides"></div>
   </div>
 </section>

@@ -189,6 +189,13 @@ The history splits on the only distinction that matters: a ride in the future sa
 yet* and waits, and a ride in the past asks the question. Rides can be rated, re-rated and
 deleted, and deleting a rated one tells you it also removes what that ride taught the model.
 
+Export writes `cycling-rides-<date>.json`. **Import merges rather than replaces** — the
+opposite of the gear list, and deliberately. Gear is one inventory kept in one place; rides
+accumulate wherever you happen to open the app, so a file from the laptop must not discard what
+the phone recorded since. Where the same ride exists on both sides the rated one wins, because
+a rating is evidence and an empty slot is not, and if both are rated the more recent rating
+stands.
+
 ## Learning your calibration
 
 The rider setting began as a single hand-set number — +3 °C for "runs hot", decided once. It

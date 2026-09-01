@@ -131,6 +131,54 @@ document.getElementById("histfilter").addEventListener("click", e => {
   renderHistory();
 });
 
+/* A short-lived note under the toolbar. */
+let histStatusTimer = null;
+function histStatus(msg, isErr){
+  const el = document.getElementById("histstatus");
+  el.className = msg ? ("wx-status" + (isErr ? " wx-status--err" : "")) : "wx-status wx-hidden";
+  el.textContent = msg || "";
+  clearTimeout(histStatusTimer);
+  if (msg) histStatusTimer = setTimeout(() => {
+    el.className = "wx-status wx-hidden"; el.textContent = "";
+  }, 9000);
+}
+
+document.getElementById("histexport").onclick = () => {
+  const list = loadHistory();
+  if (!list.length) return histStatus("Nothing to export yet.", true);
+  const stamp = new Date().toISOString().slice(0, 10);
+  const blob = new Blob([exportHistory()], {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `cycling-rides-${stamp}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  const rated = ratedRides(list).length;
+  histStatus(`Exported ${list.length} ride${list.length === 1 ? "" : "s"}, ${rated} of them rated.`);
+};
+
+document.getElementById("histimport").onchange = e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const fr = new FileReader();
+  fr.onload = () => {
+    try{
+      const r = importHistory(fr.result);
+      renderHistory();
+      const bits = [];
+      if (r.added) bits.push(`${r.added} added`);
+      if (r.updated) bits.push(`${r.updated} updated with a rating`);
+      if (r.unchanged) bits.push(`${r.unchanged} already here`);
+      histStatus(`Merged: ${bits.join(", ") || "nothing new"}. ${r.total} rides in total.`);
+    }catch(err){
+      histStatus(err.message, true);
+    }
+  };
+  fr.onerror = () => histStatus("Couldn't read that file.", true);
+  fr.readAsText(file);
+  e.target.value = "";
+};
+
 document.getElementById("histclear").onclick = () => {
   const rated = ratedRides(loadHistory()).length;
   if (!confirm("Delete every ride in the history?"
