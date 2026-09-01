@@ -48,6 +48,8 @@ outage at 3am. The whole config is about ten lines, and one of them is your doma
 |---|---|
 | **Caddy** | Default recommendation. Automatic HTTPS, tiny config, one binary. |
 | **nginx** | You already run nginx, or you need its finer-grained rate limiting and caching. Add certbot for TLS. |
+| **Nginx Proxy Manager** | You already run it, or you would rather click than edit config files. Same nginx underneath, with a web UI and Let's Encrypt built in. |
+| **Cloudflare Tunnel** | You cannot or would rather not open a port: behind CGNAT, on a home connection, or on a machine you do not want reachable from the internet at all. No certificates to manage. |
 | **Docker or Podman + Caddy** | You want the app isolated, or you deploy several things to the same box. Podman if you would rather not run a root daemon. |
 | **Apache** | Only if it's already there. `mod_proxy` will do it, but neither of the above needs as much configuring. |
 | **Fly.io / Render / Railway** | You'd rather not run a server at all. A Node app with no dependencies deploys to these almost unchanged. |
@@ -252,6 +254,148 @@ handle_path /kit/* {
 	reverse_proxy 127.0.0.1:8765
 }
 ```
+
+---
+
+## Putting it behind something other than Caddy
+
+The app does not care what fronts it. Anything that can forward HTTP to
+`127.0.0.1:8765` will do, and the only two requirements are worth stating once:
+
+- **`/api/lookup` is slow on purpose.** It fetches two or three manufacturer pages before it
+  answers, so it can take 20–30 seconds. A 10-second proxy timeout will cut it off and the
+  gear screen will report the lookup service as unreachable.
+- **Do not let the proxy cache `.js` and `.css`.** The app is about 300 KB and the origin
+  already sends `Cache-Control: no-cache`. A proxy that caches assets by file extension will
+  serve new HTML against old scripts after an update, which breaks in ways that are hard to
+  attribute.
+
+### Nginx Proxy Manager
+
+Same nginx underneath, with a web UI and Let's Encrypt wired in. Sensible if you already run
+it for other services.
+
+Run it (this is the NPM project's own compose file, not part of this app):
+
+```yaml
+services:
+  npm:
+    image: jc21/nginx-proxy-manager:latest
+    restart: unless-stopped
+    ports: ["80:80", "443:443", "81:81"]
+    volumes:
+      - ./data:/data
+      - ./letsencrypt:/etc/letsencrypt
+```
+
+Log in at `http://<host>:81` — the default credentials are `admin@example.com` / `changeme`,
+and it forces a change on first login.
+
+**First, make sure NPM can actually reach the app.** This is where most of the time goes. If
+you followed Option A, the app is on the host's loopback and a container cannot see the host's
+`127.0.0.1` — that address inside the NPM container is the container itself. Pick one:
+
+| Where the app runs | What to forward to |
+|---|---|
+| Container, same network as NPM | the container name, e.g. `cwem`, port `8765` — the tidiest |
+| systemd on the host | the host's Docker bridge address, usually `172.17.0.1`, port `8765` |
+| systemd on the host, Podman | the host's Podman bridge, usually `10.88.0.1` |
+
+For the bridge cases the app has to be listening on more than loopback. Change `HOST` in the
+systemd unit from `127.0.0.1` to `0.0.0.0` and firewall port 8765 from the outside world,
+because it is now bound on every interface.
+
+Then **Hosts → Proxy Hosts → Add Proxy Host**:
+
+- *Details*: your domain, scheme `http`, the forward host and port from the table above
+- *Details*: **leave "Cache Assets" off**, for the reason at the top of this section. "Block
+  Common Exploits" and "Websockets Support" are harmless either way — this app uses no
+  websockets
+- *SSL*: request a new certificate, enable **Force SSL** and HTTP/2
+- *Advanced*: paste this, or the lookup will time out —
+
+  ```
+  location /api/ {
+      proxy_pass http://172.17.0.1:8765;
+      proxy_read_timeout 90s;
+      proxy_set_header Host $host;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
+  }
+  ```
+
+  Use the same forward address you put in *Details*. NPM's default `proxy_read_timeout` is 60
+  seconds, which is usually enough but leaves nothing spare on a slow upstream.
+
+### Cloudflare Tunnel
+
+The most interesting alternative, because it inverts the problem: nothing listens on your
+public IP at all. `cloudflared` makes an outbound connection to Cloudflare and traffic comes
+back down it, so there is no port to forward, no firewall hole, and no certificate to renew.
+That makes it the answer on a home connection, behind CGNAT, or on any machine you would
+rather not expose.
+
+The trade is real and worth stating: **your traffic goes through Cloudflare**, who terminate
+TLS and can therefore see it. For a personal cycling app that is a fair swap for never opening
+a port. For something sensitive, weigh it.
+
+You need a domain whose nameservers point at Cloudflare. Then:
+
+```bash
+# Debian/Ubuntu
+sudo apt-get install -y cloudflared        # or download from Cloudflare's releases
+
+cloudflared tunnel login                   # opens a browser, pick your domain
+cloudflared tunnel create kit
+cloudflared tunnel route dns kit kit.example.com
+```
+
+`create` prints a tunnel UUID and writes a credentials JSON. Put both into
+[`deploy/cloudflared-config.yml`](deploy/cloudflared-config.yml), copy it to
+`/etc/cloudflared/config.yml`, and run it as a service:
+
+```bash
+sudo cloudflared service install
+sudo systemctl enable --now cloudflared
+sudo systemctl status cloudflared
+```
+
+Two things that catch people out:
+
+- **The catch-all is mandatory.** `- service: http_status:404` has to be the last ingress rule
+  or cloudflared refuses to start, and rules are matched in order, so it must come after your
+  real hostname.
+- **cloudflared does not reload the config on its own.** Edit the file, then restart the
+  service, or you will be debugging a change that was never loaded.
+
+With a tunnel the app should bind the loopback and stay there — there is nothing to reach it
+from outside:
+
+```
+Environment=HOST=127.0.0.1
+```
+
+**The dashboard alternative.** Creating the tunnel under *Zero Trust → Networks → Tunnels*
+gives you a token instead, and the ingress rules live in the dashboard rather than a file.
+Then the whole connector is one container, which suits the Podman route:
+
+```bash
+podman run -d --name cloudflared --network host \
+  docker.io/cloudflare/cloudflared:latest tunnel --no-autoupdate run --token <TOKEN>
+```
+
+Treat that token as a credential — it is enough on its own to serve traffic as your tunnel.
+
+**Cloudflare Access is the better answer to "public, but only for me".** Rather than the HTTP
+basic auth suggested further down, put an Access policy in front of the hostname and log in
+with an email one-time PIN or your existing identity provider. Free for a handful of users,
+and it happens at Cloudflare's edge, so unauthenticated requests never reach your machine at
+all.
+
+**One caching gotcha.** Cloudflare caches common static extensions — `.js` and `.css` among
+them — at the edge by default. That is exactly the stale-script problem described at the top
+of this section. Add a Cache Rule for the hostname with *Bypass cache*, or purge the cache
+after each update.
 
 ---
 
@@ -471,7 +615,9 @@ worth bounding on a public host.
 
   Then open `http://localhost:8765`. No TLS to manage, nothing public, no rate limiting to
   think about.
-- If you want it public but private to you, put HTTP basic auth in front. In Caddy:
+- If you want it public but private to you, Cloudflare Access is the cleaner option — see
+  [Cloudflare Tunnel](#cloudflare-tunnel) — because unauthenticated requests never reach your
+  machine. Failing that, HTTP basic auth in front. In Caddy:
 
   ```
   basic_auth {

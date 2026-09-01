@@ -1,0 +1,28 @@
+# Cloudflare Tunnel — locally managed configuration.
+#
+# Only needed if you run the tunnel from a config file. If you created the
+# tunnel in the Cloudflare dashboard instead, the ingress rules live there and
+# cloudflared just needs the token — see INSTALL.md.
+#
+#   ~/.cloudflared/config.yml   (rootless)
+#   /etc/cloudflared/config.yml (system service)
+#
+# cloudflared does NOT reload this file on its own. Restart it after editing:
+#   sudo systemctl restart cloudflared
+
+tunnel: 00000000-0000-0000-0000-000000000000
+credentials-file: /etc/cloudflared/00000000-0000-0000-0000-000000000000.json
+
+ingress:
+  - hostname: kit.example.com
+    service: http://127.0.0.1:8765
+    originRequest:
+      # The gear lookup fetches two or three manufacturer pages before it
+      # answers, so it can take 20-30 seconds. The default connect timeout is
+      # fine, but don't let a shorter one get set here by habit.
+      connectTimeout: 30s
+      noTLSVerify: false
+
+  # Required. cloudflared refuses to start without a catch-all, and it has to
+  # come last — rules are matched in order.
+  - service: http_status:404
