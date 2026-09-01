@@ -1215,3 +1215,18 @@ input[type="checkbox"] { accent-color: var(--temp); width: auto; min-height: 0; 
 .wx-linkbtn--warn:hover { color: var(--signal); }
 
 #histlearned b { color: var(--text); }
+
+/* --- What actually happened, against what was assumed --- */
+.wx-actual {
+  margin-top: var(--sp-3);
+  padding: var(--sp-2) 0 var(--sp-2) var(--sp-3);
+  border-left: 2px solid var(--line);
+}
+.wx-actual__line { font-size: var(--step--1); color: var(--text); margin: 0; }
+.wx-actual__line b { font-weight: 600; }
+.wx-actual__line .wx-num { color: var(--temp); }
+.wx-actual__note {
+  font-size: var(--step--1); color: var(--text-dim); margin: var(--sp-1) 0 0;
+}
+.wx-actual__note b { color: var(--text); font-weight: 600; }
+label.wx-linkbtn { display: inline-block; }

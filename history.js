@@ -82,6 +82,54 @@ function recordRide(entry){
   return list;
 }
 
+/* ---------------------------------------------------------------
+   Attaching what actually happened.
+
+   Speed is the model's weakest input: it is typed in beforehand, and it drives
+   the self-generated wind chill. When a recorded file says you rode 24 and not
+   the 27 you assumed, part of the model's error was that guess and not your
+   physiology — and without separating the two, the calibration quietly absorbs
+   bad speed estimates and calls them "runs cold".
+
+   Speed touches ride-feel through exactly one term, so the size of that error
+   is exact rather than estimated: the self-wind term at the real speed minus
+   the same term at the assumed one.
+----------------------------------------------------------------*/
+function speedFeelEffect(entry){
+  if (!entry || !entry.actual || entry.air == null || !entry.speed) return 0;
+  if (!entry.actual.speed) return 0;
+  return +(selfWindTerm(entry.air, entry.actual.speed)
+         - selfWindTerm(entry.air, entry.speed)).toFixed(2);
+}
+
+/* What the calibration should actually learn from this ride. The verdict is a
+   judgement on what was worn, which was chosen from the predicted feel; if the
+   corrected model would already have been warmer, the rider correction only has
+   to account for what is left. */
+function effectiveDelta(entry){
+  if (entry.delta == null) return null;
+  const eff = speedFeelEffect(entry);
+  if (!eff) return entry.delta;
+  return +(entry.delta - eff).toFixed(2);
+}
+
+function attachActual(id, actual, fileName){
+  const list = loadHistory();
+  const e = list.find(x => x.id === id);
+  if (!e) return list;
+  e.actual = actual;
+  e.actualFrom = fileName || null;
+  saveHistory(list);
+  return list;
+}
+
+function detachActual(id){
+  const list = loadHistory();
+  const e = list.find(x => x.id === id);
+  if (e){ delete e.actual; delete e.actualFrom; saveHistory(list); }
+  return list;
+}
+
 function rateRide(id, verdict){
   const list = loadHistory();
   const e = list.find(x => x.id === id);

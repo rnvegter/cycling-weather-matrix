@@ -42,6 +42,14 @@ const rampPos = t => clamp((t - RAMP_MIN) / (RAMP_MAX - RAMP_MIN) * 100, 0, 100)
 const BASE_SPEED = {road:27, gravel:22, mtb:16};
 const PACE_SPEED = {easy:0.85, steady:1, hard:1.12};
 
+/* The chill you make yourself. Extracted because it is the only place speed
+   touches ride-feel, which makes it also the exact size of the error when the
+   speed was guessed wrong — see rideNumbersFromActual in history.js. */
+function selfWindTerm(air, speed){
+  const speedFactor = clamp(speed / 27, 0.55, 1.45);
+  return Math.round((air < 15 ? -3 : -1) * speedFactor * 2) / 2;
+}
+
 /* ---------------------------------------------------------------
    Ride-feel. Standing-still "feels like" numbers are wrong on a bike,
    so start from air temperature and adjust for what the rider is doing.
@@ -52,8 +60,7 @@ function rideFeel(w, opts){
   rows.push({label:"Air temperature at start", v:air, base:true});
 
   // Self-generated wind, scaled by actual average speed rather than a fixed 25-30 km/h.
-  const speedFactor = clamp(opts.speed / 27, 0.55, 1.45);
-  const self = Math.round((air < 15 ? -3 : -1) * speedFactor * 2) / 2;
+  const self = selfWindTerm(air, opts.speed);
   rows.push({label:`Self-generated wind at ${r1(opts.speed)} km/h`, v:self});
 
   // Ambient wind only bites below 12°C.

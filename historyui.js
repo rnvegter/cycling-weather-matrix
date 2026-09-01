@@ -82,6 +82,23 @@ function renderHistory(){
       </p>
       ${kit ? `<p class="wx-ride__kit">${escHtml(kit)}</p>` : ""}
 
+      ${e.actual ? (() => {
+        const eff = speedFeelEffect(e);
+        const faster = e.actual.speed > (e.speed || 0);
+        return `<div class="wx-actual">
+          <p class="wx-actual__line"><b>Rode</b> ${e.actual.distance} km in
+            ${hoursToClock(e.actual.movingH)} moving${
+              e.actual.elapsedH - e.actual.movingH > 0.08
+                ? ` (${hoursToClock(e.actual.elapsedH)} elapsed)` : ""} —
+            <b class="wx-num">${e.actual.speed} km/h</b>${
+              e.speed ? `, against the ${e.speed} assumed` : ""}.</p>
+          ${eff ? `<p class="wx-actual__note">Riding ${faster ? "faster" : "slower"} than
+            assumed made it <b>${eff > 0 ? "+" : ""}${eff}&deg;C</b> ${
+            eff > 0 ? "warmer" : "colder"} than the forecast said, and that much of any
+            mismatch was the speed guess rather than you.</p>` : ""}
+        </div>`;
+      })() : ""}
+
       <div class="wx-ride__foot">
         ${v
           ? `<span class="wx-verdict-set">Rated <b>${v.label.toLowerCase()}</b></span>
@@ -93,6 +110,11 @@ function renderHistory(){
                </div>`
             : `<span class="wx-waiting">Not ridden yet</span>`}
         <span class="wx-spacer"></span>
+        ${ridden ? (e.actual
+          ? `<button class="wx-linkbtn" data-detach="${escHtml(e.id)}">Remove ride file</button>`
+          : `<label class="wx-linkbtn" for="act-${escHtml(e.id)}">Attach ride file</label>
+             <input type="file" class="wx-hidden" id="act-${escHtml(e.id)}"
+               accept=".gpx,application/gpx+xml,text/xml" data-attach="${escHtml(e.id)}">`) : ""}
         <button class="wx-linkbtn wx-linkbtn--warn" data-del="${escHtml(e.id)}">Delete</button>
       </div>
     </article>`;
@@ -111,6 +133,9 @@ document.getElementById("histlist").addEventListener("click", e => {
   const un = e.target.closest("[data-unrate]");
   if (un){ unrateRide(un.dataset.unrate); renderHistory(); return; }
 
+  const detach = e.target.closest("[data-detach]");
+  if (detach){ detachActual(detach.dataset.detach); renderHistory(); return; }
+
   const del = e.target.closest("[data-del]");
   if (del){
     const entry = loadHistory().find(x => x.id === del.dataset.del);
@@ -120,6 +145,30 @@ document.getElementById("histlist").addEventListener("click", e => {
     deleteRide(del.dataset.del);
     renderHistory();
   }
+});
+
+/* Attaching a recorded ride. Delegated, because the inputs are rebuilt with
+   the list on every render. */
+document.getElementById("histlist").addEventListener("change", e => {
+  const input = e.target.closest("[data-attach]");
+  if (!input || !input.files[0]) return;
+  const id = input.dataset.attach, file = input.files[0];
+  const fr = new FileReader();
+  fr.onload = () => {
+    try{
+      const parsed = parseGPX(fr.result);
+      if (!parsed.recorded)
+        throw new Error("That file has no timestamps, so it is a planned route rather than a recorded ride. Export the activity itself.");
+      const stats = activityStats(parsed.points);
+      if (!stats) throw new Error("Couldn't read a distance and a time from that file.");
+      attachActual(id, stats, file.name);
+      renderHistory();
+      histStatus(`Attached ${stats.distance} km at ${stats.speed} km/h.`);
+    }catch(err){ histStatus(err.message, true); }
+  };
+  fr.onerror = () => histStatus("Couldn't read that file.", true);
+  fr.readAsText(file);
+  input.value = "";
 });
 
 document.getElementById("histfilter").addEventListener("click", e => {

@@ -54,12 +54,14 @@ function learnedOffset(history, opts){
   const recent = ratedRides(history).slice(-WINDOW);
   if (recent.length < MIN_RIDES) return {value: 0, n: recent.length, ready: false, basis: "all"};
 
+  // effectiveDelta strips out whatever the speed guess got wrong, so what is
+  // left is about the rider rather than the estimate.
   const wetOnes = recent.filter(e => e.wet);
   if (wet && wetOnes.length >= MIN_RIDES){
-    return {value: clampCorrection(mean(wetOnes.map(e => e.delta))),
+    return {value: clampCorrection(mean(wetOnes.map(effectiveDelta))),
             n: wetOnes.length, ready: true, basis: "wet"};
   }
-  return {value: clampCorrection(mean(recent.map(e => e.delta))),
+  return {value: clampCorrection(mean(recent.map(effectiveDelta))),
           n: recent.length, ready: true, basis: "all"};
 }
 

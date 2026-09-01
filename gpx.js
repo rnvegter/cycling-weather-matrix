@@ -58,17 +58,29 @@ function parseGPX(text){
 
   const pts = nodes.map(n => {
     const ele = n.getElementsByTagName("ele")[0];
+    // A planned route has no timestamps; a recorded activity does, and that is
+    // the whole difference between "where I meant to go" and "what I did".
+    const t = n.getElementsByTagName("time")[0];
+    const when = t ? Date.parse(t.textContent) : NaN;
     return {
       lat: +n.getAttribute("lat"),
       lon: +n.getAttribute("lon"),
-      ele: ele ? +ele.textContent : null
+      ele: ele ? +ele.textContent : null,
+      t: Number.isFinite(when) ? when : null
     };
   }).filter(p => Number.isFinite(p.lat) && Number.isFinite(p.lon));
 
   if (pts.length < 2) throw new Error("That route has fewer than two points.");
 
   const nameEl = doc.querySelector("trk > name, rte > name, metadata > name");
-  return {name: nameEl ? nameEl.textContent.trim() : "", points: pts};
+  const timed = pts.filter(p => p.t != null).length;
+  return {
+    name: nameEl ? nameEl.textContent.trim() : "",
+    points: pts,
+    // A file is a recording rather than a plan when most of its points are
+    // stamped. Strava's activity export is; its route export is not.
+    recorded: timed >= Math.max(2, pts.length * 0.5)
+  };
 }
 
 /* --- Shape ------------------------------------------------------ */
@@ -193,4 +205,56 @@ const windLabel = comp =>
 function lapseAdjust(temp, routeEle, modelEle){
   if (routeEle == null || modelEle == null) return temp;
   return temp - (routeEle - modelEle) * 0.0065;
+}
+
+
+/* ---------------------------------------------------------------
+   What a recorded activity actually did.
+
+   Elapsed time is the clock; moving time ignores the stops, and the two differ
+   by however long you stood at the lights or in the café. The model wants the
+   moving average, because that is the speed the airflow was made at — a coffee
+   stop does not chill you at 25 km/h.
+----------------------------------------------------------------*/
+const MOVING_MIN_KMH = 1.5;    // slower than this is a stop, not riding
+const GPS_SPIKE_KMH = 120;     // a jump this fast is the receiver, not you
+
+function activityStats(points){
+  const timed = points.filter(p => p.t != null);
+  if (timed.length < 2) return null;
+
+  let distance = 0, movingSeconds = 0, movingDistance = 0;
+  for (let i = 1; i < timed.length; i++){
+    const d = haversine(timed[i-1], timed[i]);
+    const secs = (timed[i].t - timed[i-1].t) / 1000;
+    if (secs <= 0) continue;
+    const kmh = d / (secs / 3600);
+    if (kmh > GPS_SPIKE_KMH) continue;
+    distance += d;
+    if (kmh >= MOVING_MIN_KMH){ movingSeconds += secs; movingDistance += d; }
+  }
+
+  const start = timed[0].t, end = timed[timed.length - 1].t;
+  const elapsedH = (end - start) / 3600000;
+  const movingH = movingSeconds / 3600;
+  if (!(distance > 0.2) || !(elapsedH > 0)) return null;
+
+  return {
+    start: new Date(start).toISOString(),
+    end: new Date(end).toISOString(),
+    distance: +distance.toFixed(2),
+    elapsedH: +elapsedH.toFixed(3),
+    movingH: +movingH.toFixed(3),
+    // The moving average is the one the model wants.
+    speed: movingH > 0 ? +(movingDistance / movingH).toFixed(1)
+                       : +(distance / elapsedH).toFixed(1),
+    elapsedSpeed: +(distance / elapsedH).toFixed(1)
+  };
+}
+
+/* h:mm, because 2.783 hours means nothing to anyone. */
+function hoursToClock(h){
+  if (h == null) return "—";
+  const total = Math.round(h * 60);
+  return `${Math.floor(total / 60)}h ${String(total % 60).padStart(2, "0")}`;
 }

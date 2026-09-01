@@ -191,6 +191,16 @@ The history splits on the only distinction that matters: a ride in the future sa
 yet* and waits, and a ride in the past asks the question. Rides can be rated, re-rated and
 deleted, and deleting a rated one tells you it also removes what that ride taught the model.
 
+**Attach what actually happened.** Speed is the model's weakest input: it is typed in
+beforehand and it drives the self-generated wind chill. Drop the GPX of a completed activity
+onto a ride — Strava's activity export carries a timestamp on every point, its route export
+does not — and the real moving average replaces the guess.
+
+That separation matters more than it sounds. Speed touches ride-feel through exactly one term,
+so the size of the error is exact rather than estimated, and the calibration learns only what
+is left after it. Assume 24 km/h, ride 30, and come home cold, and the naive reading is "runs
+cold"; the correct reading is that you rode harder, and the correction is zero.
+
 Export writes `cycling-rides-<date>.json`. **Import merges rather than replaces** — the
 opposite of the gear list, and deliberately. Gear is one inventory kept in one place; rides
 accumulate wherever you happen to open the app, so a file from the laptop must not discard what
