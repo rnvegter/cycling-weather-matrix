@@ -140,6 +140,7 @@ function status(msg, isErr){
    Route file
 ----------------------------------------------------------------*/
 let route = null;
+let lastRide = null;   // what the feedback control is rating
 
 $("#gpx").onchange = e => {
   const file = e.target.files[0];
@@ -190,7 +191,11 @@ async function forecast(lat, lon){
   const url = "https://api.open-meteo.com/v1/forecast"
     + `?latitude=${lat}&longitude=${lon}`
     + "&hourly=temperature_2m,precipitation_probability,precipitation,cloud_cover,"
-    + "wind_speed_10m,wind_direction_10m,wind_gusts_10m,is_day,weather_code,apparent_temperature"
+    + "wind_speed_10m,wind_direction_10m,wind_gusts_10m,is_day,weather_code,"
+    + "apparent_temperature,freezing_level_height"
+    // Quarter-hourly precipitation only runs a few days out; absent beyond that,
+    // which the rain-timing code treats as "fall back to the hour".
+    + "&minutely_15=precipitation"
     + "&daily=sunrise,sunset&timezone=auto&forecast_days=16&past_days=2";
   const r = await fetch(url);
   if (!r.ok) throw new Error("Forecast request failed");
@@ -208,7 +213,7 @@ function rideWindow(fc, dateStr, timeStr, hours){
   const temps=g("temperature_2m"), winds=g("wind_speed_10m"), gusts=g("wind_gusts_10m"),
         precip=g("precipitation"), probs=g("precipitation_probability"),
         cloud=g("cloud_cover"), day=g("is_day"), dirs=g("wind_direction_10m"),
-        codes=g("weather_code");
+        codes=g("weather_code"), freeze=g("freezing_level_height");
 
   // Directions are angles, so they average on the unit circle — a naive mean of
   // 350° and 10° gives 180°, which is the exact opposite of the truth.
@@ -243,6 +248,20 @@ function rideWindow(fc, dateStr, timeStr, hours){
     prob: Math.max(...probs), cloud: cloud.reduce((a,b)=>a+b,0)/cloud.length,
     dark: darkFrac, wetHours: precip.filter(p => p >= 0.1).length, hoursCount: idx.length,
     sunrise, sunset, dirLate,
+    // Altitude of 0°C. Lower than the ground you are riding on means freezing.
+    freezingLevel: freeze.length ? Math.min(...freeze) : null,
+    // Quarter-hourly rain start, when the 15-minute feed reaches this far out.
+    rainStart15: (() => {
+      const m = fc.minutely_15;
+      if (!m || !m.time) return null;
+      const from = startDT.getTime(), to = endDT.getTime();
+      for (let k = 0; k < m.time.length; k++){
+        const t = new Date(m.time[k]).getTime();
+        if (t < from || t > to) continue;
+        if ((m.precipitation[k] || 0) >= 0.1) return m.time[k];
+      }
+      return null;
+    })(),
     hourly: idx.map((k,n) => ({
       time:times[k], t:temps[n], wind:winds[n], precip:precip[n], prob:probs[n],
       dir:dirs[n], gust:gusts[n], code:codes[n], day:day[n], cloud:cloud[n]
@@ -266,56 +285,102 @@ function rideWindow(fc, dateStr, timeStr, hours){
 }
 
 /* ---------------------------------------------------------------
-   Do the models agree?
+   Pollen.
 
-   Open-Meteo's default already picks the highest-resolution model available
-   for a location — over the Netherlands that is KNMI HARMONIE at 2.5 km, and
-   it is what the forecast above is built from. What a single model cannot tell
-   you is how much to trust it.
-
-   So ask the global models the same question and see whether they say the same
-   thing. Flipping between ECMWF, GFS and ICON to see if they agree is what
-   people actually use a Windy subscription for; it is one extra request here,
-   and it turns "the wind is from the NW" into "the wind is from the NW, and
-   everyone agrees" or "...but nobody agrees, so don't plan the route on it".
+   Grass runs from roughly May to July here and birch in April, and a bad day
+   is genuinely miserable on a bike in a way no jacket fixes — you are breathing
+   hard, through your mouth, at head height in open country for hours. Counts
+   are grains per cubic metre.
 ----------------------------------------------------------------*/
-const SPREAD_MODELS = ["ecmwf_ifs025", "gfs_seamless", "icon_seamless"];
+const POLLENS = [
+  ["alder_pollen", "alder"], ["birch_pollen", "birch"], ["grass_pollen", "grass"],
+  ["mugwort_pollen", "mugwort"], ["olive_pollen", "olive"], ["ragweed_pollen", "ragweed"]
+];
 
-async function modelSpread(lat, lon, dateStr, hourKey){
-  const url = "https://api.open-meteo.com/v1/forecast"
+async function airQuality(lat, lon, dateStr, hourKey){
+  const url = "https://air-quality-api.open-meteo.com/v1/air-quality"
     + `?latitude=${lat}&longitude=${lon}`
-    + "&hourly=wind_speed_10m,wind_direction_10m,temperature_2m"
-    + `&models=${SPREAD_MODELS.join(",")}`
+    + `&hourly=${POLLENS.map(p => p[0]).join(",")},european_aqi`
     + `&start_date=${dateStr}&end_date=${dateStr}&timezone=auto`;
   const r = await fetch(url);
-  if (!r.ok) throw new Error("model comparison unavailable");
+  if (!r.ok) throw new Error("air quality unavailable");
   const h = (await r.json()).hourly;
   const i = h.time.indexOf(hourKey);
-  if (i < 0) throw new Error("hour outside the comparison window");
+  if (i < 0) throw new Error("hour outside the air quality window");
 
-  const dirs = [], speeds = [], temps = [], named = [];
-  SPREAD_MODELS.forEach(m => {
-    const d = h[`wind_direction_10m_${m}`]?.[i];
-    const sp = h[`wind_speed_10m_${m}`]?.[i];
-    const t = h[`temperature_2m_${m}`]?.[i];
-    if (d == null || sp == null) return;
-    dirs.push(d); speeds.push(sp); if (t != null) temps.push(t);
-    named.push({model: m.split("_")[0].toUpperCase(), dir: d, speed: sp, temp: t});
-  });
-  if (named.length < 2) throw new Error("not enough models answered");
+  const worst = POLLENS
+    .map(([key, name]) => ({name, count: h[key] ? h[key][i] : null}))
+    .filter(p => p.count != null && p.count > 0)
+    .sort((a, b) => b.count - a.count)[0] || null;
 
-  // Widest disagreement between any two, which is the honest measure — an
-  // average would hide one model sitting 40° off on its own.
+  return {worst, aqi: h.european_aqi ? h.european_aqi[i] : null};
+}
+
+/* Grains per cubic metre. Bands follow the common European reporting scale —
+   below about 20 nobody notices, and above 50 hay fever sufferers do. */
+function pollenBand(count){
+  if (count >= 150) return "very high";
+  if (count >= 50)  return "high";
+  if (count >= 20)  return "moderate";
+  return null;
+}
+
+/* ---------------------------------------------------------------
+   How sure is the forecast?
+
+   Open-Meteo's default already serves the highest-resolution model for a
+   location — over the Netherlands that is KNMI HARMONIE at 2.5 km, and it is
+   what everything else here is built from. What one model cannot say is how
+   much to trust itself.
+
+   The ensemble answers that properly. ECMWF runs its model 51 times from
+   slightly different starting conditions; where the members agree the
+   atmosphere is behaving predictably, and where they scatter it is not. That
+   turns "it might rain" into "9 of 51 members have rain", which is a sentence
+   you can act on. 51 members, and it covers the whole globe — checked from
+   Reykjavik to Sydney.
+----------------------------------------------------------------*/
+async function ensembleSpread(lat, lon, dateStr, hourKey){
+  const url = "https://ensemble-api.open-meteo.com/v1/ensemble"
+    + `?latitude=${lat}&longitude=${lon}`
+    + "&hourly=temperature_2m,precipitation,wind_speed_10m,wind_direction_10m"
+    + "&models=ecmwf_ifs025"
+    + `&start_date=${dateStr}&end_date=${dateStr}&timezone=auto`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error("ensemble unavailable");
+  const h = (await r.json()).hourly;
+  const i = h.time.indexOf(hourKey);
+  if (i < 0) throw new Error("hour outside the ensemble window");
+
+  const at = prefix => Object.keys(h)
+    .filter(k => k.startsWith(prefix + "_member") || k === prefix)
+    .map(k => h[k][i])
+    .filter(v => v != null);
+
+  const temps = at("temperature_2m");
+  const rain  = at("precipitation");
+  const dirs  = at("wind_direction_10m");
+  const winds = at("wind_speed_10m");
+  if (temps.length < 5) throw new Error("too few members answered");
+
   let dirSpread = 0;
   for (let a = 0; a < dirs.length; a++)
     for (let b = a + 1; b < dirs.length; b++)
       dirSpread = Math.max(dirSpread, angleGap(dirs[a], dirs[b]));
 
+  const dry = rain.filter(v => v < 0.1).length;
+  const sorted = temps.slice().sort((a, b) => a - b);
+  // The middle 80%: the outer members are the tails, and quoting them as the
+  // range makes every forecast look uncertain.
+  const lo = sorted[Math.floor(sorted.length * 0.1)];
+  const hi = sorted[Math.ceil(sorted.length * 0.9) - 1];
+
   return {
-    models: named,
+    members: temps.length,
+    dryMembers: dry, wetMembers: rain.length - dry, rainMembers: rain.length,
+    tempLow: lo, tempHigh: hi, tempSpread: hi - lo,
     dirSpread,
-    speedSpread: Math.max(...speeds) - Math.min(...speeds),
-    tempSpread: temps.length ? Math.max(...temps) - Math.min(...temps) : null
+    windSpread: winds.length ? Math.max(...winds) - Math.min(...winds) : 0
   };
 }
 
@@ -498,6 +563,8 @@ async function analyseRoute(route, opts){
       speed: leg.speed, hours: leg.hours, dist: leg.toKm - leg.fromKm,
       terrain: descending ? "exposed" : opts.terrain,
       pace: climbing ? "hard" : opts.pace
+      // opts already carries learned/learnedLabel, so the legs and the
+      // headline number stay in step.
     });
     leg.climbing = climbing; leg.descending = descending;
     leg.w = w;
@@ -530,6 +597,20 @@ async function analyseRoute(route, opts){
   // Only the wardrobe knows what packs; the generic list has no such detail.
   if (changes && state.mode === "wardrobe") result.plan = packingPlan(result, opts);
   return result;
+}
+
+/* What the app has learned so far, in one line. */
+function feedbackState(){
+  const list = loadFeedback();
+  if (!list.length) return "No rides logged yet. Three is enough for it to start adjusting.";
+  const off = learnedOffset(list, {wet:false});
+  const n = list.length;
+  if (!off.ready)
+    return `${n} ride${n===1?"":"s"} logged. ${MIN_RIDES - n} more before it starts adjusting — `
+         + "one cold morning shouldn't rewrite the model.";
+  const sign = off.value > 0 ? "+" : "";
+  return `${n} rides logged. Currently applying ${sign}${Math.round(off.value*10)/10}°C `
+       + "on top of your rider setting.";
 }
 
 /* ---------------------------------------------------------------
@@ -669,21 +750,17 @@ function render(f, w, opts, place, analysis){
         ${(() => {
           const sp = w.spread;
           if (!sp) return "";
-          const names = sp.models.map(m => m.model).join(", ");
-          // A tight spread is a reason to trust the bearing; a wide one is a
-          // reason to treat it as a steer rather than a plan. Saying which is
-          // the whole point of asking more than one model.
-          const tight = sp.dirSpread <= 20;
+          const tight = sp.dirSpread <= 25;
+          const wetPct = Math.round(100 * sp.wetMembers / sp.rainMembers);
           return `<p class="wx-agree ${tight ? "is-tight" : "is-loose"}">
-            <b>${names}</b> ${tight
-              ? `agree within ${Math.round(sp.dirSpread)}&deg; on the direction`
-              : `spread over ${Math.round(sp.dirSpread)}&deg; on the direction`}${
-              sp.speedSpread >= 8 ? ` and ${Math.round(sp.speedSpread)} km/h on the speed` : ""}.
-            ${tight
-              ? "The bearing is worth planning around."
-              : "Treat the bearing as a steer, not a plan, and look again nearer the time."}
-            ${sp.tempSpread != null && sp.tempSpread >= 3
-              ? `They also differ by ${r1(sp.tempSpread)}&deg;C on air temperature, so the kit call is less settled than one number makes it look.`
+            <b>${sp.members} ECMWF members</b> ${tight
+              ? `land within ${Math.round(sp.dirSpread)}&deg; of each other on direction — the bearing is worth planning around.`
+              : `spread over ${Math.round(sp.dirSpread)}&deg; on direction, so treat the bearing as a steer and look again nearer the time.`}
+            ${sp.wetMembers > 0
+              ? ` ${sp.wetMembers} of ${sp.rainMembers} have rain at this hour (${wetPct}%).`
+              : " None of them have rain at this hour."}
+            ${sp.tempSpread >= 2.5
+              ? ` Air temperature spans ${r1(sp.tempLow)}&ndash;${r1(sp.tempHigh)}&deg;C across the middle of the spread, so the kit call is less settled than one number looks.`
               : ""}</p>`;
         })()}
         ${matters ? `
@@ -809,6 +886,19 @@ function render(f, w, opts, place, analysis){
   </section>`;
   })()}
 
+  <section class="wx-card wx-card--flat ${ramp}" id="wx-feedback">
+    <div class="wx-card__head">
+      <h2 class="wx-heading">Afterwards</h2>
+      <span class="wx-eyebrow" style="margin:0">Teaches it your calibration</span>
+    </div>
+    <p class="wx-note" style="margin-top:0">How did this one actually feel? One tap when you
+      get back is what turns the rider setting from a guess into a measurement.</p>
+    <div class="wx-choice" id="wx-verdicts" style="margin-top:var(--sp-3)">
+      ${VERDICTS.map(v => `<button class="wx-chip" data-verdict="${v.id}">${v.label}</button>`).join("")}
+    </div>
+    <p class="wx-note" id="wx-fbstate">${feedbackState()}</p>
+  </section>
+
   ${out.notes.map(n => `<p class="wx-alert">${n}</p>`).join("")}
   ${watch.map(x => `<p class="wx-alert"><b>Watch.</b> ${x}</p>`).join("")}
 
@@ -850,6 +940,28 @@ function render(f, w, opts, place, analysis){
 
 `;
   $("#out").scrollIntoView({behavior:"smooth", block:"start"});
+
+  // Rating a ride re-runs it, so the effect of the correction is visible
+  // immediately rather than only on the next ride.
+  const verdicts = document.getElementById("wx-verdicts");
+  if (verdicts) verdicts.addEventListener("click", e => {
+    const b = e.target.closest("[data-verdict]");
+    if (!b || !lastRide) return;
+    const v = verdictById(b.dataset.verdict);
+    recordFeedback({
+      delta: v.delta, verdict: v.id,
+      feel: f.feel, air: r1(f.air), wet: f.wet,
+      rider: opts.rider, place: place.name
+    });
+    verdicts.querySelectorAll(".wx-chip").forEach(c =>
+      c.setAttribute("aria-pressed", c === b ? "true" : "false"));
+    document.getElementById("wx-fbstate").textContent = feedbackState();
+    // Re-run with the updated correction.
+    const off = learnedOffset(loadFeedback(), {wet: f.wet});
+    const next = Object.assign({}, lastRide.opts,
+      {learned: off.value, learnedLabel: learnedLabel(off)});
+    render(rideFeel(lastRide.w, next), lastRide.w, next, lastRide.place, analysis);
+  });
 }
 
 /* ---------------------------------------------------------------
@@ -869,11 +981,19 @@ $("#go").onclick = async () => {
   try{
     const fc = await forecast(state.place.latitude, state.place.longitude);
     const w = rideWindow(fc, date, time, hours);
-    // Agreement is a nice-to-have: a failure here must not cost the forecast.
-    try{
-      w.spread = await modelSpread(state.place.latitude, state.place.longitude,
-                                   date, `${date}T${time.slice(0,2)}:00`);
-    }catch(e){ w.spread = null; }
+    // The highest ground the ride reaches — the route's summit if one is
+    // loaded, otherwise the model's terrain height at the start point.
+    opts.maxElevation = (route && route.stats.hasElevation)
+      ? route.stats.maxEle : fc.elevation;
+    // Confidence and pollen are nice-to-haves: a failure in either must not
+    // cost the forecast itself.
+    const hourKey = `${date}T${time.slice(0,2)}:00`;
+    const [spread, pollen] = await Promise.all([
+      ensembleSpread(state.place.latitude, state.place.longitude, date, hourKey).catch(() => null),
+      airQuality(state.place.latitude, state.place.longitude, date, hourKey).catch(() => null)
+    ]);
+    w.spread = spread;
+    w.pollen = pollen;
     let analysis = null;
     if (route){
       status("Checking the kit along the route…");
@@ -884,7 +1004,14 @@ $("#go").onclick = async () => {
         analysis = {error: err.message};
       }
     }
+    // Two passes: the first tells us whether it is a wet ride, which decides
+    // which learned correction applies, and the second uses it.
+    const dry = rideFeel(w, opts);
+    const off = learnedOffset(loadFeedback(), {wet: dry.wet});
+    opts.learned = off.value;
+    opts.learnedLabel = learnedLabel(off);
     status("");
+    lastRide = {w, opts, place: state.place};
     render(rideFeel(w, opts), w, opts, state.place, analysis);
   }catch(e){
     status(e.message, true);

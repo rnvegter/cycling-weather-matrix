@@ -91,6 +91,16 @@ function rideFeel(w, opts){
   if (opts.rider === "cold") cal = -3;
   if (cal) rows.push({label: cal > 0 ? "Rider runs hot" : "Rider runs cold", v:cal, calibration:true});
 
+  // What the rides themselves say, on top of the preset. Shown as its own row
+  // rather than folded in, because a correction you cannot see is one you
+  // cannot argue with.
+  const learned = opts.learned || 0;
+  if (learned){
+    cal += learned;
+    rows.push({label: opts.learnedLabel || "Learned from your rides",
+               v: Math.round(learned * 10) / 10, calibration:true});
+  }
+
   const feel = air + self + ambient + rain + sun + dark + pace + terrain + cal;
   // What the environment is doing, for the heat-balance sum: everything except
   // the rider's own preference (not physics) , the pace bonus (already in the
@@ -374,6 +384,16 @@ function watchFor(f, w, opts){
     out.push(`Gusts to ${Math.round(w.gust)} km/h. On open ground — dikes, polder, coastal road, ridgeline — that's a safety point, not a comfort one${opts.type !== "road" ? ", especially on gravel" : " with deep-section wheels"}.`);
   if (w.tMin <= 2)
     out.push("Black ice on shaded corners and bridge decks. They freeze first and thaw last.");
+
+  // Measured rather than inferred: the altitude of 0°C, against the ground you
+  // will actually be on.
+  if (w.freezingLevel != null && opts.maxElevation != null){
+    const gap = w.freezingLevel - opts.maxElevation;
+    if (gap < 0)
+      out.push(`The freezing line sits at ${Math.round(w.freezingLevel)} m and your high point is ${Math.round(opts.maxElevation)} m — the top of this ride is below zero, whatever the valley says.`);
+    else if (gap < 300)
+      out.push(`Freezing line at ${Math.round(w.freezingLevel)} m, only ${Math.round(gap)} m above your high point. Close enough that a colder-than-forecast morning puts ice on the top.`);
+  }
   if (w.dark >= 0.2 && w.dark < 1)
     out.push(`Part of this ride is in the dark — sunrise ${fmtTime(w.sunrise)}, sunset ${fmtTime(w.sunset)}. Lights.`);
   else if (w.dark >= 1)
@@ -381,7 +401,20 @@ function watchFor(f, w, opts){
   if (f.raining && w.hourly.length > 1){
     const first = w.hourly.find(h => h.precip >= 0.1);
     const dry = w.hourly.filter(h => h.precip < 0.1).length;
-    if (first && dry > 0) out.push(`Rain starts around ${fmtTime(first.time)} — ${dry} of ${w.hourly.length} hours look dry.`);
+    // The quarter-hourly feed knows 08:45 where the hourly one can only say
+    // "sometime in the 09:00 hour", and that decides whether you leave early.
+    if (w.rainStart15)
+      out.push(`Rain starts about ${fmtTime(w.rainStart15)} — near enough to the quarter hour to be worth leaving before.`);
+    else if (first && dry > 0)
+      out.push(`Rain starts around ${fmtTime(first.time)} — ${dry} of ${w.hourly.length} hours look dry.`);
+  }
+
+  // Hay fever on a bike: hard breathing, through the mouth, at head height in
+  // open country for hours.
+  if (w.pollen && w.pollen.worst){
+    const band = pollenBand(w.pollen.worst.count);
+    if (band)
+      out.push(`${band.charAt(0).toUpperCase() + band.slice(1)} ${w.pollen.worst.name} pollen, ${Math.round(w.pollen.worst.count)} grains/m³. If that bothers you, it is worth an antihistamine before you leave rather than halfway round.`);
   }
   return out;
 }

@@ -125,13 +125,13 @@ quietly picking one.
 Below force 3 it says the wind isn't worth planning a route around, instead of inventing
 advice.
 
-**Does the forecast agree with itself?** Open-Meteo's default already serves the
-highest-resolution model for a location — over the Netherlands that is KNMI HARMONIE at
-2.5 km, and it is what everything above is built from. What one model cannot tell you is how
-much to trust it, so the same question goes to ECMWF, GFS and ICON and the answer says whether
-they agree. Within about 20° the bearing is worth planning around; wider than that it is a
-steer rather than a plan. That comparison is what a Windy subscription is really used for, done
-in one extra request. If it fails, the line disappears and nothing else changes.
+**How sure is it?** Open-Meteo's default already serves the highest-resolution model for a
+location — over the Netherlands that is KNMI HARMONIE at 2.5 km, and it is what everything
+above is built from. What one model cannot say is how much to trust itself, so the ensemble
+answers that: ECMWF runs its model **51 times** from slightly different starting conditions.
+Where the members agree the atmosphere is behaving predictably; where they scatter it is not.
+That turns "it might rain" into "9 of 51 members have rain", and it covers the globe — checked
+from Reykjavik to Sydney. If it fails, the line disappears and nothing else changes.
 
 The map is what makes the bearing usable: "set off towards the WSW" means nothing until you
 can see which way that is from where you're standing. It draws the route, or the start point,
@@ -173,6 +173,22 @@ That plan is then checked rather than assumed: worn plus carried is run back thr
 balance at the coldest leg. If a pocket can't close it, the conflict is named as one garment
 with the trade either way, plus any workaround the wardrobe has — the shorts-and-warmers route
 to where tights reach. If nothing closes it, it says so and suggests shortening the ride.
+
+## Learning your calibration
+
+The rider setting began as a single hand-set number — +3 °C for "runs hot", decided once. It
+is the most influential term in the model and was the least evidenced.
+
+After a ride, one question: too cold, about right, or too warm. Each answer is a correction,
+and the running mean of the corrections is worth more than any one-off self-assessment. Two
+guards keep it honest: nothing applies until three rides exist, because one cold morning says
+more about that day than about you; and only the last twenty count, so the number follows a new
+jacket or a fitter spring instead of being anchored to a season that has passed. It is capped
+at ±4 °C and shown as its own row in the effect matrix, because a correction you cannot see is
+one you cannot argue with.
+
+Once there are enough wet rides it keeps a separate correction for them. Plenty of riders run
+hot in the dry and cold in the wet, and one number cannot hold both.
 
 ## Look
 
