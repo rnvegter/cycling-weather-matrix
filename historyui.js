@@ -1,0 +1,142 @@
+"use strict";
+
+/* ---------------------------------------------------------------
+   The history screen.
+
+   A list of rides, newest first, split by the only distinction that matters
+   here: whether it has happened yet. A ride in the future is waiting; a ride
+   in the past is a question the calibration needs answered.
+----------------------------------------------------------------*/
+
+let histFilter = "all";
+
+const RIDE_DATE = iso => {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d)) return "—";
+  return d.toLocaleDateString(undefined, {weekday:"short", day:"numeric", month:"short"})
+       + " · " + d.toTimeString().slice(0,5);
+};
+
+function renderHistory(){
+  const list = loadHistory();
+  const now = Date.now();
+  const rows = historyNewestFirst(list).filter(e => {
+    if (histFilter === "rated") return e.delta != null;
+    if (histFilter === "unrated") return e.delta == null && isRidden(e, now);
+    return true;
+  });
+
+  const rated = ratedRides(list).length;
+  document.getElementById("histcount").textContent =
+    `${list.length} ride${list.length === 1 ? "" : "s"} · ${rated} rated`;
+
+  const off = learnedOffset(list, {wet:false});
+  const learnedEl = document.getElementById("histlearned");
+  if (!list.length){
+    learnedEl.textContent = "";
+  } else if (!off.ready){
+    learnedEl.textContent =
+      `${rated} rated so far. ${MIN_RIDES - rated} more before the correction starts applying — `
+      + "one cold morning shouldn't rewrite the model.";
+  } else {
+    const wetOff = learnedOffset(list, {wet:true});
+    const sign = v => (v > 0 ? "+" : "") + (Math.round(v * 10) / 10);
+    learnedEl.innerHTML =
+      `Currently applying <b class="wx-num">${sign(off.value)}&deg;C</b> on top of your rider setting`
+      + (wetOff.basis === "wet" && Math.abs(wetOff.value - off.value) >= 0.5
+          ? `, and <b class="wx-num">${sign(wetOff.value)}&deg;C</b> when it's wet — you run differently in the rain.`
+          : ".");
+  }
+
+  const el = document.getElementById("histlist");
+  if (!rows.length){
+    el.innerHTML = `<p class="wx-empty">${
+      list.length ? "Nothing matches that filter." :
+      "No rides yet. Work one out on the Ride tab and it will be kept here."}</p>`;
+    return;
+  }
+
+  el.innerHTML = rows.map(e => {
+    const ridden = isRidden(e, now);
+    const v = e.verdict ? verdictById(e.verdict) : null;
+    const kit = (e.kit || []).slice(0, 4).join(", ")
+      + ((e.kit || []).length > 4 ? `, +${e.kit.length - 4} more` : "");
+    return `
+    <article class="wx-ride ${e.feel != null ? rampFor(e.feel) : ""}${v ? " is-rated" : ""}" data-id="${escHtml(e.id)}">
+      <div class="wx-ride__head">
+        <div>
+          <p class="wx-ride__when">${RIDE_DATE(e.startISO)}</p>
+          <p class="wx-ride__where">${escHtml(e.place || "—")}${
+            e.routeName ? ` · ${escHtml(e.routeName)}` : ""}</p>
+        </div>
+        <div class="wx-ride__feel">
+          ${e.feel != null ? `<span class="wx-num">${e.feel}</span><small>&deg;C felt</small>` : ""}
+        </div>
+      </div>
+
+      <p class="wx-ride__meta">
+        ${e.air != null ? `${e.air}&deg; air` : ""}${e.wet ? " · wet" : ""}${
+          e.dist ? ` · ${e.dist} km` : ""}${e.rider ? ` · runs ${e.rider}` : ""}${
+          e.legacy ? " · rated before history existed" : ""}
+      </p>
+      ${kit ? `<p class="wx-ride__kit">${escHtml(kit)}</p>` : ""}
+
+      <div class="wx-ride__foot">
+        ${v
+          ? `<span class="wx-verdict-set">Rated <b>${v.label.toLowerCase()}</b></span>
+             <button class="wx-linkbtn" data-unrate="${escHtml(e.id)}">Change</button>`
+          : ridden
+            ? `<div class="wx-choice wx-choice--tight">
+                 ${VERDICTS.map(x => `<button class="wx-chip" data-rate="${escHtml(e.id)}"
+                    data-verdict="${x.id}">${x.label}</button>`).join("")}
+               </div>`
+            : `<span class="wx-waiting">Not ridden yet</span>`}
+        <span class="wx-spacer"></span>
+        <button class="wx-linkbtn wx-linkbtn--warn" data-del="${escHtml(e.id)}">Delete</button>
+      </div>
+    </article>`;
+  }).join("");
+}
+
+/* --- Events ----------------------------------------------------- */
+
+document.getElementById("histlist").addEventListener("click", e => {
+  const rate = e.target.closest("[data-rate]");
+  if (rate){
+    rateRide(rate.dataset.rate, rate.dataset.verdict);
+    renderHistory();
+    return;
+  }
+  const un = e.target.closest("[data-unrate]");
+  if (un){ unrateRide(un.dataset.unrate); renderHistory(); return; }
+
+  const del = e.target.closest("[data-del]");
+  if (del){
+    const entry = loadHistory().find(x => x.id === del.dataset.del);
+    const what = entry ? `${RIDE_DATE(entry.startISO)}, ${entry.place}` : "this ride";
+    if (!confirm(`Delete ${what}?` + (entry && entry.delta != null
+      ? "\n\nIt has been rated, so removing it also removes what it taught the model." : ""))) return;
+    deleteRide(del.dataset.del);
+    renderHistory();
+  }
+});
+
+document.getElementById("histfilter").addEventListener("click", e => {
+  const b = e.target.closest("[data-filter]");
+  if (!b) return;
+  histFilter = b.dataset.filter;
+  document.querySelectorAll("#histfilter .wx-chip").forEach(c =>
+    c.setAttribute("aria-pressed", c === b ? "true" : "false"));
+  renderHistory();
+});
+
+document.getElementById("histclear").onclick = () => {
+  const rated = ratedRides(loadHistory()).length;
+  if (!confirm("Delete every ride in the history?"
+      + (rated ? `\n\n${rated} of them are rated, so the learned correction goes back to zero.` : ""))) return;
+  clearHistory();
+  renderHistory();
+};
+
+renderHistory();

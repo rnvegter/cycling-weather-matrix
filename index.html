@@ -48,6 +48,7 @@
 <nav class="wx-tabs">
   <button class="wx-tab" data-screen="ride" aria-pressed="true">Ride</button>
   <button class="wx-tab" data-screen="gear" aria-pressed="false">Gear</button>
+  <button class="wx-tab" data-screen="history" aria-pressed="false">History</button>
 </nav>
 
 <!-- ================= RIDE ================= -->
@@ -231,6 +232,34 @@
   </div>
 </section>
 
+<!-- ================= HISTORY ================= -->
+<section id="screen-history" class="wx-hidden">
+  <div class="wx-card wx-card--flat">
+    <div class="wx-card__head">
+      <h2 class="wx-heading">Ride history</h2>
+      <span class="wx-eyebrow" style="margin:0" id="histcount"></span>
+    </div>
+    <p class="wx-note" style="margin-top:0">
+      Every ride the model has worked out. Rate the ones you've actually ridden — that is what
+      corrects the rider setting, and it is a question you can only answer afterwards. Rides
+      still in the future wait here until their start time passes.
+    </p>
+
+    <div class="wx-bar-row">
+      <div class="wx-choice" id="histfilter">
+        <button class="wx-chip" data-filter="all" aria-pressed="true">All</button>
+        <button class="wx-chip" data-filter="unrated" aria-pressed="false">Waiting to be rated</button>
+        <button class="wx-chip" data-filter="rated" aria-pressed="false">Rated</button>
+      </div>
+      <span class="wx-spacer"></span>
+      <button id="histclear" class="wx-btn wx-btn--quiet">Clear all</button>
+    </div>
+
+    <p class="wx-note" id="histlearned"></p>
+    <div id="histlist" class="wx-rides"></div>
+  </div>
+</section>
+
 <footer class="wx-foot">
   Forecast from <a href="https://open-meteo.com/">Open-Meteo</a>, no key.
   Insulation sized as required clo = 0.148 × (33 − T) ÷ MET, work rate from the
@@ -249,10 +278,12 @@
 <script src="map.js"></script>
 <script src="weather.js"></script>
 <script src="insulation.js"></script>
+<script src="history.js"></script>
 <script src="feedback.js"></script>
 <script src="gear.js"></script>
 <script src="model.js"></script>
 <script src="app.js"></script>
 <script src="gearui.js"></script>
+<script src="historyui.js"></script>
 </body>
 </html>

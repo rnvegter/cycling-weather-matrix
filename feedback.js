@@ -16,8 +16,6 @@
    who came home cold was over-adjusted and the number must come DOWN.
 ----------------------------------------------------------------*/
 
-const FEEDBACK_KEY = "cwem-feedback-v1";
-
 /* What each answer implies about the calibration, in degrees. */
 const VERDICTS = [
   {id:"cold",      label:"Too cold",     delta:-2},
@@ -27,24 +25,6 @@ const VERDICTS = [
   {id:"warm",      label:"Too warm",     delta: 2}
 ];
 const verdictById = id => VERDICTS.find(v => v.id === id);
-
-function loadFeedback(){
-  try{
-    const raw = localStorage.getItem(FEEDBACK_KEY);
-    const list = raw ? JSON.parse(raw) : [];
-    return Array.isArray(list) ? list : [];
-  }catch(e){ return []; }
-}
-function saveFeedback(list){
-  try{ localStorage.setItem(FEEDBACK_KEY, JSON.stringify(list.slice(-200))); }catch(e){}
-}
-
-function recordFeedback(entry){
-  const list = loadFeedback();
-  list.push(Object.assign({at: new Date().toISOString()}, entry));
-  saveFeedback(list);
-  return list;
-}
 
 /* ---------------------------------------------------------------
    The learned correction.
@@ -68,9 +48,10 @@ const CAP = 4;
 const mean = xs => xs.reduce((a, b) => a + b, 0) / xs.length;
 const clampCorrection = v => Math.max(-CAP, Math.min(CAP, v));
 
-function learnedOffset(list, opts){
+function learnedOffset(history, opts){
   const wet = !!(opts && opts.wet);
-  const recent = list.slice(-WINDOW);
+  // Only rides that have actually been rated teach anything.
+  const recent = ratedRides(history).slice(-WINDOW);
   if (recent.length < MIN_RIDES) return {value: 0, n: recent.length, ready: false, basis: "all"};
 
   const wetOnes = recent.filter(e => e.wet);

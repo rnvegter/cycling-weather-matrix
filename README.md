@@ -174,6 +174,21 @@ balance at the coldest leg. If a pocket can't close it, the conflict is named as
 with the trade either way, plus any workaround the wardrobe has — the shorts-and-warmers route
 to where tights reach. If nothing closes it, it says so and suggests shortening the ride.
 
+## Ride history
+
+Every ride the model works out is kept, because the question the calibration needs — how did
+that actually feel — can only be answered after the ride, while the forecast is read before it.
+Without somewhere to put them, rating a ride meant remembering to re-run the identical query
+afterwards.
+
+A ride is identified by where and when, not by when you looked it up, so tweaking the pace and
+pressing the button again updates that entry instead of filling the list with near-duplicates
+of one morning — and any rating already given survives the re-run.
+
+The history splits on the only distinction that matters: a ride in the future says *not ridden
+yet* and waits, and a ride in the past asks the question. Rides can be rated, re-rated and
+deleted, and deleting a rated one tells you it also removes what that ride taught the model.
+
 ## Learning your calibration
 
 The rider setting began as a single hand-set number — +3 °C for "runs hot", decided once. It
@@ -227,6 +242,9 @@ INSTALL.md if you want to self-host them for a genuinely offline install.
 | `app.js` | Forecast, form wiring, rendering |
 | `gearui.js` | Gear screen: add, edit, delete, lookup |
 | `gpx.js` | Route parsing, leg sampling, headwind and lapse rate |
+| `history.js` | Ride records, and the calibration's source of truth |
+| `historyui.js` | The history screen |
+| `feedback.js` | Turning ratings into a temperature correction |
 | `map.js` | Slippy-map projection, tiles, and the drawn overlay |
 | `styles.css` | The Weather Effect design system, plus app chrome |
 

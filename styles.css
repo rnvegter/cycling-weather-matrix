@@ -1149,3 +1149,69 @@ input[type="checkbox"] { accent-color: var(--temp); width: auto; min-height: 0; 
 .wx-agree.is-tight b { color: var(--t-cool); }
 .wx-agree.is-loose { border-left-color: var(--signal); }
 .wx-agree.is-loose b { color: var(--signal); }
+
+/* ---------- 22. Ride history --------------------------------- */
+/* A list rather than a table: the useful unit is one ride, and it has to read
+   on a phone in the hallway when you get back. */
+
+.wx-rides { display: flex; flex-direction: column; gap: var(--sp-3); margin-top: var(--sp-4); }
+
+.wx-ride {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: var(--edge) solid var(--temp);
+  border-radius: var(--radius);
+  padding: var(--sp-3) var(--sp-4);
+}
+/* A rated ride is settled — it recedes so the ones still asking stand out. */
+.wx-ride.is-rated { background: none; opacity: .78; }
+
+.wx-ride__head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--sp-3);
+}
+.wx-ride__when {
+  font-family: var(--data); font-size: .74rem; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--text); margin: 0;
+}
+.wx-ride__where { font-size: var(--step--1); color: var(--text-dim); margin: 2px 0 0; }
+.wx-ride__feel {
+  text-align: right; white-space: nowrap; color: var(--temp);
+  font-family: var(--data); font-weight: 600; font-size: var(--step-2); line-height: 1;
+}
+.wx-ride__feel small {
+  display: block; font-family: var(--display); font-size: .62rem; font-weight: 500;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--text-dim); margin-top: 3px;
+}
+
+.wx-ride__meta {
+  font-family: var(--data); font-size: .66rem; color: var(--text-dim);
+  margin: var(--sp-2) 0 0;
+}
+.wx-ride__kit { font-size: var(--step--1); color: var(--text-dim); margin: var(--sp-1) 0 0; }
+
+.wx-ride__foot {
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2);
+  margin-top: var(--sp-3); padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+}
+.wx-choice--tight .wx-chip { min-height: 30px; padding: 0 var(--sp-2); font-size: .72rem; }
+[data-touch="gloves"] .wx-choice--tight .wx-chip { min-height: var(--tap); font-size: var(--step--1); }
+
+.wx-verdict-set { font-size: var(--step--1); color: var(--text-dim); }
+.wx-verdict-set b { color: var(--temp); font-weight: 600; }
+.wx-waiting {
+  font-family: var(--data); font-size: .66rem; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--text-dim);
+}
+
+.wx-linkbtn {
+  background: none; border: 0; padding: var(--sp-1) 0;
+  font: inherit; font-size: var(--step--1);
+  color: var(--text-dim); text-decoration: underline;
+  text-underline-offset: 2px; cursor: pointer;
+}
+.wx-linkbtn:hover { color: var(--text); }
+.wx-linkbtn--warn:hover { color: var(--signal); }
+
+#histlearned b { color: var(--text); }

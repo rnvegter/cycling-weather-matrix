@@ -16,9 +16,15 @@ let lastLookup = null;
 let originalItem = null;    // snapshot, to detect edits
 
 /* --- Screens ---------------------------------------------------- */
+const SCREENS = ["ride", "gear", "history"];
+
 function showScreen(name){
-  document.getElementById("screen-ride").classList.toggle("wx-hidden", name !== "ride");
-  document.getElementById("screen-gear").classList.toggle("wx-hidden", name !== "gear");
+  if (!SCREENS.includes(name)) name = "ride";
+  SCREENS.forEach(s =>
+    document.getElementById("screen-" + s).classList.toggle("wx-hidden", s !== name));
+  // The history list can change while another screen is open — a ride saved on
+  // the ride screen, say — so it is rebuilt on arrival rather than once.
+  if (name === "history" && typeof renderHistory === "function") renderHistory();
   document.querySelectorAll(".wx-tab[data-screen]").forEach(t =>
     t.setAttribute("aria-pressed", t.dataset.screen === name ? "true" : "false"));
   document.body.dataset.screen = name;
@@ -28,7 +34,7 @@ function showScreen(name){
 // Only the tabs that name a screen — the glove toggle sits in the same row.
 document.querySelectorAll(".wx-tab[data-screen]").forEach(t =>
   t.onclick = () => showScreen(t.dataset.screen));
-window.addEventListener("hashchange", () => showScreen(location.hash === "#gear" ? "gear" : "ride"));
+window.addEventListener("hashchange", () => showScreen(location.hash.slice(1)));
 
 /* Glove mode: bigger targets and type. Not an accessibility afterthought —
    it's the intended winter state, so it persists between rides. */
@@ -591,4 +597,4 @@ document.getElementById("gearreset").onclick = () => {
 };
 
 renderGear();
-showScreen(location.hash === "#gear" ? "gear" : "ride");
+showScreen(location.hash.slice(1));
