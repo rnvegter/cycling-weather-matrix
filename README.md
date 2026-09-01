@@ -178,6 +178,8 @@ to where tights reach. If nothing closes it, it says so and suggests shortening 
 
 Every ride the model works out is kept, because the question the calibration needs — how did
 that actually feel — can only be answered after the ride, while the forecast is read before it.
+Rating happens on the History tab and nowhere else: the ride screen is read before you leave,
+which is the one moment the question cannot be answered.
 Without somewhere to put them, rating a ride meant remembering to re-run the identical query
 afterwards.
 
@@ -241,7 +243,7 @@ INSTALL.md if you want to self-host them for a genuinely offline install.
 
 | File | |
 |---|---|
-| `index.html` | Two screens — ride, and gear |
+| `index.html` | Three screens — ride, history, gear |
 | `model.js` | Ride-feel, heat balance, outfit selection |
 | `gear.js` | Seeded inventory and storage |
 | `insulation.js` | Inference engine, runs in both browser and Node |

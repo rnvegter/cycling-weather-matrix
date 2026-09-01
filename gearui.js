@@ -16,7 +16,7 @@ let lastLookup = null;
 let originalItem = null;    // snapshot, to detect edits
 
 /* --- Screens ---------------------------------------------------- */
-const SCREENS = ["ride", "gear", "history"];
+const SCREENS = ["ride", "history", "gear"];
 
 function showScreen(name){
   if (!SCREENS.includes(name)) name = "ride";

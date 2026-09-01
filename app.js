@@ -140,7 +140,6 @@ function status(msg, isErr){
    Route file
 ----------------------------------------------------------------*/
 let route = null;
-let lastRide = null;   // what the feedback control is rating
 
 $("#gpx").onchange = e => {
   const file = e.target.files[0];
@@ -599,20 +598,6 @@ async function analyseRoute(route, opts){
   return result;
 }
 
-/* What the app has learned so far, in one line. */
-function feedbackState(){
-  const list = loadHistory();
-  const n = ratedRides(list).length;
-  if (!n) return "No rides rated yet. Three is enough for it to start adjusting.";
-  const off = learnedOffset(list, {wet:false});
-  if (!off.ready)
-    return `${n} ride${n===1?"":"s"} rated. ${MIN_RIDES - n} more before it starts adjusting — `
-         + "one cold morning shouldn't rewrite the model.";
-  const sign = off.value > 0 ? "+" : "";
-  return `${n} rides rated. Currently applying ${sign}${Math.round(off.value*10)/10}°C `
-       + "on top of your rider setting.";
-}
-
 /* ---------------------------------------------------------------
    Render
 ----------------------------------------------------------------*/
@@ -886,30 +871,6 @@ function render(f, w, opts, place, analysis){
   </section>`;
   })()}
 
-  ${(() => {
-    const ridden = new Date(w.startDT).getTime() <= Date.now();
-    return `
-  <section class="wx-card wx-card--flat ${ramp}" id="wx-feedback">
-    <div class="wx-card__head">
-      <h2 class="wx-heading">Afterwards</h2>
-      <span class="wx-eyebrow" style="margin:0">Teaches it your calibration</span>
-    </div>
-    ${ridden ? `
-      <p class="wx-note" style="margin-top:0">This one has already been ridden. How did it
-        actually feel? One tap is what turns the rider setting from a guess into a
-        measurement.</p>
-      <div class="wx-choice" id="wx-verdicts" style="margin-top:var(--sp-3)">
-        ${VERDICTS.map(v => `<button class="wx-chip" data-verdict="${v.id}">${v.label}</button>`).join("")}
-      </div>`
-    : `
-      <p class="wx-note" style="margin-top:0">Saved to <a href="#history">History</a>. Rating a
-        ride you haven't done yet would teach the model nothing, so it waits there until you
-        get back.</p>`}
-    <p class="wx-note" id="wx-fbstate">${feedbackState()}</p>
-  </section>
-
-`;})()}
-
   ${out.notes.map(n => `<p class="wx-alert">${n}</p>`).join("")}
   ${watch.map(x => `<p class="wx-alert"><b>Watch.</b> ${x}</p>`).join("")}
 
@@ -952,25 +913,6 @@ function render(f, w, opts, place, analysis){
 `;
   $("#out").scrollIntoView({behavior:"smooth", block:"start"});
 
-  // Rating a ride re-runs it, so the effect of the correction is visible
-  // immediately rather than only on the next ride.
-  const verdicts = document.getElementById("wx-verdicts");
-  if (verdicts) verdicts.addEventListener("click", e => {
-    const b = e.target.closest("[data-verdict]");
-    if (!b || !lastRide) return;
-    // Rate the history entry this ride was saved as, so the results card and
-    // the History tab are the same record rather than two.
-    rateRide(rideId(lastRide.startISO, placeLabel(place)), b.dataset.verdict);
-    if (typeof renderHistory === "function") renderHistory();
-    verdicts.querySelectorAll(".wx-chip").forEach(c =>
-      c.setAttribute("aria-pressed", c === b ? "true" : "false"));
-    document.getElementById("wx-fbstate").textContent = feedbackState();
-    // Re-run with the updated correction.
-    const off = learnedOffset(loadHistory(), {wet: f.wet});
-    const next = Object.assign({}, lastRide.opts,
-      {learned: off.value, learnedLabel: learnedLabel(off)});
-    render(rideFeel(lastRide.w, next), lastRide.w, next, lastRide.place, analysis);
-  });
 }
 
 /* ---------------------------------------------------------------
@@ -1020,7 +962,6 @@ $("#go").onclick = async () => {
     opts.learned = off.value;
     opts.learnedLabel = learnedLabel(off);
     status("");
-    lastRide = {w, opts, place: state.place, startISO: `${date}T${time}`};
     // Kept so it can be rated afterwards, which is the only time the question
     // can honestly be answered.
     const out0 = state.mode === "wardrobe" ? pickOutfit(rideFeel(w, opts), w, opts, gear)
