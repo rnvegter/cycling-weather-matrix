@@ -1131,3 +1131,21 @@ input[type="checkbox"] { accent-color: var(--temp); width: auto; min-height: 0; 
 .wx-maplegend .k-wind { border-top-color: var(--minus); }
 .wx-maplegend .k-go { border-top-color: var(--temp); border-top-style: dashed; }
 .wx-maplegend .k-route { border-top-color: var(--temp); }
+
+/* ---------- 21. Model agreement ------------------------------ */
+/* How much the forecast agrees with itself. A tight spread earns the quiet
+   treatment; a wide one gets the warning colour, because it changes whether
+   the bearing above is worth acting on. */
+
+.wx-agree {
+  margin: var(--sp-3) 0 0;
+  padding-left: var(--sp-3);
+  border-left: var(--edge) solid var(--line);
+  font-size: var(--step--1);
+  color: var(--text-dim);
+}
+.wx-agree b { font-family: var(--data); font-size: .72rem; letter-spacing: .06em; }
+.wx-agree.is-tight { border-left-color: var(--t-cool); }
+.wx-agree.is-tight b { color: var(--t-cool); }
+.wx-agree.is-loose { border-left-color: var(--signal); }
+.wx-agree.is-loose b { color: var(--signal); }

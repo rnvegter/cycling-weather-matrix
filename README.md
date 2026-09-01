@@ -125,6 +125,14 @@ quietly picking one.
 Below force 3 it says the wind isn't worth planning a route around, instead of inventing
 advice.
 
+**Does the forecast agree with itself?** Open-Meteo's default already serves the
+highest-resolution model for a location — over the Netherlands that is KNMI HARMONIE at
+2.5 km, and it is what everything above is built from. What one model cannot tell you is how
+much to trust it, so the same question goes to ECMWF, GFS and ICON and the answer says whether
+they agree. Within about 20° the bearing is worth planning around; wider than that it is a
+steer rather than a plan. That comparison is what a Windy subscription is really used for, done
+in one extra request. If it fails, the line disappears and nothing else changes.
+
 The map is what makes the bearing usable: "set off towards the WSW" means nothing until you
 can see which way that is from where you're standing. It draws the route, or the start point,
 north-up with the wind and the outbound bearing over the top. Tiles come from OpenStreetMap —

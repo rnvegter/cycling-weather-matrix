@@ -266,6 +266,60 @@ function rideWindow(fc, dateStr, timeStr, hours){
 }
 
 /* ---------------------------------------------------------------
+   Do the models agree?
+
+   Open-Meteo's default already picks the highest-resolution model available
+   for a location — over the Netherlands that is KNMI HARMONIE at 2.5 km, and
+   it is what the forecast above is built from. What a single model cannot tell
+   you is how much to trust it.
+
+   So ask the global models the same question and see whether they say the same
+   thing. Flipping between ECMWF, GFS and ICON to see if they agree is what
+   people actually use a Windy subscription for; it is one extra request here,
+   and it turns "the wind is from the NW" into "the wind is from the NW, and
+   everyone agrees" or "...but nobody agrees, so don't plan the route on it".
+----------------------------------------------------------------*/
+const SPREAD_MODELS = ["ecmwf_ifs025", "gfs_seamless", "icon_seamless"];
+
+async function modelSpread(lat, lon, dateStr, hourKey){
+  const url = "https://api.open-meteo.com/v1/forecast"
+    + `?latitude=${lat}&longitude=${lon}`
+    + "&hourly=wind_speed_10m,wind_direction_10m,temperature_2m"
+    + `&models=${SPREAD_MODELS.join(",")}`
+    + `&start_date=${dateStr}&end_date=${dateStr}&timezone=auto`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error("model comparison unavailable");
+  const h = (await r.json()).hourly;
+  const i = h.time.indexOf(hourKey);
+  if (i < 0) throw new Error("hour outside the comparison window");
+
+  const dirs = [], speeds = [], temps = [], named = [];
+  SPREAD_MODELS.forEach(m => {
+    const d = h[`wind_direction_10m_${m}`]?.[i];
+    const sp = h[`wind_speed_10m_${m}`]?.[i];
+    const t = h[`temperature_2m_${m}`]?.[i];
+    if (d == null || sp == null) return;
+    dirs.push(d); speeds.push(sp); if (t != null) temps.push(t);
+    named.push({model: m.split("_")[0].toUpperCase(), dir: d, speed: sp, temp: t});
+  });
+  if (named.length < 2) throw new Error("not enough models answered");
+
+  // Widest disagreement between any two, which is the honest measure — an
+  // average would hide one model sitting 40° off on its own.
+  let dirSpread = 0;
+  for (let a = 0; a < dirs.length; a++)
+    for (let b = a + 1; b < dirs.length; b++)
+      dirSpread = Math.max(dirSpread, angleGap(dirs[a], dirs[b]));
+
+  return {
+    models: named,
+    dirSpread,
+    speedSpread: Math.max(...speeds) - Math.min(...speeds),
+    tempSpread: temps.length ? Math.max(...temps) - Math.min(...temps) : null
+  };
+}
+
+/* ---------------------------------------------------------------
    Route analysis
 
    One forecast call covers every leg: Open-Meteo takes comma-separated
@@ -612,6 +666,26 @@ function render(f, w, opts, place, analysis){
             w.gust >= w.wind + 12 ? `, gusting ${Math.round(w.gust)} which is force ${gustBft.force}` : ""}.
           ${bft.note}
         </p>
+        ${(() => {
+          const sp = w.spread;
+          if (!sp) return "";
+          const names = sp.models.map(m => m.model).join(", ");
+          // A tight spread is a reason to trust the bearing; a wide one is a
+          // reason to treat it as a steer rather than a plan. Saying which is
+          // the whole point of asking more than one model.
+          const tight = sp.dirSpread <= 20;
+          return `<p class="wx-agree ${tight ? "is-tight" : "is-loose"}">
+            <b>${names}</b> ${tight
+              ? `agree within ${Math.round(sp.dirSpread)}&deg; on the direction`
+              : `spread over ${Math.round(sp.dirSpread)}&deg; on the direction`}${
+              sp.speedSpread >= 8 ? ` and ${Math.round(sp.speedSpread)} km/h on the speed` : ""}.
+            ${tight
+              ? "The bearing is worth planning around."
+              : "Treat the bearing as a steer, not a plan, and look again nearer the time."}
+            ${sp.tempSpread != null && sp.tempSpread >= 3
+              ? `They also differ by ${r1(sp.tempSpread)}&deg;C on air temperature, so the kit call is less settled than one number makes it look.`
+              : ""}</p>`;
+        })()}
         ${matters ? `
         <p class="wx-startdir"><b>Set off towards the ${compass(outbound)}.</b>
           That puts the wind in your face going out and behind you coming back,
@@ -795,6 +869,11 @@ $("#go").onclick = async () => {
   try{
     const fc = await forecast(state.place.latitude, state.place.longitude);
     const w = rideWindow(fc, date, time, hours);
+    // Agreement is a nice-to-have: a failure here must not cost the forecast.
+    try{
+      w.spread = await modelSpread(state.place.latitude, state.place.longitude,
+                                   date, `${date}T${time.slice(0,2)}:00`);
+    }catch(e){ w.spread = null; }
     let analysis = null;
     if (route){
       status("Checking the kit along the route…");
