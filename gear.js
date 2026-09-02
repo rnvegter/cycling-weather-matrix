@@ -72,8 +72,8 @@ const GEAR_SEED = [
 {brand:"", model:"Winter bib tights, Castelli or AGU", slot:"legs", tmin:-2, tmax:8, clo:0.30, wind:0.40, water:0.20,
    notes:"Two pairs you treat as the same thing, because on the road they are - only the Assos stands apart as the warmer one. Kept as a single row rather than two identical entries pretending to a distinction you do not make."},
 
-  {brand:"Gore", model:"C3 knee warmers", slot:"legextra", tmin:11, tmax:16, clo:0.07, wind:0.45, water:0.35,
-   notes:"Gore rate the C3 knee warmers 5–15°C, which is what the garment can do; 11–16 is where you actually reach for them, because below that you want full leg warmers instead. Both C3 versions share that rating and differ only in wind — the Windstopper one is windproof and water-repellent, the Thermo one is napped inside for dry cold. Knees are the part that complains first, so when the call is borderline, cover them."},
+  {brand:"Gore", model:"C3 Windstopper knee warmers", slot:"legextra", tmin:11, tmax:16, clo:0.07, wind:0.9, water:0.5,
+   notes:"The Windstopper version, so a windproof membrane rather than the napped Thermo — same 5–15°C rating from Gore, but it earns its keep on a cold descent or an exposed crosswind where plain roubaix knee warmers give up. Gore quote 5–15; 11–16 is where you actually reach for them, because below that you want full leg warmers instead. Knees are the part that complains first, so when the call is borderline, cover them."},
   {brand:"Bioracer", model:"thermal leg warmers", slot:"legextra", tmin:8, tmax:13, clo:0.12, wind:0.30, water:0.35,
    notes:"Removable mid-ride, which bib tights are not — that is the whole argument for them on a day that starts cold and warms up, or on any route with a long descent in the middle."},
   {brand:"Endura", model:"spray over-trousers", slot:"legextra", tmin:-10, tmax:20, clo:0.08, wind:0.80, water:0.50, pack:true, rainOnly:true,
