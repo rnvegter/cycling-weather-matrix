@@ -5,7 +5,16 @@ FROM node:22-alpine
 WORKDIR /app
 COPY . .
 
-ENV PORT=8765 HOST=0.0.0.0
+# The gear list and ride history have to live outside the code directory, for
+# two independent reasons. /app is owned by root and the process runs as `node`,
+# so a write beside the code fails outright with EACCES — sync would report an
+# error on every save. And updating a container means replacing it, not
+# restarting it, so anything inside the container is discarded on every update.
+# Mount a named volume here: -v cwem-state:/state
+RUN mkdir -p /state && chown node:node /state
+VOLUME ["/state"]
+
+ENV PORT=8765 HOST=0.0.0.0 STATE_DIR=/state
 EXPOSE 8765
 
 # Don't run as root.

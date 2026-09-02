@@ -85,8 +85,20 @@ Never run a network service as root or as yourself.
 
 ```bash
 sudo useradd --system --no-create-home --shell /usr/sbin/nologin cwem
-sudo chown -R cwem:cwem /opt/cycling-weather-matrix
 ```
+
+Deliberately no `chown` of the checkout. The service only ever *reads* its own directory — the
+unit mounts it read-only, and everything it writes goes to `/var/lib/cycling-weather-matrix`
+via `StateDirectory=`. Leaving the code owned by root means `sudo git pull` keeps working at
+update time; hand the tree to `cwem` and git refuses to touch it as root:
+
+```
+fatal: detected dubious ownership in repository at '/opt/cycling-weather-matrix'
+```
+
+That check exists because pulling into someone else's repository can execute their hooks. The
+answer is not to add an exception — it is to not give a service account write access to the
+code it runs.
 
 **4. Run it as a service**
 
@@ -133,8 +145,14 @@ git clone https://github.com/rnvegter/cycling-weather-matrix.git
 cd cycling-weather-matrix
 docker build -t cycling-weather-matrix .
 docker run -d --name cwem --restart unless-stopped \
-  -p 127.0.0.1:8765:8765 cycling-weather-matrix
+  -p 127.0.0.1:8765:8765 \
+  -v cwem-state:/state -e STATE_DIR=/state cycling-weather-matrix
 ```
+
+The `cwem-state` volume is where your gear list and ride history live. It has to be outside
+the container: updating means replacing the container, so anything written inside one is
+thrown away with it. Without the volume the app also cannot write state at all — `/app` is
+owned by root and the process runs as `node`, so every save returns a permission error.
 
 Binding to `127.0.0.1:8765` rather than `8765` keeps the container off the public interface;
 put Caddy or nginx in front as above. Then point the proxy at `127.0.0.1:8765`.
@@ -150,7 +168,8 @@ sudo apt-get install -y podman          # or: sudo dnf install -y podman
 git clone https://github.com/rnvegter/cycling-weather-matrix.git
 cd cycling-weather-matrix
 podman build -t cycling-weather-matrix .
-podman run -d --name cwem -p 127.0.0.1:8765:8765 cycling-weather-matrix
+podman run -d --name cwem -p 127.0.0.1:8765:8765 \
+  -v cwem-state:/state -e STATE_DIR=/state cycling-weather-matrix
 ```
 
 Two differences that matter:
@@ -178,7 +197,9 @@ Wants=network-online.target
 Image=localhost/cycling-weather-matrix:latest
 ContainerName=cwem
 PublishPort=127.0.0.1:8765:8765
+Volume=cwem-state:/state
 Environment=HOST=0.0.0.0
+Environment=STATE_DIR=/state
 Environment=LOOKUP_RATE=12
 
 [Service]
@@ -421,9 +442,14 @@ can reach the app can read and overwrite your gear and rides, so put auth in fro
 
 Two caveats to that:
 
-- **Reset to defaults reads the new seed.** The button pulls from `gear.js`, which the update
-  replaces. Press it after an update and you get the new starting list, not the one you had
-  before — which is usually what you want, but it is not an undo.
+- **An update that changes the shipped gear list will not reach you.** This is the one that
+  surprises people, because nothing appears to be wrong. `loadGear()` returns your saved copy
+  and only falls back to the seed in `gear.js` when there is nothing saved — so from the first
+  time you open the app, the seed is never read again. If a release corrects a garment's
+  numbers, renames it, or adds one, a perfectly clean deploy still shows you the old entry.
+  **Reset** on the gear screen is what loads the new seed; it also discards any edits you made
+  in the UI, so Export first. There is no automatic migration — the gear list is treated as
+  yours, not as something an update is entitled to rewrite.
 - **`localStorage` is per browser and per origin.** Moving the app to a different domain, or
   opening it in a different browser, is a fresh empty-handed start.
 
@@ -474,14 +500,29 @@ sudo systemctl reload caddy
 ```bash
 cd cycling-weather-matrix
 git pull
+docker tag cycling-weather-matrix cycling-weather-matrix:previous   # a way back
 docker build -t cycling-weather-matrix .
-docker restart cwem
+docker stop cwem && docker rm cwem
+docker run -d --name cwem --restart unless-stopped \
+  -p 127.0.0.1:8765:8765 \
+  -v cwem-state:/state -e STATE_DIR=/state cycling-weather-matrix
 ```
 
-If you want a way back, tag the image you are replacing before you build over it:
+**`docker restart` is not enough, and this is the trap worth knowing about.** A container is
+built from an image once, when you `docker run` it, and it keeps that image for life. Building
+a new image under the same tag does not touch a container that already exists — `docker restart`
+stops and starts the *old* code, reports success, and leaves you looking at the previous
+version with nothing in the logs to say so. The container has to be replaced, not restarted.
+
+Rolling back is the same shape: point the tag back and replace the container again.
 
 ```bash
-docker tag cycling-weather-matrix cycling-weather-matrix:previous
+docker rmi cycling-weather-matrix
+docker tag cycling-weather-matrix:previous cycling-weather-matrix
+docker stop cwem && docker rm cwem
+docker run -d --name cwem --restart unless-stopped \
+  -p 127.0.0.1:8765:8765 \
+  -v cwem-state:/state -e STATE_DIR=/state cycling-weather-matrix
 ```
 
 ### Option B — Podman
@@ -499,7 +540,8 @@ If you started it with `podman run`, replace the container:
 
 ```bash
 podman stop cwem && podman rm cwem
-podman run -d --name cwem -p 127.0.0.1:8765:8765 cycling-weather-matrix
+podman run -d --name cwem -p 127.0.0.1:8765:8765 \
+  -v cwem-state:/state -e STATE_DIR=/state cycling-weather-matrix
 ```
 
 If you used the Quadlet unit, restart the service and let it pick up the rebuilt image instead.
@@ -597,6 +639,25 @@ sudo git checkout main && sudo git pull
 
 ### After updating
 
+**First, prove the new code is actually being served.** Every update path has a way of
+appearing to succeed while changing nothing — a container restarted instead of replaced, a
+`git pull` that stopped on a dirty tree, a copy into the wrong directory. Compare what the
+server hands out against what you have in the checkout:
+
+```bash
+cd /opt/cycling-weather-matrix          # or wherever you cloned it
+git rev-parse --short HEAD
+shasum model.js | cut -c1-12
+curl -s https://kit.example.com/model.js | shasum | cut -c1-12
+```
+
+The last two must match. If they don't, the update did not reach the server and nothing else
+in this section is worth checking yet. Work backwards: did `git pull` report new commits, is
+this the directory the server actually serves, and — on Docker or Podman — did you replace the
+container rather than restart it?
+
+Then the service itself:
+
 ```bash
 curl -sI https://kit.example.com | head -1
 curl -s "https://kit.example.com/api/lookup?name=Castelli%20Perfetto%20RoS&slot=shell" | head -c 200
@@ -606,6 +667,10 @@ Then open the app and run one ride. If the page loads but behaves oddly, the usu
 browser holding old JavaScript against new HTML — hard-reload once (Cmd/Ctrl + Shift + R). The
 supplied proxy configs send `Cache-Control: no-cache` on everything precisely so this does not
 happen; if you wrote your own and cached scripts aggressively, that is where to look.
+
+**If the code is current but a garment still shows its old numbers, that is not a deploy
+problem** — your saved gear list is winning over the updated seed. See
+[Your gear list and rides](#your-gear-list-and-rides) above; the fix is Export, then Reset.
 
 ---
 
