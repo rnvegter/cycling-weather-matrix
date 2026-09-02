@@ -1230,3 +1230,7 @@ input[type="checkbox"] { accent-color: var(--temp); width: auto; min-height: 0; 
 }
 .wx-actual__note b { color: var(--text); font-weight: 600; }
 label.wx-linkbtn { display: inline-block; }
+
+/* --- Sync state, quiet unless it needs you --- */
+.wx-sync { display: block; margin-top: var(--sp-2); font-family: var(--data); font-size: .66rem; }
+.wx-sync.is-error { color: var(--signal); }

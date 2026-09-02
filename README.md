@@ -79,7 +79,7 @@ lookup that fetches manufacturer and retailer pages through the local service an
 the quoted temperature range and fabric technology. Found values are shown next to yours with
 per-field checkboxes — nothing is overwritten silently.
 
-Edits live in `localStorage`, so they are per-browser. Use Export/Import to move them.
+Edits live in `localStorage` and sync to the server when one is running — see below.
 
 ## The lookup service
 
@@ -174,6 +174,29 @@ balance at the coldest leg. If a pocket can't close it, the conflict is named as
 with the trade either way, plus any workaround the wardrobe has — the shorts-and-warmers route
 to where tights reach. If nothing closes it, it says so and suggests shortening the ride.
 
+## Syncing
+
+The gear list and the ride history are the two things here that cannot be regenerated, and
+`localStorage` is one browser and one cleared-site-data away from losing them. When the server
+is running they sync to a single `state.json` beside it.
+
+**Local-first, deliberately.** `localStorage` stays the working copy, so the app still answers
+at 06:40 on bad signal with nothing reachable; the server is a sync point rather than the
+source of truth. Writes land locally first and are pushed after, a failed push is queued and
+retried on the next change, and where there is no server at all — files opened directly, or a
+static deployment — none of it runs and the app behaves exactly as it did before.
+
+The two stores merge differently because they are used differently. **History merges ride by
+ride**, on the same rules as the import: rides accumulate independently on whichever device you
+open, so both sides hold real entries the other has never seen. **Gear is last-write-wins**,
+guarded by a timestamp — you edit it deliberately, in one sitting, and merging per garment
+would mean stamping every item to protect against something that does not happen.
+
+The file is written temp-then-rename so a crash mid-write cannot leave truncated JSON where
+your gear list was, and the previous version is kept alongside as `state.prev.json`. Backing up
+is a file copy. Note that the endpoint has no authentication of its own: on a public
+deployment, put auth in front of it — see INSTALL.md.
+
 ## Ride history
 
 Every ride the model works out is kept, because the question the calibration needs — how did
@@ -260,6 +283,7 @@ INSTALL.md if you want to self-host them for a genuinely offline install.
 | `server.js` | Static files plus `/api/lookup` |
 | `app.js` | Forecast, form wiring, rendering |
 | `gearui.js` | Gear screen: add, edit, delete, lookup |
+| `sync.js` | Local-first sync of gear and history |
 | `gpx.js` | Route parsing, leg sampling, headwind and lapse rate |
 | `history.js` | Ride records, and the calibration's source of truth |
 | `historyui.js` | The history screen |

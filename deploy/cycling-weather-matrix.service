@@ -22,6 +22,11 @@ Environment=HOST=127.0.0.1
 Environment=PORT=8765
 # Lookups per client per minute.
 Environment=LOOKUP_RATE=12
+# The gear list and ride history are synced into here. StateDirectory= creates
+# /var/lib/cycling-weather-matrix and makes it writable even with
+# ProtectSystem=strict, which is what keeps the app directory read-only below.
+StateDirectory=cycling-weather-matrix
+Environment=STATE_DIR=/var/lib/cycling-weather-matrix
 
 Restart=on-failure
 RestartSec=5s

@@ -23,6 +23,21 @@ const PORT = +(process.argv[2] || process.env.PORT || 8765);
 const HOST = process.env.HOST || "0.0.0.0";
 const ROOT = __dirname;
 
+/* Where the synced copy of the gear list and ride history lives.
+
+   Deliberately NOT inside the app directory by default under systemd: the unit
+   mounts that read-only, which is worth keeping. StateDirectory= hands the
+   service a writable /var/lib/cycling-weather-matrix and the unit points
+   STATE_DIR at it. Locally it falls back to alongside the app, which is what
+   you want when running it by hand.
+
+   Nothing here is servable as a static file — the allow-list below admits no
+   .json at all — so state.json cannot be fetched over HTTP by accident. */
+const STATE_DIR = process.env.STATE_DIR || __dirname;
+const STATE_FILE = path.join(STATE_DIR, "state.json");
+const STATE_PREV = path.join(STATE_DIR, "state.prev.json");
+const STATE_MAX_BYTES = 4 * 1024 * 1024;
+
 /* The lookup endpoint makes outbound requests on someone else's behalf, which
    is worth a limit before it faces a network. A handful per minute is far more
    than a person editing their wardrobe will ever need. */
@@ -141,6 +156,41 @@ async function lookup(name, slot){
   return result;
 }
 
+/* --- Synced state ------------------------------------------------
+   One document, written whole. Small enough that rewriting it costs nothing,
+   and simple enough that a backup is a file copy. */
+
+function readState(){
+  try{ return JSON.parse(fs.readFileSync(STATE_FILE, "utf8")); }
+  catch(e){ return null; }
+}
+
+/* Temp file then rename, because a crash halfway through a write would
+   otherwise leave truncated JSON where the gear list used to be. The previous
+   version is kept alongside as the cheapest possible insurance. */
+function writeState(doc){
+  const text = JSON.stringify(doc);
+  if (Buffer.byteLength(text) > STATE_MAX_BYTES) throw new Error("state too large");
+  fs.mkdirSync(STATE_DIR, {recursive: true});
+  try{ if (fs.existsSync(STATE_FILE)) fs.copyFileSync(STATE_FILE, STATE_PREV); }catch(e){}
+  const tmp = STATE_FILE + ".tmp";
+  fs.writeFileSync(tmp, text);
+  fs.renameSync(tmp, STATE_FILE);
+}
+
+function readBody(req, limit){
+  return new Promise((resolve, reject) => {
+    let size = 0; const chunks = [];
+    req.on("data", c => {
+      size += c.length;
+      if (size > limit){ reject(new Error("too large")); req.destroy(); return; }
+      chunks.push(c);
+    });
+    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    req.on("error", reject);
+  });
+}
+
 /* --- Server ----------------------------------------------------- */
 
 /* Which files this may hand out.
@@ -168,6 +218,35 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
 
   // Matched by suffix so the app still works when mounted under a sub-path.
+  if (url.pathname.endsWith("/api/state")){
+    res.setHeader("content-type", "application/json; charset=utf-8");
+
+    if (req.method === "GET"){
+      const doc = readState();
+      res.writeHead(200);
+      return res.end(JSON.stringify(doc || {empty: true}));
+    }
+
+    if (req.method === "PUT"){
+      try{
+        const body = await readBody(req, STATE_MAX_BYTES);
+        const doc = JSON.parse(body);
+        if (!doc || typeof doc !== "object" || Array.isArray(doc))
+          throw new Error("expected an object");
+        doc.savedAt = new Date().toISOString();
+        writeState(doc);
+        res.writeHead(200);
+        return res.end(JSON.stringify({ok: true, savedAt: doc.savedAt}));
+      }catch(e){
+        res.writeHead(e.message === "too large" ? 413 : 400);
+        return res.end(JSON.stringify({error: String(e.message || e)}));
+      }
+    }
+
+    res.writeHead(405);
+    return res.end(JSON.stringify({error: "GET to read, PUT to write."}));
+  }
+
   if (url.pathname.endsWith("/api/lookup")){
     const name = (url.searchParams.get("name") || "").trim().slice(0, 120);
     const slot = (url.searchParams.get("slot") || "mid").trim();
@@ -211,4 +290,5 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, HOST, () => {
   console.log(`Cycling Weather Effect Matrix on http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}`);
   console.log(`Gear lookup at /api/lookup?name=...&slot=...  (max ${RATE.max}/min per client)`);
+  console.log(`Synced state in ${STATE_FILE}`);
 });

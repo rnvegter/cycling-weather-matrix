@@ -401,11 +401,23 @@ after each update.
 
 ## Updating
 
-### Your gear list is not on the server
+### Your gear list and rides
 
-Worth knowing before anything else: the inventory lives in your browser's `localStorage`, not
-on the server. **Updating the app cannot touch it.** Whatever you have edited, switched Out,
-or added stays exactly as it was.
+The inventory and the ride history live in your browser's `localStorage`, and — when the server
+is running — sync to `state.json` in `STATE_DIR`. **Updating the app touches neither.** The
+systemd unit puts that file in `/var/lib/cycling-weather-matrix` via `StateDirectory=`, which
+is what lets the app directory stay mounted read-only.
+
+**That file is the one thing here worth backing up**, since the ratings behind the learned
+calibration cannot be regenerated:
+
+```bash
+sudo cp /var/lib/cycling-weather-matrix/state.json ~/cwem-backup-$(date +%F).json
+```
+
+The endpoint that writes it has no authentication of its own. On a public deployment anyone who
+can reach the app can read and overwrite your gear and rides, so put auth in front of it —
+[Cloudflare Access or basic auth](#before-you-expose-it-publicly), or don't expose it at all.
 
 Two caveats to that:
 
