@@ -72,9 +72,9 @@ const GEAR_SEED = [
 {brand:"", model:"Winter bib tights, Castelli or AGU", slot:"legs", tmin:-2, tmax:8, clo:0.30, wind:0.40, water:0.20,
    notes:"Two pairs you treat as the same thing, because on the road they are - only the Assos stands apart as the warmer one. Kept as a single row rather than two identical entries pretending to a distinction you do not make."},
 
-  {brand:"", model:"Knee warmers", slot:"legextra", tmin:11, tmax:16, clo:0.06, wind:0.25, water:0,
-   notes:"Knees are the part that actually complains, and they complain before the rest of the leg does. When the call is borderline, cover them: they weigh nothing and roll into a pocket."},
-  {brand:"", model:"Leg warmers", slot:"legextra", tmin:8, tmax:13, clo:0.10, wind:0.25, water:0,
+  {brand:"Gore", model:"C3 knee warmers", slot:"legextra", tmin:11, tmax:16, clo:0.07, wind:0.45, water:0.35,
+   notes:"Gore rate the C3 knee warmers 5–15°C, which is what the garment can do; 11–16 is where you actually reach for them, because below that you want full leg warmers instead. Both C3 versions share that rating and differ only in wind — the Windstopper one is windproof and water-repellent, the Thermo one is napped inside for dry cold. Knees are the part that complains first, so when the call is borderline, cover them."},
+  {brand:"Bioracer", model:"thermal leg warmers", slot:"legextra", tmin:8, tmax:13, clo:0.12, wind:0.30, water:0.35,
    notes:"Removable mid-ride, which bib tights are not — that is the whole argument for them on a day that starts cold and warms up, or on any route with a long descent in the middle."},
   {brand:"Endura", model:"spray over-trousers", slot:"legextra", tmin:-10, tmax:20, clo:0.08, wind:0.80, water:0.50, pack:true, rainOnly:true,
    notes:"Go over whatever is already on the legs, and only when it is wet — temperature barely bounds them. Showerproof rather than waterproof, so they buy you an hour and not a day: right for a shower or a spray-covered road, overwhelmed by sustained rain. Still the only waterproof-ish leg option you own."},
@@ -110,8 +110,8 @@ const GEAR_SEED = [
   {brand:"", model:"Thermal cap", slot:"head", tmin:-10, tmax:4, clo:0.06, wind:0.55, water:0.20, notes:"Under the helmet below about 4°C. Covers the ears, which a headband also does, but adds a layer over the crown for when the headband alone stops being enough."},
   {brand:"", model:"Brimmed cap under the helmet", slot:"head", tmin:-10, tmax:25, clo:0.02, wind:0.20, water:0.30, pack:true,
    notes:"Rain only. The brim keeps spray off your glasses, which is the thing that actually ends wet rides early — not cold, but not being able to see.", rainOnly:true},
-  {brand:"", model:"Sunglasses", slot:"eyes", tmin:-10, tmax:45, clo:0, wind:0, water:0,
-   notes:"Low winter sun on flat open roads is a genuine hazard here, not a comfort item: it sits at eye height for hours and you ride into it. Model unspecified."},
+  {brand:"Oakley", model:"Sutro Lite", slot:"eyes", tmin:-10, tmax:45, clo:0, wind:0, water:0,
+   notes:"A single shield lens with the frame cut away below, so there is no rim in your lower field when you are down on the drops — which is the whole argument for this shape over a conventional frame. Big coverage also means less wind in the eyes, which matters more than it sounds at 4°C. Low winter sun on flat open roads is a genuine hazard here, not a comfort item. The tinted lens is why the clear pair is a separate row: this is not the one for dusk or heavy rain."},
   {brand:"", model:"Clear or light lenses", slot:"eyes", tmin:-10, tmax:45, clo:0, wind:0, water:0,
    notes:"For rain, dusk and dark. Clear lenses still keep grit and spray out of your eyes, which is why they beat riding without — the protection matters more than the tint.", rainOnly:true}
 ];
