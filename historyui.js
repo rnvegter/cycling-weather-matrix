@@ -68,7 +68,8 @@ function renderHistory(){
         <div>
           <p class="wx-ride__when">${RIDE_DATE(e.startISO)}</p>
           <p class="wx-ride__where">${escHtml(e.place || "—")}${
-            e.routeName ? ` · ${escHtml(e.routeName)}` : ""}</p>
+            e.routeName && e.routeName !== e.place ? ` · ${escHtml(e.routeName)}` : ""}${
+            e.reconstructed ? ` <span class="wx-tag" title="Added from a GPX file. The weather was looked up from the archive afterwards, so this is what actually happened rather than what was forecast.">from GPX</span>` : ""}</p>
         </div>
         <div class="wx-ride__feel">
           ${e.feel != null ? `<span class="wx-num">${e.feel}</span><small>&deg;C felt</small>` : ""}
@@ -204,6 +205,29 @@ document.getElementById("histexport").onclick = () => {
   URL.revokeObjectURL(a.href);
   const rated = ratedRides(list).length;
   histStatus(`Exported ${list.length} ride${list.length === 1 ? "" : "s"}, ${rated} of them rated.`);
+};
+
+/* Adding a ride the app never planned. The weather is looked up from the
+   archive, so this one is asynchronous and can fail on the network — say so
+   rather than leaving the button looking dead. */
+document.getElementById("histgpx").onchange = async e => {
+  const input = e.target, file = input.files[0];
+  if (!file) return;
+  input.value = "";
+  const label = document.querySelector('label[for="histgpx"]');
+  const restore = label ? label.textContent : null;
+  if (label) label.textContent = "Looking up the weather…";
+  try{
+    const text = await file.text();
+    const r = await rideFromActivity(text, file.name);
+    renderHistory();
+    histStatus(`Added ${r.place} — ${r1(r.stats.distance)} km at ${r1(r.stats.speed)} km/h, ` +
+      `and it felt like ${Math.round(r.feel.feel)}°C at the start. Rate it below.`);
+  }catch(err){
+    histStatus(err.message || "Couldn't read that file.", true);
+  }finally{
+    if (label && restore) label.textContent = restore;
+  }
 };
 
 document.getElementById("histimport").onchange = e => {

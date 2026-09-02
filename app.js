@@ -201,6 +201,119 @@ async function forecast(lat, lon){
   return r.json();
 }
 
+/* What the weather actually was, for a ride that has already happened.
+
+   Same hourly shape as the forecast, so rideWindow reads it unchanged — with
+   two gaps to fill first. The archive publishes what happened rather than what
+   might, so it carries no precipitation_probability and no freezing level.
+   Probability is the one that matters: leaving it empty would have rideWindow
+   take Math.max of nothing and hand the model -Infinity. We know whether it
+   rained, which is better than a probability, so it is filled from the
+   measurement — 100 for an hour that produced rain, 0 for one that did not. */
+async function archiveWeather(lat, lon, dateStr){
+  const url = "https://archive-api.open-meteo.com/v1/archive"
+    + `?latitude=${lat}&longitude=${lon}`
+    + `&start_date=${dateStr}&end_date=${dateStr}`
+    + "&hourly=temperature_2m,precipitation,cloud_cover,wind_speed_10m,"
+    + "wind_direction_10m,wind_gusts_10m,is_day,weather_code"
+    + "&daily=sunrise,sunset&timezone=auto";
+  const r = await fetch(url);
+  if (!r.ok) throw new Error("Couldn't reach the weather archive.");
+  const fc = await r.json();
+  if (fc.error) throw new Error(fc.reason || "The weather archive refused that date.");
+  if (!fc.hourly || !fc.hourly.time || !fc.hourly.time.length)
+    throw new Error("The weather archive has nothing for that date yet. It runs about a day behind.");
+  const h = fc.hourly;
+  h.precipitation_probability = h.precipitation.map(p => ((p || 0) >= 0.1 ? 100 : 0));
+  h.freezing_level_height = h.time.map(() => null);
+  return fc;
+}
+
+/* ---------------------------------------------------------------
+   A ride that was never planned here.
+
+   Rating a ride is a comparison — what the model said against how it felt —
+   so until now only a ride worked out on the Ride tab could be rated. That
+   quietly assumed you always plan before riding, which is not how riding
+   works.
+
+   A recorded GPX carries every input the comparison needs except the weather,
+   and the weather is precisely the part that can be looked up afterwards: it
+   says where you were, when you started and how long you took. So fetch what
+   the weather actually did, run the same model over it, and keep the result
+   as an ordinary history entry.
+
+   The prediction is reconstructed rather than remembered. That makes it
+   better evidence, not worse: measured weather instead of a forecast, and
+   measured speed instead of an estimate — which is the larger of the two
+   errors the calibration otherwise has to absorb.
+----------------------------------------------------------------*/
+async function rideFromActivity(text, fileName){
+  const parsed = parseGPX(text);
+  if (!parsed.points.length) throw new Error("No track points in that file.");
+  if (!parsed.recorded)
+    throw new Error("That file has no timestamps, so it is a planned route rather than a recorded ride. Export the activity itself.");
+
+  const stats = activityStats(parsed.points);
+  if (!stats) throw new Error("Couldn't read a distance and a time from that file.");
+
+  const start = new Date(stats.start);
+  if (start.getTime() > Date.now())
+    throw new Error("That ride is dated in the future, so there is nothing to look up.");
+
+  const p0 = parsed.points[0];
+  const route = routeStats(parsed.points);
+
+  /* The archive is indexed by local date, and the ride's own timezone is the
+     one the file was recorded in — so ask the API for local time (timezone=auto
+     resolves it from the coordinates) and match on the ride's local hour. */
+  const local = new Date(start.getTime());
+  const dateStr = `${local.getFullYear()}-${String(local.getMonth()+1).padStart(2,"0")}-${String(local.getDate()).padStart(2,"0")}`;
+  const timeStr = `${String(local.getHours()).padStart(2,"0")}:${String(local.getMinutes()).padStart(2,"0")}`;
+
+  const fc = await archiveWeather(p0.lat, p0.lon, dateStr);
+  const w = rideWindow(fc, dateStr, timeStr, stats.elapsedH);
+
+  /* Everything the model needs, measured rather than guessed. Effort is the
+     one thing a GPX cannot tell us — a slow hour into a headwind and a slow
+     hour freewheeling look identical — so that keeps your current setting. */
+  const opts = {
+    dist: stats.distance, hours: stats.elapsedH, speed: stats.speed,
+    pace: state.pace, rider: state.rider, type: state.type,
+    // Binary in this model: long descents and open ground cost you warmth.
+    // Descent per kilometre separates the two better than ascent, since it is
+    // the way down you feel.
+    terrain: (route.hasElevation && route.descent / Math.max(1, route.distance) > 12) ? "exposed" : "flat",
+    maxElevation: route.hasElevation ? route.maxEle : fc.elevation
+  };
+  const off = learnedOffset(loadHistory(), {wet: rideFeel(w, opts).wet});
+  opts.learned = off.value;
+  opts.learnedLabel = learnedLabel(off);
+
+  const feel = rideFeel(w, opts);
+  const gear = loadGear();
+  const out = state.mode === "wardrobe" ? pickOutfit(feel, w, opts, gear)
+                                        : genericOutfit(feel, w, opts);
+
+  const place = parsed.name || `${r1(p0.lat)}, ${r1(p0.lon)}`;
+  recordRide({
+    startISO: `${dateStr}T${timeStr}`,
+    place,
+    dist: r1(stats.distance), hours: r1(stats.elapsedH), speed: r1(stats.speed),
+    feel: feel.feel, extFeel: feel.extFeel, air: r1(feel.air),
+    wet: feel.wet, raining: feel.raining,
+    rider: state.rider, mode: state.mode,
+    routeName: parsed.name || null,
+    kit: out.wear.map(i => i.name),
+    // Marks this as looked up after the fact rather than forecast beforehand.
+    reconstructed: true
+  });
+  // The GPX is also the actual-ride record, so attach it in the same step —
+  // there is no reason to make you upload the same file twice.
+  attachActual(rideId(`${dateStr}T${timeStr}`, place), stats, fileName);
+  return {stats, feel, place, terrain: opts.terrain};
+}
+
 function rideWindow(fc, dateStr, timeStr, hours){
   const times = fc.hourly.time;
   const i = times.indexOf(`${dateStr}T${timeStr.slice(0,2)}:00`);

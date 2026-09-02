@@ -211,7 +211,28 @@ function normaliseRide(e){
     verdict: v,
     delta: v ? verdictById(v).delta : null,
     ratedAt: typeof e.ratedAt === "string" ? e.ratedAt : null,
-    legacy: !!e.legacy
+    legacy: !!e.legacy,
+    /* The recorded ride, when one has been attached. This is rebuilt field by
+       field rather than passed through, because it arrives from a file or from
+       the sync server and everything else here is validated the same way.
+
+       It has to survive: this function runs on import AND on every sync merge,
+       so anything it drops is lost the moment history round-trips through the
+       server — which would silently undo an attached ride and, with it, the
+       speed correction that depends on it. */
+    actual: (() => {
+      const a = e.actual;
+      if (!a || typeof a !== "object") return null;
+      const out = {};
+      ["distance","speed","elapsedH","movingH","elapsedSpeed"].forEach(k => {
+        if (Number.isFinite(+a[k])) out[k] = +a[k];
+      });
+      ["start","end"].forEach(k => { if (typeof a[k] === "string") out[k] = a[k]; });
+      return Number.isFinite(out.speed) ? out : null;
+    })(),
+    actualFrom: typeof e.actualFrom === "string" ? e.actualFrom : null,
+    // Weather looked up after the ride rather than forecast before it.
+    reconstructed: !!e.reconstructed
   };
 }
 

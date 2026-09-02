@@ -1175,6 +1175,15 @@ input[type="checkbox"] { accent-color: var(--temp); width: auto; min-height: 0; 
   text-transform: uppercase; color: var(--text); margin: 0;
 }
 .wx-ride__where { font-size: var(--step--1); color: var(--text-dim); margin: 2px 0 0; }
+/* Provenance, not decoration: says the weather behind this entry was looked up
+   after the ride rather than forecast before it. */
+.wx-tag {
+  display: inline-block; vertical-align: 1px; margin-left: .35em;
+  padding: .1em .45em; border: 1px solid var(--rule); border-radius: 2px;
+  font-family: var(--display); font-size: .62rem; font-weight: 500;
+  letter-spacing: .04em; text-transform: uppercase; color: var(--text-dim);
+  cursor: help;
+}
 .wx-ride__feel {
   text-align: right; white-space: nowrap; color: var(--temp);
   font-family: var(--data); font-weight: 600; font-size: var(--step-2); line-height: 1;

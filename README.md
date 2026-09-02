@@ -214,6 +214,20 @@ The history splits on the only distinction that matters: a ride in the future sa
 yet* and waits, and a ride in the past asks the question. Rides can be rated, re-rated and
 deleted, and deleting a rated one tells you it also removes what that ride taught the model.
 
+**A ride you never planned here can still be rated.** For a long time only rides worked out on
+the Ride tab could be, which quietly assumed you always plan before riding — and if you simply
+went out and rode, there was nowhere to put the result. **Add a ride from GPX** closes that: a
+recorded file already says where you were, when you started and how long you took, and the
+weather is the one missing input that can be looked up afterwards. The archive is asked what
+actually happened, the same model is run over it, and the ride lands in the history rateable,
+tagged *from GPX* so its provenance stays visible.
+
+The reconstruction is better evidence than a planned entry, not worse. It uses measured weather
+rather than a forecast, and measured speed rather than an estimate — which is the larger of the
+two errors the calibration otherwise has to absorb. So these count toward the learned offset on
+equal footing. Effort is the one thing a GPX cannot tell you, since a slow hour into a headwind
+and a slow hour freewheeling look identical, so that keeps whatever pace you have set.
+
 **Attach what actually happened.** Speed is the model's weakest input: it is typed in
 beforehand and it drives the self-generated wind chill. Drop the GPX of a completed activity
 onto a ride — Strava's activity export carries a timestamp on every point, its route export
