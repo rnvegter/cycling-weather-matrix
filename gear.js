@@ -76,20 +76,30 @@ const GEAR_SEED = [
    notes:"Knees are the part that actually complains, and they complain before the rest of the leg does. When the call is borderline, cover them: they weigh nothing and roll into a pocket."},
   {brand:"", model:"Leg warmers", slot:"legextra", tmin:8, tmax:13, clo:0.10, wind:0.25, water:0,
    notes:"Removable mid-ride, which bib tights are not — that is the whole argument for them on a day that starts cold and warms up, or on any route with a long descent in the middle."},
-  {brand:"Endura", model:"waterproof over-trousers", slot:"legextra", tmin:-10, tmax:20, clo:0.08, wind:0.85, water:0.90, pack:true, rainOnly:true,
-   notes:"Go over whatever is already on the legs, and only when it is properly wet - temperature barely bounds them. The one waterproof leg option you own, which is what makes a long wet day survivable rather than merely endurable. Exact model unspecified."},
+  {brand:"Endura", model:"spray over-trousers", slot:"legextra", tmin:-10, tmax:20, clo:0.08, wind:0.80, water:0.50, pack:true, rainOnly:true,
+   notes:"Go over whatever is already on the legs, and only when it is wet — temperature barely bounds them. Showerproof rather than waterproof, so they buy you an hour and not a day: right for a shower or a spray-covered road, overwhelmed by sustained rain. Still the only waterproof-ish leg option you own."},
   {brand:"Bioracer", model:"bib tight, no chamois", slot:"legextra", tmin:-8, tmax:10, clo:0.14, wind:0.35, water:0.20,
    notes:"The most flexible leg item you own. Over bib shorts it converts a short-bib setup into a winter one, which matters on trips because one chamois then covers two temperature ranges. It also layers over a winter bib as a second skin when it is genuinely cold."},
 
+  // --- Socks. Under the shoe, where overshoes and toe covers go over it. ---
+  {brand:"", model:"Merino socks, summer weight", slot:"socks", tmin:13, tmax:40, clo:0.03, wind:0.15, water:0.10,
+   notes:"Merino rather than synthetic, which matters more on the feet than anywhere else: shoes stay damp, and merino keeps working when wet where synthetics stop."},
+  {brand:"", model:"Merino socks, winter weight", slot:"socks", tmin:-10, tmax:12, clo:0.06, wind:0.20, water:0.10,
+   notes:"The thicker pair. Worth pairing with overshoes rather than instead of them — a shoe is mostly vents, so the sock warms and the overshoe blocks."},
+
   // --- Neck ---
-  {brand:"", model:"Neck gaiter", slot:"neck", tmin:-10, tmax:10, clo:0.05, wind:0.45, water:0.10,
-   notes:"Fills a gap nothing else does: the neck of a jersey is an open pipe pointing straight down your chest, so a gaiter buys more warmth than its weight suggests. Pull it up over the chin on a descent. Brand and weight unspecified."},
+{brand:"", model:"Merino buff", slot:"neck", tmin:2, tmax:14, clo:0.03, wind:0.25, water:0.10,
+   notes:"The thin one that packs to nothing and lives in a pocket. Takes the edge off a cool morning and comes off without stopping. Little wind resistance, so it is warmth by coverage rather than by blocking anything."},
+  {brand:"", model:"Thermal neck gaiter", slot:"neck", tmin:-10, tmax:8, clo:0.06, wind:0.45, water:0.10,
+   notes:"Brushed inside, for actual winter. Pull it over the chin on a descent — the neck of a jersey is an open pipe pointing straight down your chest, which is why a gaiter buys more warmth than its weight suggests."},
+  {brand:"", model:"Windproof neck gaiter", slot:"neck", tmin:-6, tmax:10, clo:0.05, wind:0.75, water:0.20,
+   notes:"A membrane panel across the throat. The one to reach for on an exposed dike rather than a cold still morning: the neck is where airflow actually gets under a jacket, and blocking it there is worth more than another layer underneath."},
 
   // --- Hands, feet, head. These run on the air-based number, not ride-feel. ---
-  {brand:"Castelli", model:"Arenberg Gel 2 (short finger)", slot:"hands", tmin:13, tmax:40, clo:0.02, wind:0.20, water:0,
-   notes:"Short-finger with gel inserts, built for rough surfaces — the right choice for gravel and for long days where hand numbness is the limiting factor, less necessary on a smooth two-hour road ride."},
-  {brand:"", model:"Mid-weight long-finger gloves", slot:"hands", tmin:6, tmax:13, clo:0.07, wind:0.45, water:0.20,
-   notes:"The workhorse for Dutch autumn and spring, and the pair that covers the widest band. Brand unspecified — worth naming if you want the range checked against anything."},
+  {brand:"Castelli", model:"Arenberg Gel 2 (short finger)", slot:"hands", tmin:11, tmax:40, clo:0.02, wind:0.20, water:0,
+   notes:"Short-finger with gel inserts, built for rough surfaces — the right choice for gravel and long days where hand numbness is the limiting factor. Reaches down to 11°C so there is no bare patch between these and the Laval, which is a fair call for a rider who runs hot."},
+  {brand:"Rogelli", model:"Laval gloves", slot:"hands", tmin:0, tmax:10, clo:0.09, wind:0.50, water:0.30,
+   notes:"The workhorse for Dutch autumn and spring, rated 0–10°C. That overlaps the Estremo below 5, where either will do and the Estremo is the warmer call; above 10 the Arenberg takes over."},
   {brand:"Castelli", model:"Estremo winter gloves", slot:"hands", tmin:-10, tmax:5, clo:0.14, wind:0.85, water:0.40,
    notes:"Model unspecified, which matters here: Castelli's winter gloves span roughly −5°C to 10°C depending on which line. Not waterproof in any case — in sustained cold rain your hands become the limiting factor on the whole ride."},
   {brand:"", model:"Toe covers", slot:"feet", tmin:8, tmax:13, clo:0.05, wind:0.55, water:0.40,
@@ -110,6 +120,8 @@ const GEAR_SEED = [
 const GEAR_GAPS = [
   {when: (f) => f.raining && !f.light && f.extFeel < 5,
    text: "No waterproof gloves in the inventory. Below about 5°C in sustained rain your hands become the limiting factor and they'll shorten the ride whatever the jacket is doing."},
+  {when: (f) => f.wet && f.extFeel < 6,
+   text: "No waterproof socks. Overshoes keep the worst of it out, but on a long wet ride water runs down your legs and into the shoe anyway — wet feet are the complaint that outlasts the ride, and nothing you own actually prevents it."},
   {when: (f) => f.feel < -1,
    text: "No heavyweight base layer — both merinos are 150gsm, so the bottom of the Winter Jacket's range isn't properly supported. Stack the two merinos and accept the layering is at its limit."}
 ];
@@ -117,7 +129,7 @@ const GEAR_GAPS = [
 const SLOTS = [
   ["base","Base layer"], ["mid","Jersey / mid"], ["shell","Shell / jacket"], ["vest","Gilet"],
   ["arms","Arm warmers"], ["legs","Legs"], ["legextra","Leg warmers / over-tight"],
-  ["hands","Hands"], ["feet","Feet"], ["neck","Neck"], ["head","Head"], ["eyes","Eyes"]
+  ["hands","Hands"], ["socks","Socks"], ["feet","Feet"], ["neck","Neck"], ["head","Head"], ["eyes","Eyes"]
 ];
 const SLOT_LABEL = Object.fromEntries(SLOTS);
 
@@ -125,9 +137,9 @@ const SLOT_LABEL = Object.fromEntries(SLOTS);
    head down to feet, base layer before what goes over it. */
 const ZONE_LABEL = {
   head:"Head", eyes:"Eyes", neck:"Neck", base:"Base", mid:"Torso", shell:"Shell", vest:"Gilet",
-  arms:"Arms", hands:"Hands", legs:"Legs", legextra:"Legs", feet:"Feet"
+  arms:"Arms", hands:"Hands", legs:"Legs", legextra:"Legs", socks:"Socks", feet:"Feet"
 };
-const ZONE_ORDER = ["head","eyes","neck","base","mid","shell","vest","arms","hands","legs","legextra","feet"];
+const ZONE_ORDER = ["head","eyes","neck","base","mid","shell","vest","arms","hands","legs","legextra","socks","feet"];
 
 /* --- Storage ---------------------------------------------------- */
 const GEAR_KEY = "cwem-gear-v1";

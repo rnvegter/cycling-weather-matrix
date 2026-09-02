@@ -307,7 +307,7 @@ function pickOutfit(f, w, opts, gear){
   }
 
   /* --- Extremities run on the air-based number ------------------- */
-  ["hands","feet","neck","head"].forEach(slot => push(bestOrEdge(slot, ex)));
+  ["hands","socks","feet","neck","head"].forEach(slot => push(bestOrEdge(slot, ex)));
   // Feet get covered in the wet whatever the temperature.
   if (f.wet && !wear.some(i => i.slot === "feet")){
     const feet = best(inSlot("feet"), ex);
