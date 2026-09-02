@@ -44,10 +44,26 @@ const PACE_SPEED = {easy:0.85, steady:1, hard:1.12};
 
 /* The chill you make yourself. Extracted because it is the only place speed
    touches ride-feel, which makes it also the exact size of the error when the
-   speed was guessed wrong — see rideNumbersFromActual in history.js. */
+   speed was guessed wrong — see rideNumbersFromActual in history.js.
+
+   The air dependence is a ramp, not a step. It used to switch from -1 to -3 at
+   exactly 15°C, so a tenth of a degree of air moved ride-feel by two full
+   degrees. Any garment whose band straddled that jump became nearly
+   unreachable: the knee warmers were advised across half a degree of air
+   temperature at 27 km/h, and at 32 km/h never at all, because the advice
+   stepped clean over their window from bare legs to leg warmers.
+
+   Cold air genuinely does make self-generated wind bite harder — a wet-bulb
+   effect on skin that is not linear in temperature — so the endpoints are
+   unchanged. Only the transition between them is now gradual. */
+const SELF_COLD = -3, SELF_WARM = -1;         // the two endpoints, as before
+const SELF_RAMP_LO = 12, SELF_RAMP_HI = 18;   // ...blended across this band
+
 function selfWindTerm(air, speed){
   const speedFactor = clamp(speed / 27, 0.55, 1.45);
-  return Math.round((air < 15 ? -3 : -1) * speedFactor * 2) / 2;
+  const t = clamp((air - SELF_RAMP_LO) / (SELF_RAMP_HI - SELF_RAMP_LO), 0, 1);
+  const base = SELF_COLD + (SELF_WARM - SELF_COLD) * t;
+  return Math.round(base * speedFactor * 2) / 2;
 }
 
 /* ---------------------------------------------------------------
