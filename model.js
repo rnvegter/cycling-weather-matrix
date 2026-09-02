@@ -307,14 +307,22 @@ function pickOutfit(f, w, opts, gear){
   }
 
   /* --- Extremities run on the air-based number ------------------- */
-  ["hands","feet","head"].forEach(slot => push(bestOrEdge(slot, ex)));
+  ["hands","feet","neck","head"].forEach(slot => push(bestOrEdge(slot, ex)));
   // Feet get covered in the wet whatever the temperature.
   if (f.wet && !wear.some(i => i.slot === "feet")){
     const feet = best(inSlot("feet"), ex);
     if (feet) push(feet, "Wet feet are the complaint that outlasts the ride.");
   }
-  // Rain-only items.
-  if (f.wet) inSlot("head").filter(i => i.rainOnly).forEach(i => push(i));
+  /* Rain-only items, wherever they live. A brimmed cap and waterproof
+     over-trousers are the same kind of thing: chosen by the weather rather than
+     the temperature, and worn over whatever is already on. */
+  if (f.wet){
+    SLOTS.forEach(([slot]) => {
+      const pick = inSlot(slot).filter(i => i.rainOnly)
+        .sort((a, b) => b.water - a.water)[0];
+      if (pick && !wear.includes(pick)) push(pick);
+    });
+  }
 
   const eyes = inSlot("eyes").filter(i => !!i.rainOnly === (f.raining || w.dark >= 0.4));
   if (eyes.length) push(eyes[0]);

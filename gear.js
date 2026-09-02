@@ -31,8 +31,8 @@ const GEAR_SEED = [
    notes:"Clima Code 1/3. The default top whenever a shell isn't needed. Pairs with arm warmers to reach the low teens, which is cheaper than owning another jersey for that band."},
   {brand:"Castelli", model:"Espresso Thermal (LS)", slot:"mid", tmin:6, tmax:14, clo:0.30, wind:0.20, water:0,
    notes:"Powerstretch-type fleece: light fleece inside, denser weave outside. Castelli quote 12–18°C but reviewers consistently ride it from about 6°C, and your range follows them rather than the label. Barely wind-resistant, so it wants a gilet over it on anything exposed. Three open rear pockets plus a zipped one."},
-  {brand:"Assos", model:"Mille GT Spring Fall LS", slot:"mid", tmin:7, tmax:14, clo:0.28, wind:0.35, water:0,
-   notes:"Clima Code 2/3. 250g/m² RX fabric on the front for insulation and abrasion resistance, breathable striped back. Relaxed regularFit, so it layers under a shell better than the Castelli race pieces. Assos rate the current C2 at 12–20°C — well above your range, so check which version this is."},
+  {brand:"Assos", model:"Mille GT Spring Fall LS", slot:"mid", tmin:10, tmax:15, clo:0.28, wind:0.35, water:0,
+   notes:"Clima Code 2/3. 250g/m² RX fabric on the front for insulation and abrasion resistance, breathable striped back. Relaxed regularFit, so it layers under a shell better than the Castelli race pieces. Assos rate the C2 at 12–20°C; your 10–15 is your own figure and sits sensibly below the label, the way a run-hot rider's range should — narrower at the top than they claim, a little braver at the bottom."},
 
   // --- Shells ---
   {brand:"Castelli", model:"Gabba R (SS)", slot:"shell", tmin:4, tmax:15, clo:0.18, wind:0.95, water:0.95, short:true,
@@ -57,8 +57,8 @@ const GEAR_SEED = [
   // --- Arms ---
   {brand:"Castelli", model:"Nano Flex arm warmers", slot:"arms", tmin:6, tmax:15, clo:0.08, wind:0.50, water:0.60,
    notes:"Termoflex fleece coated in nano filaments: water beads and rolls off rather than soaking in. Castelli rate them 8–20°C; yours run colder. Not waterproof — sustained rain will get through. Castelli designed the Gabba around this pairing, which is exactly the trick a hot rider wants: short sleeves plus warm arms, and the arms come off mid-ride."},
-  {brand:"GripGrab", model:"arm warmers", slot:"arms", tmin:11, tmax:17, clo:0.07, wind:0.30, water:0.20,
-   notes:"Model unspecified, and it matters — GripGrab make lightweight, thermal and water-repellent versions with quite different ranges. Worth pinning down before trusting this row."},
+  {brand:"GripGrab", model:"thermal arm warmers", slot:"arms", tmin:6, tmax:14, clo:0.09, wind:0.35, water:0.20,
+   notes:"The thermal pair rather than the lightweight or the water-repellent one, which puts them alongside the Nano Flex instead of above them. The Nano Flex still wins when it is wet, being water-repellent; these are the dry-cold choice."},
   {brand:"Bioracer", model:"Stratos arm warmers", slot:"arms", tmin:14, tmax:20, clo:0.04, wind:0.30, water:0.40, pack:true,
    notes:"Ultralight woven Aquaracer, water-repellent outside and hydrophilic inside, UPF 50. Packs to almost nothing, so this is the pair that lives in a pocket on uncertain mornings and comes off at the first climb. Also cuts wind chill on a long descent."},
   {brand:"Castelli", model:"UPF 50 sun sleeves", slot:"arms", tmin:20, tmax:45, clo:0.01, wind:0.10, water:0, pack:true,
@@ -69,16 +69,21 @@ const GEAR_SEED = [
    notes:"Castelli rate them 15–35°C. Gravel-oriented: Kiss Air2 pad, abrasion-resistant double-layer side panels, and flapped cargo pockets on the thighs. Those pockets are the reason to default to these whenever a shell is being carried — the Shakedry and the Wind Vest ride on the legs and leave the jersey pockets free for food."},
   {brand:"Assos", model:"winter bib tights", slot:"legs", tmin:-4, tmax:6, clo:0.34, wind:0.45, water:0.20,
    notes:"The warmest of your three pairs, so this is the one for the genuinely cold days. Ranked by your own experience rather than a spec sheet, which is the better evidence."},
-  {brand:"Castelli", model:"winter bib tights", slot:"legs", tmin:-2, tmax:8, clo:0.30, wind:0.40, water:0.20,
-   notes:"Middle of your three pairs. Not yet ranked against the AGU - if one of them is noticeably warmer on the road, split them by a couple of degrees and the advice will start choosing between them."},
-  {brand:"AGU", model:"winter bib tights", slot:"legs", tmin:-2, tmax:8, clo:0.30, wind:0.40, water:0.20,
-   notes:"The third pair, unranked against the Castelli. Both sit above the Assos, which is the one to reach for when it is properly cold."},
+{brand:"", model:"Winter bib tights, Castelli or AGU", slot:"legs", tmin:-2, tmax:8, clo:0.30, wind:0.40, water:0.20,
+   notes:"Two pairs you treat as the same thing, because on the road they are - only the Assos stands apart as the warmer one. Kept as a single row rather than two identical entries pretending to a distinction you do not make."},
+
   {brand:"", model:"Knee warmers", slot:"legextra", tmin:11, tmax:16, clo:0.06, wind:0.25, water:0,
    notes:"Knees are the part that actually complains, and they complain before the rest of the leg does. When the call is borderline, cover them: they weigh nothing and roll into a pocket."},
   {brand:"", model:"Leg warmers", slot:"legextra", tmin:8, tmax:13, clo:0.10, wind:0.25, water:0,
    notes:"Removable mid-ride, which bib tights are not — that is the whole argument for them on a day that starts cold and warms up, or on any route with a long descent in the middle."},
+  {brand:"Endura", model:"waterproof over-trousers", slot:"legextra", tmin:-10, tmax:20, clo:0.08, wind:0.85, water:0.90, pack:true, rainOnly:true,
+   notes:"Go over whatever is already on the legs, and only when it is properly wet - temperature barely bounds them. The one waterproof leg option you own, which is what makes a long wet day survivable rather than merely endurable. Exact model unspecified."},
   {brand:"Bioracer", model:"bib tight, no chamois", slot:"legextra", tmin:-8, tmax:10, clo:0.14, wind:0.35, water:0.20,
    notes:"The most flexible leg item you own. Over bib shorts it converts a short-bib setup into a winter one, which matters on trips because one chamois then covers two temperature ranges. It also layers over a winter bib as a second skin when it is genuinely cold."},
+
+  // --- Neck ---
+  {brand:"", model:"Neck gaiter", slot:"neck", tmin:-10, tmax:10, clo:0.05, wind:0.45, water:0.10,
+   notes:"Fills a gap nothing else does: the neck of a jersey is an open pipe pointing straight down your chest, so a gaiter buys more warmth than its weight suggests. Pull it up over the chin on a descent. Brand and weight unspecified."},
 
   // --- Hands, feet, head. These run on the air-based number, not ride-feel. ---
   {brand:"Castelli", model:"Arenberg Gel 2 (short finger)", slot:"hands", tmin:13, tmax:40, clo:0.02, wind:0.20, water:0,
@@ -112,17 +117,17 @@ const GEAR_GAPS = [
 const SLOTS = [
   ["base","Base layer"], ["mid","Jersey / mid"], ["shell","Shell / jacket"], ["vest","Gilet"],
   ["arms","Arm warmers"], ["legs","Legs"], ["legextra","Leg warmers / over-tight"],
-  ["hands","Hands"], ["feet","Feet"], ["head","Head"], ["eyes","Eyes"]
+  ["hands","Hands"], ["feet","Feet"], ["neck","Neck"], ["head","Head"], ["eyes","Eyes"]
 ];
 const SLOT_LABEL = Object.fromEntries(SLOTS);
 
 /* Short zone words for the kit list, and the order you actually get dressed in:
    head down to feet, base layer before what goes over it. */
 const ZONE_LABEL = {
-  head:"Head", eyes:"Eyes", base:"Base", mid:"Torso", shell:"Shell", vest:"Gilet",
+  head:"Head", eyes:"Eyes", neck:"Neck", base:"Base", mid:"Torso", shell:"Shell", vest:"Gilet",
   arms:"Arms", hands:"Hands", legs:"Legs", legextra:"Legs", feet:"Feet"
 };
-const ZONE_ORDER = ["head","eyes","base","mid","shell","vest","arms","hands","legs","legextra","feet"];
+const ZONE_ORDER = ["head","eyes","neck","base","mid","shell","vest","arms","hands","legs","legextra","feet"];
 
 /* --- Storage ---------------------------------------------------- */
 const GEAR_KEY = "cwem-gear-v1";

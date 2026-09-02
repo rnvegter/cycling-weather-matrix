@@ -55,11 +55,11 @@
   /* Baseline clo by slot, before fabric and descriptor adjustments. */
   const SLOT_BASE = {
     base:0.09, mid:0.15, shell:0.20, vest:0.07, arms:0.06,
-    legs:0.15, legextra:0.10, hands:0.06, feet:0.06, head:0.04, eyes:0
+    legs:0.15, legextra:0.10, hands:0.06, feet:0.06, neck:0.05, head:0.04, eyes:0
   };
   const SLOT_WIND = {
     base:0.10, mid:0.20, shell:0.80, vest:0.55, arms:0.30,
-    legs:0.25, legextra:0.25, hands:0.40, feet:0.55, head:0.35, eyes:0
+    legs:0.25, legextra:0.25, hands:0.40, feet:0.55, neck:0.45, head:0.35, eyes:0
   };
 
   /* Descriptive words that move the baseline. */
@@ -85,7 +85,7 @@
      Additive adjustments are scaled to the size of the garment. */
   const SLOT_CLO_SCALE = {
     base:0.7, mid:1, shell:1, vest:0.5, arms:0.4,
-    legs:0.75, legextra:0.6, hands:0.35, feet:0.35, head:0.30, eyes:0
+    legs:0.75, legextra:0.6, hands:0.35, feet:0.35, neck:0.30, head:0.30, eyes:0
   };
 
   /* Merino weight is quoted in gsm and maps almost linearly onto clo. */
@@ -158,7 +158,7 @@
       const tmax = 18 - 40*clo;
       return R(tmax - 10, tmax);
     }
-    if (slot === "head"){
+    if (slot === "neck" || slot === "head"){
       const tmax = 13 - 150*clo;
       return R(clo >= 0.05 ? -10 : tmax - 6, tmax);
     }
