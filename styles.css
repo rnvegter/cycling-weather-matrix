@@ -382,7 +382,14 @@ body[data-screen="gear"] { --shell: 82rem; }
 
 /* ---------- 9. Controls -------------------------------------- */
 
+/* A <button> centres its text on its own; a <label> wearing this class does
+   not, and "Add a ride from GPX" sat 10px high in a 44px box because of it.
+   The class carries its own centring rather than relying on which element it
+   happens to be put on -- the same way .wx-file already does. */
 .wx-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-family: var(--display);
   font-size: var(--step-0);
   font-weight: 600;
@@ -588,16 +595,51 @@ input[type="checkbox"] { accent-color: var(--temp); width: auto; min-height: 0; 
 .wx-grid--2 { grid-template-columns: repeat(2, 1fr); }
 .wx-grid--3 { grid-template-columns: repeat(3, 1fr); }
 .wx-grid--4 { grid-template-columns: repeat(4, 1fr); }
-.wx-grid--5 { grid-template-columns: repeat(5, 1fr); }
+
+/* The ride row: date, start, distance, hours, speed.
+
+   1fr means minmax(auto, 1fr), and that auto floor is the track's min-CONTENT
+   width -- so one stubborn child widens its own column and takes the space
+   from its neighbours. A native date input is exactly that child: it carries
+   "08/09/2026" plus a picker button and will not shrink below them, which left
+   Date half again as wide as the four fields beside it.
+
+   Equal fifths are not the answer either: at this card's width a fifth is
+   118px and the date loses its year. So the row asks for as many equal
+   columns of at least 140px as will fit and wraps what is left over. Every
+   field ends up the same width at every screen size -- which is the point of
+   the row -- and the count follows the space instead of being asserted, so
+   this needs no breakpoints of its own.
+
+   Scoped to this row rather than applied to every grid: this is the only one
+   holding a child that refuses to shrink, and dropping the floor under grids
+   that do not need it changes their sizing on no evidence. */
+.wx-grid--5 { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.wx-grid--5 > * { min-width: 0; }
+
+/* A cell that takes the rest of the row it lands on.
+
+   The gear form's flags sit in the same four-column row as min, max, clo, wind
+   and water, filling the three cells left beside Water -- and asked for that
+   with `span 3`, which is only the rest of the row while the row has four
+   columns. Below 34rem the grid drops to two, and a span of three then invents
+   a third, implicit, content-sized column: it took 215px of a 346px row and
+   squeezed Max and Wind until their own values clipped, 15 rendering as 1!.
+
+   So the span holds only where there are four columns to span, and narrower
+   than that the cell runs to the last explicit line instead -- which is however
+   many columns there are, and never conjures another. */
+.wx-grid--4 > .wx-fill { grid-column: span 3; }
+@media (max-width: 34rem) { .wx-grid--4 > .wx-fill { grid-column: 1 / -1; } }
+
 .wx-row { display: flex; gap: var(--sp-2); align-items: flex-end; }
 .wx-row > .wx-grow { flex: 1; }
 
-@media (max-width: 46rem) { .wx-grid--5 { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 34rem) {
-  .wx-grid--3, .wx-grid--4, .wx-grid--5 { grid-template-columns: repeat(2, 1fr); }
+  .wx-grid--3, .wx-grid--4 { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 22rem) {
-  .wx-grid--2, .wx-grid--3, .wx-grid--4, .wx-grid--5 { grid-template-columns: 1fr; }
+  .wx-grid--2, .wx-grid--3, .wx-grid--4 { grid-template-columns: 1fr; }
 }
 
 /* Choice chips reuse the adjustment chip, pressed state and all. */
