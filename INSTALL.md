@@ -681,6 +681,23 @@ it takes a garment name, searches, and follows its own results — so it isn't a
 proxy. But anyone who can reach it can make your server issue outbound requests, which is
 worth bounding on a public host.
 
+Two things bound it. **Every destination is resolved and checked before it is fetched**, and
+refused if it lands on loopback, private, link-local, carrier-NAT, multicast or reserved
+space — `169.254.169.254`, the cloud metadata address, among them. Redirects are followed by
+hand so each hop is checked, not just the first: a public page that answers `302` to
+`localhost` gets no further than the check. Non-standard ports are refused too, since that is
+how you reach an internal service on a public-looking host. What remains is a DNS rebinding
+window — a name that passes the check and then resolves elsewhere for the fetch itself —
+which is narrow, needs an attacker-controlled domain ranking for a garment name, and is worth
+knowing about rather than claiming is closed.
+
+**The rate limit counts the right end of `X-Forwarded-For`.** That header is a list the client
+starts and each proxy appends to, so its first entry is whatever the caller typed. The limit
+reads `TRUST_PROXY_HOPS` entries back from the end instead — 1 by default, which is nginx or
+Caddy on the same box — and ignores the header entirely on a direct connection. If something
+else sits in front of your proxy (Cloudflare, a load balancer), raise it to match, or every
+visitor lands in one shared bucket.
+
 - The Node process limits each client to 12 lookups a minute. Change it with `LOOKUP_RATE`.
 - `deploy/nginx.conf` adds a second limit at the proxy, so abusive traffic never reaches Node.
 - If the server is only for you, the simplest answer is not to expose it at all: leave it on

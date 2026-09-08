@@ -15,6 +15,8 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+const dns = require("dns").promises;
+const net = require("net");
 const {inferGarment} = require("./insulation.js");
 
 const PORT = +(process.argv[2] || process.env.PORT || 8765);
@@ -41,6 +43,40 @@ const STATE_MAX_BYTES = 4 * 1024 * 1024;
 /* The lookup endpoint makes outbound requests on someone else's behalf, which
    is worth a limit before it faces a network. A handful per minute is far more
    than a person editing their wardrobe will ever need. */
+/* Who is calling, for rate-limiting purposes.
+
+   X-Forwarded-For is a list the client starts and each proxy appends to, so
+   the FIRST entry is whatever the caller chose to put there and the LAST is
+   the one the nearest trusted proxy added. Reading the first entry means the
+   limit is keyed on a value the attacker controls — a different fake header
+   on each request buys unlimited lookups. Both supplied configs append this
+   way: nginx via $proxy_add_x_forwarded_for, Caddy by default.
+
+   So: only believe the header at all when the connection itself came from a
+   proxy we trust, and then count back TRUST_PROXY_HOPS from the end. One hop
+   is the supplied setup (nginx or Caddy on the same box). Put something else
+   in front of that — Cloudflare, a load balancer — and raise it to match, or
+   every visitor shares one bucket. */
+const TRUST_HOPS = Math.max(1, +(process.env.TRUST_PROXY_HOPS || 1));
+
+function isLocalPeer(ip){
+  if (!ip) return false;
+  const s = String(ip).replace(/^::ffff:/, "");
+  return s === "::1" || s === "127.0.0.1" || /^127\./.test(s);
+}
+
+function clientIP(req){
+  const peer = req.socket.remoteAddress || "unknown";
+  // A direct connection has no proxy to have written the header, so anything
+  // in it is the caller's own invention.
+  if (!isLocalPeer(peer)) return peer;
+  const chain = String(req.headers["x-forwarded-for"] || "")
+    .split(",").map(s => s.trim()).filter(Boolean);
+  if (!chain.length) return peer;
+  const i = chain.length - TRUST_HOPS;
+  return i >= 0 ? chain[i] : chain[0];
+}
+
 const RATE = {max: +(process.env.LOOKUP_RATE || 12), windowMs: 60_000, hits: new Map()};
 function rateLimited(ip){
   const now = Date.now();
@@ -62,19 +98,110 @@ const MIME = {
 
 /* --- Fetching --------------------------------------------------- */
 
+/* --- Where this server is allowed to reach ------------------------
+
+   The lookup fetches pages chosen by a search engine, on behalf of whoever
+   called the endpoint. That is a server making requests to an address it did
+   not choose, which is the shape of an SSRF: get a page ranked for a
+   distinctive garment name, point it at 169.254.169.254 or at something bound
+   to loopback, and the server fetches it from inside the network and hands
+   back the body.
+
+   So the destination is checked rather than trusted. Every hostname is
+   resolved and every resulting address tested against the ranges that are
+   only ever reachable from inside — loopback, private, link-local (which is
+   where cloud metadata lives), carrier NAT, multicast and reserved space.
+   Redirects are followed by hand for the same reason: a public URL that
+   answers 302 to localhost would otherwise walk straight past a check done
+   only on the first hop. */
+
+const BLOCKED_V4 = [
+  [[0,0,0,0], 8],           // "this network"
+  [[10,0,0,0], 8],          // private
+  [[100,64,0,0], 10],       // carrier-grade NAT
+  [[127,0,0,0], 8],         // loopback
+  [[169,254,0,0], 16],      // link-local — cloud metadata (169.254.169.254)
+  [[172,16,0,0], 12],       // private
+  [[192,0,0,0], 24],        // IETF protocol assignments
+  [[192,168,0,0], 16],      // private
+  [[198,18,0,0], 15],       // benchmarking
+  [[224,0,0,0], 4],         // multicast
+  [[240,0,0,0], 4]          // reserved, includes 255.255.255.255
+];
+
+function v4Blocked(ip){
+  const p = ip.split(".").map(Number);
+  if (p.length !== 4 || p.some(n => !Number.isInteger(n) || n < 0 || n > 255)) return true;
+  const asInt = ((p[0] << 24) >>> 0) + (p[1] << 16) + (p[2] << 8) + p[3];
+  return BLOCKED_V4.some(([base, bits]) => {
+    const baseInt = ((base[0] << 24) >>> 0) + (base[1] << 16) + (base[2] << 8) + base[3];
+    const mask = bits === 0 ? 0 : (~0 << (32 - bits)) >>> 0;
+    return (asInt & mask) === (baseInt & mask);
+  });
+}
+
+function isBlockedAddress(ip){
+  const v = net.isIP(ip);
+  if (v === 4) return v4Blocked(ip);
+  if (v !== 6) return true;                       // not an address at all
+  const s = ip.toLowerCase().replace(/^\[|\]$/g, "");
+  // IPv4 carried inside IPv6 is still IPv4 — ::ffff:127.0.0.1 must not pass.
+  const mapped = s.match(/(?:^::ffff:|^::)((?:\d{1,3}\.){3}\d{1,3})$/);
+  if (mapped) return v4Blocked(mapped[1]);
+  if (s === "::1" || s === "::") return true;     // loopback, unspecified
+  if (/^f[cd]/.test(s)) return true;              // fc00::/7 unique local
+  if (/^fe[89ab]/.test(s)) return true;           // fe80::/10 link-local
+  if (/^ff/.test(s)) return true;                 // multicast
+  return false;
+}
+
+/* Resolve a URL and refuse it if it points anywhere internal. Returns the
+   parsed URL so the caller fetches exactly what was checked. */
+async function checkedURL(raw){
+  let u;
+  try{ u = new URL(raw); }catch(e){ return null; }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+  // A non-standard port is how you reach an internal service that happens to
+  // sit on a public-looking host. Nothing we want is served off one.
+  if (u.port && u.port !== "80" && u.port !== "443") return null;
+  const host = u.hostname.replace(/^\[|\]$/g, "");
+  // A literal address skips DNS but still gets checked.
+  if (net.isIP(host)) return isBlockedAddress(host) ? null : u;
+  let addrs;
+  try{ addrs = await dns.lookup(host, {all: true}); }
+  catch(e){ return null; }
+  if (!addrs.length || addrs.some(a => isBlockedAddress(a.address))) return null;
+  return u;
+}
+
+const MAX_REDIRECTS = 4;
+
 async function get(url, timeoutMs = 8000){
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try{
-    const res = await fetch(url, {
-      signal: ctrl.signal,
-      redirect: "follow",
-      headers: {"user-agent": UA, "accept-language": "en-GB,en;q=0.9"}
-    });
-    if (!res.ok) return null;
-    const type = res.headers.get("content-type") || "";
-    if (!/text\/html|text\/plain/.test(type)) return null;
-    return await res.text();
+    let target = url;
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop++){
+      const safe = await checkedURL(target);
+      if (!safe) return null;
+      const res = await fetch(safe.toString(), {
+        signal: ctrl.signal,
+        // Followed by hand so each hop is checked, not just the first.
+        redirect: "manual",
+        headers: {"user-agent": UA, "accept-language": "en-GB,en;q=0.9"}
+      });
+      if (res.status >= 300 && res.status < 400){
+        const loc = res.headers.get("location");
+        if (!loc) return null;
+        target = new URL(loc, safe).toString();     // relative redirects resolve
+        continue;
+      }
+      if (!res.ok) return null;
+      const type = res.headers.get("content-type") || "";
+      if (!/text\/html|text\/plain/.test(type)) return null;
+      return await res.text();
+    }
+    return null;                                    // too many redirects
   }catch(e){
     return null;
   }finally{ clearTimeout(t); }
@@ -228,6 +355,23 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "PUT"){
+      /* This endpoint has no authentication of its own — it relies on the
+         proxy, as INSTALL.md says. That is a deliberate limit, but it should
+         at least not be drivable from another site in your browser: a page you
+         happen to visit must not be able to overwrite your gear and rides
+         using your session. A JSON PUT already forces a CORS preflight, so
+         this is a second lock rather than the only one, and it costs nothing.
+         Absent Origin (curl, a script, the app's own sendBeacon) is allowed
+         through; a present and foreign one is not. */
+      const origin = req.headers.origin;
+      if (origin){
+        let ok = false;
+        try{ ok = new URL(origin).host === req.headers.host; }catch(e){}
+        if (!ok){
+          res.writeHead(403);
+          return res.end(JSON.stringify({error: "Cross-origin writes are refused."}));
+        }
+      }
       try{
         const body = await readBody(req, STATE_MAX_BYTES);
         const doc = JSON.parse(body);
@@ -254,8 +398,7 @@ const server = http.createServer(async (req, res) => {
     if (!name){
       res.writeHead(400); return res.end(JSON.stringify({error:"Give the garment a name first."}));
     }
-    const ip = (req.headers["x-forwarded-for"] || "").split(",")[0].trim()
-            || req.socket.remoteAddress || "unknown";
+    const ip = clientIP(req);
     if (rateLimited(ip)){
       res.writeHead(429);
       return res.end(JSON.stringify({error:`Too many lookups — limit is ${RATE.max} a minute.`}));
@@ -287,8 +430,14 @@ const server = http.createServer(async (req, res) => {
   });
 });
 
-server.listen(PORT, HOST, () => {
-  console.log(`Cycling Weather Effect Matrix on http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}`);
-  console.log(`Gear lookup at /api/lookup?name=...&slot=...  (max ${RATE.max}/min per client)`);
-  console.log(`Synced state in ${STATE_FILE}`);
-});
+/* Listen only when this file is the program. Required as a module — which is
+   what the tests do — it hands over its internals and binds nothing. */
+if (require.main === module){
+  server.listen(PORT, HOST, () => {
+    console.log(`Cycling Weather Effect Matrix on http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}`);
+    console.log(`Gear lookup at /api/lookup?name=...&slot=...  (max ${RATE.max}/min per client)`);
+    console.log(`Synced state in ${STATE_FILE}`);
+  });
+}
+
+module.exports = {server, isServable, isBlockedAddress, checkedURL, get, clientIP, rateLimited, RATE, toText, rank};

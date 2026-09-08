@@ -22,6 +22,12 @@ Environment=HOST=127.0.0.1
 Environment=PORT=8765
 # Lookups per client per minute.
 Environment=LOOKUP_RATE=12
+# How many proxies sit in front. The client is read that many hops back from
+# the end of X-Forwarded-For, because the front of that list is whatever the
+# caller chose to put there. 1 is nginx or Caddy on this box; raise it to 2 if
+# something like Cloudflare sits in front of that, or every visitor shares one
+# rate-limit bucket.
+Environment=TRUST_PROXY_HOPS=1
 # The gear list and ride history are synced into here. StateDirectory= creates
 # /var/lib/cycling-weather-matrix and makes it writable even with
 # ProtectSystem=strict, which is what keeps the app directory read-only below.
