@@ -67,6 +67,130 @@ function selfWindTerm(air, speed){
 }
 
 /* ---------------------------------------------------------------
+   Humidity: the heat you cannot get rid of.
+
+   Everything above is dry heat — air, wind, and rain landing on the outside
+   of the garment. But a working rider sheds most of their surplus heat by
+   evaporating sweat, and whether that works depends on the air it has to
+   evaporate into. 24°C at 85% and 24°C at 45% are the same figure on the
+   forecast and two quite different rides.
+
+   It takes BOTH of the humidity numbers to say this, and using either one
+   alone gets a corner of the world wrong.
+
+   What physically blocks evaporation is the water already in the air — the
+   vapour pressure, in hPa, which is what a dew point states directly and what
+   a percentage only implies. So the size of the penalty comes from that.
+   Relative humidity cannot size it: 90% at 8°C is drier air, in absolute
+   terms, than 50% at 26°C, and reading the percentage would rank them the
+   wrong way round.
+
+   But vapour pressure alone cannot decide WHETHER there is a penalty at all,
+   which a desert afternoon proves. Las Vegas at 37°C and 23% carries more
+   water than a pleasant Dutch morning does — and evaporates sweat off you
+   faster than anywhere in this model, because the air is nowhere near full.
+   An early version of this term called that "muggy", which is the kind of
+   number that stops a reader trusting the rest of the page. So the percentage
+   gates the penalty: it says how close the air is to being full, and nothing
+   is charged until it is getting there.
+
+   The dry side is the same argument mirrored. Thirsty air is a real help, and
+   how thirsty it is, is the vapour pressure deficit — how much more the air
+   could hold at its own temperature.
+
+   The coefficient is anchored to the Bureau of Meteorology's apparent
+   temperature, which carries humidity as +0.33e with e in hPa. That is a
+   standing person in still air, and a rider has 25–30 km/h of their own
+   airflow carrying the vapour away — the single most effective thing there is
+   for evaporation — so what is charged here is well under it.
+
+   Below 10°C the whole term is off. Cold damp air does feel worse than cold
+   dry air, but the mechanism there is conduction through wet clothing rather
+   than blocked evaporation, and the rain term already owns it. Every
+   threshold in here is a ramp rather than a step, for exactly the reason
+   selfWindTerm ramps: a cliff in the middle of the range makes the garments
+   sitting on it unreachable.
+----------------------------------------------------------------*/
+const E_NEUTRAL = 14;                          // hPa: 60% at 20°C, where charging starts
+const HUMID_K = 0.2;                           // °C per hPa above that, under BoM's 0.33
+const RH_RAMP_LO = 45, RH_RAMP_HI = 65;        // % — how full the air is
+const VPD_RAMP_LO = 20, VPD_RAMP_HI = 40;      // hPa — how thirsty it is
+const E_BLOCKED = 12;                          // hPa over neutral: evaporation stalled
+const HUMID_RAMP_LO = 10, HUMID_RAMP_HI = 18;  // °C — where any of it applies
+
+/* Asymmetric, deliberately. There is no ceiling on how bad blocked
+   evaporation can get, while air that is already dry enough to take everything
+   you can produce cannot help any further: the second degree of dryness buys
+   much less than the first. */
+const HUMID_MAX = 3, HUMID_MIN = -2;
+
+/* Saturation vapour pressure over water, hPa. Magnus with the WMO
+   coefficients — good to within a tenth of a percent across riding
+   temperatures, which is better than anything else in here. */
+const saturationVP = t => 6.112 * Math.exp(17.62 * t / (243.12 + t));
+
+/* Both humidity numbers, whichever one the feed happened to carry, or null
+   when it carried neither. A dew point IS the vapour pressure, so it is
+   preferred; a percentage needs the temperature it was measured against. */
+function humidityOf(w, air){
+  if (!w || air == null) return null;
+  const es = saturationVP(air);
+  if (w.dew != null){
+    const e = saturationVP(w.dew);
+    return {e, rh: clamp(e / es * 100, 0, 100), vpd: Math.max(0, es - e)};
+  }
+  if (w.rh != null){
+    const rh = clamp(w.rh, 0, 100);
+    return {e: es * rh / 100, rh, vpd: es * (1 - rh / 100)};
+  }
+  return null;
+}
+
+/* How far evaporation is blocked: 0 when sweat leaves freely, 1 when the air
+   is about as full as it usefully gets. Kept separate from the degrees below,
+   because the heat balance and the sweat warning care about whether surplus
+   heat can leave at all rather than about how it feels. */
+function evaporativeBlock(w, air){
+  const h = humidityOf(w, air);
+  if (!h) return 0;
+  const tempW = clamp((air - HUMID_RAMP_LO) / (HUMID_RAMP_HI - HUMID_RAMP_LO), 0, 1);
+  const rhW = clamp((h.rh - RH_RAMP_LO) / (RH_RAMP_HI - RH_RAMP_LO), 0, 1);
+  return clamp((h.e - E_NEUTRAL) / E_BLOCKED, 0, 1) * rhW * tempW;
+}
+
+/* The ride-feel row, or null when there is nothing to say — in which case the
+   line simply disappears and nothing else changes. */
+function humidityTerm(w, air){
+  const h = humidityOf(w, air);
+  if (!h) return null;
+  const tempW = clamp((air - HUMID_RAMP_LO) / (HUMID_RAMP_HI - HUMID_RAMP_LO), 0, 1);
+  if (!tempW) return null;
+
+  // Charged on the water in the air, gated by how close to full it is.
+  const rhW = clamp((h.rh - RH_RAMP_LO) / (RH_RAMP_HI - RH_RAMP_LO), 0, 1);
+  const wet = Math.max(0, HUMID_K * (h.e - E_NEUTRAL)) * rhW;
+  // Credited on how much more the air could take. Fully thirsty air is exactly
+  // where the credit is worth capping, so the cap doubles as its scale.
+  const dry = HUMID_MIN * clamp((h.vpd - VPD_RAMP_LO) / (VPD_RAMP_HI - VPD_RAMP_LO), 0, 1);
+  /* They cannot both be large: full air is not also thirsty air.
+
+     Reported to a tenth rather than to the half degree the self-wind term
+     uses, and that is not cosmetic. On the dry side the credit shrinks as the
+     air warms, so a half-degree step can grow faster than a tenth of a degree
+     of air can fall — which made ride-feel tick UP as the temperature came
+     down. Tenths are finer than the slope, so the ordering holds. */
+  const v = Math.round(clamp((wet + dry) * tempW, HUMID_MIN, HUMID_MAX) * 10) / 10;
+  if (!v) return null;
+
+  const rh = Math.round(h.rh);
+  return {
+    v, e: h.e, rh, vpd: h.vpd,
+    label: v > 0 ? `Muggy air at ${rh}% humidity, sweat evaporating slowly`
+                 : `Dry air at ${rh}% humidity, sweat evaporating freely`
+  };
+}
+
+/* ---------------------------------------------------------------
    Ride-feel. Standing-still "feels like" numbers are wrong on a bike,
    so start from air temperature and adjust for what the rider is doing.
 ----------------------------------------------------------------*/
@@ -94,6 +218,13 @@ function rideFeel(w, opts){
   let sun = 0;
   if (!raining && w.cloud < 35 && w.wind < 15 && w.dark < 0.3) sun = 2;
   if (sun) rows.push({label:"Full sun, low wind", v:sun});
+
+  // What the air will let you evaporate. Everything above this line is heat
+  // arriving or leaving through the outside of the garment; this is the heat
+  // already inside it that cannot get out.
+  let humid = 0;
+  const hum = humidityTerm(w, air);
+  if (hum){ humid = hum.v; rows.push({label: hum.label, v: humid}); }
 
   let dark = 0;
   if (w.dark >= 0.4) dark = -2;
@@ -124,14 +255,21 @@ function rideFeel(w, opts){
                v: Math.round(learned * 10) / 10, calibration:true});
   }
 
-  const feel = air + self + ambient + rain + sun + dark + pace + terrain + cal;
+  const feel = air + self + ambient + rain + sun + humid + dark + pace + terrain + cal;
   // What the environment is doing, for the heat-balance sum: everything except
   // the rider's own preference (not physics) , the pace bonus (already in the
   // work rate) and the self-generated wind (handled as apparent airflow).
+  //
+  // Humidity is left out too, and for a sharper reason than the others: the
+  // balance below asks how much insulation it takes to HOLD heat in, and that
+  // requirement is dry and unaffected by what the air is carrying. What
+  // humidity changes is how easily surplus heat gets OUT, which is a different
+  // question — and one the balance answers separately, via evap.
   const envTemp = air + ambient + rain + sun + dark + terrain;
   return {
     rows, feel: Math.round(feel), extFeel: Math.round(feel - cal), envTemp,
-    raining, light, wet: raining && !light, air
+    raining, light, wet: raining && !light, air,
+    humid, rh: hum ? hum.rh : null, evap: evaporativeBlock(w, air)
   };
 }
 
@@ -184,19 +322,34 @@ function heatBalance(f, w, opts, outfit){
 
   const ratio = required > 0.02 ? worn / required : 1;
   let verdict = "about right", detail = "";
-  // Tolerances are deliberately wide. The formula is a dry-heat requirement for
-  // a fully covered body; a working cyclist dumps a lot of heat evaporatively
-  // and through bare skin, so only a clear mismatch is worth flagging. Under-
-  // insulation only matters on the cold side — above ~15°C surplus heat can
-  // always be sweated away.
+
+  /* Tolerances are deliberately wide. The formula is a dry-heat requirement for
+     a fully covered body; a working cyclist dumps a lot of heat evaporatively
+     and through bare skin, so only a clear mismatch is worth flagging. Under-
+     insulation only matters on the cold side — above ~15°C surplus heat can
+     always be sweated away.
+
+     Except that last clause is only true while the air will take the sweat. It
+     was the one assumption in here doing real work without being checked, and
+     humid air is exactly what breaks it: the same surplus layer that is
+     harmless at 22°C and 40% is genuinely too much at 22°C and 90%, because
+     there is nowhere for the heat to go. So the warm-side tolerance closes as
+     evaporation is blocked. The cold side is untouched — needing insulation is
+     a dry question. */
+  const evap = f.evap || 0;
+  const overTol = 1.6 - 0.35 * evap;
+
   if (ratio < 0.7 && f.air < 15){
     verdict = "light for the conditions";
     detail = "A windproof outer layer buys more here than a thicker permeable one.";
-  } else if (ratio > 1.6 && f.air > 2){
+  } else if (ratio > overTol && f.air > 2){
     verdict = "warm for the conditions";
-    detail = "Worth having something you can shed rather than a layer you're stuck in.";
+    detail = evap >= 0.4
+      ? "The air is too wet to sweat into, so a surplus layer has nowhere to send the heat. Something you can open or shed, rather than a thinner one you're stuck in."
+      : "Worth having something you can shed rather than a layer you're stuck in.";
   }
-  return {met, required, worn, staticClo, shelter, perm, outerWind, vApparent, ratio, verdict, detail};
+  return {met, required, worn, staticClo, shelter, perm, outerWind, vApparent,
+          ratio, verdict, detail, evap, overTol};
 }
 
 /* ---------------------------------------------------------------
@@ -440,6 +593,26 @@ function watchFor(f, w, opts){
       out.push(`Rain starts around ${fmtTime(first.time)} — ${dry} of ${w.hourly.length} hours look dry.`);
   }
 
+  /* The soaked base layer.
+
+     A hard hour in air that will not take the sweat leaves you riding in a wet
+     garment, and every dry-heat number above was worked out for a dry one. Both
+     halves have to be true before it is worth saying: sweating freely into dry
+     air costs nothing, and neither does muggy air at café pace. */
+  const evap = f.evap || 0;
+  const working = opts.pace === "hard" || opts.speed >= 28 || opts.hours >= 3;
+  // Not when the route card has already said it: that version names the climb,
+  // the descent and the kilometre, and two warnings about one problem is how a
+  // page teaches you to skim past both.
+  if (evap >= 0.4 && working && f.rh != null && !opts.sweatNoted){
+    // Being wet only turns into being cold where the ride gives it a chance to:
+    // a long descent, a real swing in air temperature, or nightfall.
+    const cooling = opts.terrain === "exposed" || (w.tMax - w.tMin) >= 4 || w.dark >= 0.4;
+    out.push(cooling
+      ? `${f.rh}% humidity, so you will be wet through within the hour — and a wet base layer on a long descent is a different garment from a dry one. Something windproof you can shut over it does more here than a thicker layer underneath.`
+      : `${f.rh}% humidity, so the sweat has nowhere to go and you will be wetter than ${f.feel}° suggests. Start a layer down rather than planning to shed one, and take the drinking seriously.`);
+  }
+
   // Hay fever on a bike: hard breathing, through the mouth, at head height in
   // open country for hours.
   if (w.pollen && w.pollen.worst){
@@ -448,6 +621,39 @@ function watchFor(f, w, opts){
       out.push(`${band.charAt(0).toUpperCase() + band.slice(1)} ${w.pollen.worst.name} pollen, ${Math.round(w.pollen.worst.count)} grains/m³. If that bothers you, it is worth an antihistamine before you leave rather than halfway round.`);
   }
   return out;
+}
+
+/* ---------------------------------------------------------------
+   Where a route soaks you, and then cools you down.
+
+   Climbing at 7% is the warmest and the wettest you will be all day: hard
+   effort, low speed, and almost no airflow to carry the sweat away. The
+   descent that follows is then ridden in whatever the climb left you wearing,
+   and the leg's own ride-feel was worked out for a dry rider.
+
+   It is the pair that matters, which is why this looks across legs rather than
+   at any one of them. A wet climb with only flat road after it dries out as you
+   ride; a cold descent with no climb before it is already fully described by
+   its own numbers.
+----------------------------------------------------------------*/
+const WET_CLIMB_EVAP = 0.3;    // ...the air won't take the sweat
+const WET_CLIMB_HOURS = 0.15;  // ...for long enough to matter: ~10 minutes
+const WET_DROP = 5;            // °C of ride-feel between the two
+
+function wetThroughLegs(legs){
+  let worst = null;
+  legs.forEach((leg, i) => {
+    if (!leg.climbing || leg.hours < WET_CLIMB_HOURS) return;
+    if ((leg.f.evap || 0) < WET_CLIMB_EVAP) return;
+    // The first descent after this climb, not the coldest one anywhere: by a
+    // later descent you have had a while to dry out.
+    const next = legs.slice(i + 1).find(l => l.descending);
+    if (!next) return;
+    const drop = leg.f.feel - next.f.feel;
+    if (drop < WET_DROP) return;
+    if (!worst || drop > worst.drop) worst = {climb: leg, descent: next, drop, rh: leg.f.rh};
+  });
+  return worst;
 }
 
 const fmtTime = s => s ? s.slice(11,16) : "—";

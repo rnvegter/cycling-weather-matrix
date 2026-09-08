@@ -45,6 +45,63 @@ The tolerances are deliberately wide. The formula is a dry-heat requirement for 
 covered body, while a working cyclist dumps a great deal of heat evaporatively and through
 bare skin, so only a clear mismatch is worth flagging.
 
+## Humidity, and the heat you can't get rid of
+
+Everything above is dry heat: air, wind, and rain landing on the outside of the garment. But
+a working rider sheds most of their surplus by evaporating sweat, and whether that works
+depends on the air it has to evaporate into. **24 °C at 85% and 24 °C at 45% are the same
+figure on the forecast and two quite different rides.**
+
+It takes both humidity numbers to say this, and either one alone gets a corner of the world
+wrong.
+
+What physically blocks evaporation is the water already in the air — the **vapour pressure**,
+in hPa, which is what a dew point states outright and a percentage only implies. So the size
+of the penalty comes from that. A percentage cannot size it: 90% at 8 °C is drier air, in
+absolute terms, than 50% at 26 °C, and reading the percentage ranks them the wrong way round.
+
+But vapour pressure alone cannot decide *whether* there is a penalty, which a desert
+afternoon proves. Las Vegas at 37 °C and 23% carries more water than a pleasant Dutch morning
+does, and evaporates sweat off you faster than anywhere else in this model, because the air
+is nowhere near full. An early version of this term called that **muggy**, which is the kind
+of number that stops a reader trusting the rest of the page. So the percentage gates the
+penalty — it says how close the air is to being full — and nothing is charged until it is
+getting there. The dry side is the same argument mirrored: thirsty air is a real help, and
+how thirsty it is, is the vapour pressure deficit.
+
+The coefficient is anchored to the Bureau of Meteorology's apparent temperature, which
+carries humidity as +0.33 e with e in hPa. That is a standing person in still air, and a
+rider has 25–30 km/h of their own airflow carrying the vapour away — the single most
+effective thing there is for evaporation — so what is charged here sits well under it, capped
+at +3 °C and −2 °C.
+
+Below 10 °C the term is off entirely. Cold damp air does feel worse than cold dry air, but
+the mechanism there is conduction through wet clothing rather than blocked evaporation, and
+the rain term already owns it. Every threshold ramps rather than steps.
+
+**It does not touch the heat balance's requirement, and that is deliberate.** Insulation is
+what holds heat *in*, and how much you need is a dry question. Humidity governs getting heat
+*out*. What it does change is the tolerance: the balance above allows a wide surplus because
+"above 15 °C the extra can always be sweated away", and that clause is only true while the
+air will take the sweat. So the warm-side tolerance closes as evaporation is blocked — the
+same surplus layer that is harmless at 22 °C and 40% is genuinely too much at 22 °C and 90%.
+
+### Wet through before the top
+
+Climbing at 7% is the warmest **and the wettest** you will be all day: hard effort, low speed,
+and almost no airflow to carry the sweat away. The descent that follows is then ridden in
+whatever the climb left you wearing — and that leg's ride-feel was worked out for a dry
+rider.
+
+It is the pair that matters, so the route check looks across legs rather than at any one of
+them: a wet climb with only flat road after it dries out as you ride, and a cold descent with
+no climb before it is already described by its own numbers. Where both halves are there, the
+route card names the climb, the descent, and the drop between them. The answer is not a
+thicker layer underneath but something windproof you can shut over a wet one.
+
+Off a route, the same warning is drawn from the pace and the length of the ride instead, and
+it steps aside when the route card has already said it with kilometres attached.
+
 ## Gear
 
 `gear.js` seeds an inventory. Each item carries a slot, the coldest and warmest ride-feel °C

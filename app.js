@@ -191,7 +191,9 @@ async function forecast(lat, lon){
     + `?latitude=${lat}&longitude=${lon}`
     + "&hourly=temperature_2m,precipitation_probability,precipitation,cloud_cover,"
     + "wind_speed_10m,wind_direction_10m,wind_gusts_10m,is_day,weather_code,"
-    + "apparent_temperature,freezing_level_height"
+    + "apparent_temperature,freezing_level_height,"
+    // What the air is already carrying decides whether sweat can leave at all.
+    + "relative_humidity_2m,dew_point_2m"
     // Quarter-hourly precipitation only runs a few days out; absent beyond that,
     // which the rain-timing code treats as "fall back to the hour".
     + "&minutely_15=precipitation"
@@ -215,7 +217,8 @@ async function archiveWeather(lat, lon, dateStr){
     + `?latitude=${lat}&longitude=${lon}`
     + `&start_date=${dateStr}&end_date=${dateStr}`
     + "&hourly=temperature_2m,precipitation,cloud_cover,wind_speed_10m,"
-    + "wind_direction_10m,wind_gusts_10m,is_day,weather_code"
+    + "wind_direction_10m,wind_gusts_10m,is_day,weather_code,"
+    + "relative_humidity_2m,dew_point_2m"
     + "&daily=sunrise,sunset&timezone=auto";
   const r = await fetch(url);
   if (!r.ok) throw new Error("Couldn't reach the weather archive.");
@@ -325,7 +328,8 @@ function rideWindow(fc, dateStr, timeStr, hours){
   const temps=g("temperature_2m"), winds=g("wind_speed_10m"), gusts=g("wind_gusts_10m"),
         precip=g("precipitation"), probs=g("precipitation_probability"),
         cloud=g("cloud_cover"), day=g("is_day"), dirs=g("wind_direction_10m"),
-        codes=g("weather_code"), freeze=g("freezing_level_height");
+        codes=g("weather_code"), freeze=g("freezing_level_height"),
+        rhs=g("relative_humidity_2m"), dews=g("dew_point_2m");
 
   // Directions are angles, so they average on the unit circle — a naive mean of
   // 350° and 10° gives 180°, which is the exact opposite of the truth.
@@ -360,6 +364,12 @@ function rideWindow(fc, dateStr, timeStr, hours){
     prob: Math.max(...probs), cloud: cloud.reduce((a,b)=>a+b,0)/cloud.length,
     dark: darkFrac, wetHours: precip.filter(p => p >= 0.1).length, hoursCount: idx.length,
     sunrise, sunset, dirLate,
+    /* Averaged over the riding hours rather than read off the start, because
+       unlike temperature this is a property of the day rather than the moment
+       you set off — and it barely moves inside a morning. Absent from a feed
+       that didn't carry it, which the model reads as "say nothing". */
+    rh: rhs.length ? rhs.reduce((a,b)=>a+b,0)/rhs.length : null,
+    dew: dews.length ? dews.reduce((a,b)=>a+b,0)/dews.length : null,
     // Altitude of 0°C. Lower than the ground you are riding on means freezing.
     freezingLevel: freeze.length ? Math.min(...freeze) : null,
     // Quarter-hourly rain start, when the 15-minute feed reaches this far out.
@@ -508,7 +518,8 @@ async function forecastMany(legs){
   const url = "https://api.open-meteo.com/v1/forecast"
     + `?latitude=${lats}&longitude=${lons}`
     + "&hourly=temperature_2m,precipitation_probability,precipitation,cloud_cover,"
-    + "wind_speed_10m,wind_direction_10m,wind_gusts_10m,is_day,weather_code"
+    + "wind_speed_10m,wind_direction_10m,wind_gusts_10m,is_day,weather_code,"
+    + "relative_humidity_2m,dew_point_2m"
     + "&daily=sunrise,sunset&timezone=auto&forecast_days=16&past_days=2";
   const r = await fetch(url);
   if (!r.ok) throw new Error("Route forecast request failed");
@@ -553,6 +564,12 @@ function legWeather(fc, leg, opts){
     prob: h.precipitation_probability[i] || 0, cloud: h.cloud_cover[i] || 0,
     dark, wetHours: (h.precipitation[i] || 0) >= 0.1 ? 1 : 0, hoursCount: 1,
     sunrise, sunset, dirLate: dir, code: h.weather_code[i], day: h.is_day[i],
+    /* Left at the valley's value rather than lapse-adjusted like the air. The
+       dew point falls with height too, but so does the temperature, and the two
+       move together closely enough that correcting one and not the other would
+       be worse than correcting neither. */
+    rh: h.relative_humidity_2m ? h.relative_humidity_2m[i] : null,
+    dew: h.dew_point_2m ? h.dew_point_2m[i] : null,
     hourly: [{time:h.time[i], t:air, wind, precip:h.precipitation[i]||0,
               prob:h.precipitation_probability[i]||0, dir, gust:h.wind_gusts_10m[i],
               code:h.weather_code[i], day:h.is_day[i]}],
@@ -705,7 +722,8 @@ async function analyseRoute(route, opts){
 
   const changes = extra.length > 0 || shed.length > 0 || spread >= 3;
 
-  const result = {legs, coldest, warmest, extra, shed, swaps, changes, spread};
+  const result = {legs, coldest, warmest, extra, shed, swaps, changes, spread,
+                  wetThrough: wetThroughLegs(legs)};
   // Only the wardrobe knows what packs; the generic list has no such detail.
   if (changes && state.mode === "wardrobe") result.plan = packingPlan(result, opts);
   return result;
@@ -719,7 +737,9 @@ const hhmm = d => `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes
 
 function render(f, w, opts, place, analysis){
   const out = state.mode === "wardrobe" ? pickOutfit(f, w, opts, gear) : genericOutfit(f, w, opts);
-  const watch = watchFor(f, w, opts);
+  // The route card says the sweat problem better when it has legs to point at.
+  const watch = watchFor(f, w, analysis && analysis.wetThrough
+    ? Object.assign({}, opts, {sweatNoted: true}) : opts);
   const band = bandFor(f.feel);
   const hb = out.hb;
   const ramp = rampFor(f.feel);
@@ -881,7 +901,7 @@ function render(f, w, opts, place, analysis){
       return `<p class="wx-alert"><b>Route check failed.</b> ${analysis.error}
         The advice above still stands for the start point.</p>`;
 
-    const {legs, coldest, warmest, extra, shed, swaps, changes, spread} = analysis;
+    const {legs, coldest, warmest, extra, shed, swaps, changes, spread, wetThrough} = analysis;
     const consistent = !changes;
     const km = n => `${Math.round(n)} km`;
 
@@ -908,6 +928,13 @@ function render(f, w, opts, place, analysis){
           <div class="wx-leg__time">${hhmm(l.startTime)}</div>
         </div>`).join("")}</div>
     </div>
+
+    ${wetThrough ? `<p class="wx-alert"><b>Wet through before the top.</b>
+      The climb from ${km(wetThrough.climb.fromKm)} is ${wetThrough.climb.f.feel}&deg; in
+      ${wetThrough.rh}% humidity — hard, slow, and with next to no airflow to dry you — and the
+      descent at ${km(wetThrough.descent.fromKm)} is ${Math.round(wetThrough.drop)}&deg; colder
+      than that. The descent's own number was worked out for a dry base layer, so carry something
+      windproof to shut over a wet one rather than a thicker layer to put under it.</p>` : ""}
 
     ${consistent ? `
       <p class="wx-startdir"><b>The same kit works the whole way.</b>
@@ -1008,6 +1035,7 @@ function render(f, w, opts, place, analysis){
         <tr class="wx-total"><td>Effective</td><td class="wx-right wx-feel">${r2(hb.worn)} clo</td></tr>
       </tbody>
     </table></div>
+    ${hb.detail ? `<p class="wx-note">${hb.detail}</p>` : ""}
     <p class="wx-note">A windproof outer layer keeps the stack beneath it; a permeable one lets
        the airflow strip it. That is why 75&nbsp;g of gilet can beat a much thicker fleece.</p>
   </details>` : ""}
