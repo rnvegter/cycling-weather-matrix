@@ -50,6 +50,7 @@
   <button class="wx-tab" data-screen="history" aria-pressed="false">History</button>
   <button class="wx-tab" data-screen="model" aria-pressed="false">Model</button>
   <button class="wx-tab" data-screen="gear" aria-pressed="false">Gear</button>
+  <button class="wx-tab" data-screen="backup" aria-pressed="false">Backup</button>
 </nav>
 
 <!-- ================= RIDE ================= -->
@@ -284,6 +285,17 @@
   </div>
 </section>
 
+<!-- ================= BACKUP ================= -->
+<section id="screen-backup" class="wx-hidden">
+  <div class="wx-card wx-card--flat">
+    <div class="wx-card__head">
+      <h2 class="wx-heading">Backup</h2>
+      <span class="wx-eyebrow" id="bkcount" style="margin:0"></span>
+    </div>
+    <div id="bkbody"></div>
+  </div>
+</section>
+
 <footer class="wx-foot">
   Forecast from <a href="https://open-meteo.com/">Open-Meteo</a>, no key.
   Insulation sized as required clo = 0.148 × (33 − T) ÷ MET, work rate from the
@@ -313,5 +325,6 @@
 <script src="historyui.js"></script>
 <script src="scorecardui.js"></script>
 <script src="sync.js"></script>
+<script src="backupui.js"></script>
 </body>
 </html>

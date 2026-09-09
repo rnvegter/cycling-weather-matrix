@@ -16,7 +16,7 @@ let lastLookup = null;
 let originalItem = null;    // snapshot, to detect edits
 
 /* --- Screens ---------------------------------------------------- */
-const SCREENS = ["ride", "history", "model", "gear"];
+const SCREENS = ["ride", "history", "model", "gear", "backup"];
 
 function showScreen(name){
   if (!SCREENS.includes(name)) name = "ride";
@@ -28,6 +28,9 @@ function showScreen(name){
   // which is on the history screen, so it too is built on arrival.
   if (name === "history" && typeof renderHistory === "function") renderHistory();
   if (name === "model" && typeof renderScorecard === "function") renderScorecard();
+  /* The backup list is on the server, and a scheduled run can have added to it
+     since this tab was last looked at, so arriving asks rather than assumes. */
+  if (name === "backup" && typeof refreshBackups === "function") refreshBackups();
   document.querySelectorAll(".wx-tab[data-screen]").forEach(t =>
     t.setAttribute("aria-pressed", t.dataset.screen === name ? "true" : "false"));
   document.body.dataset.screen = name;

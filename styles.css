@@ -539,6 +539,11 @@ body[data-screen="gear"] { --shell: 82rem; }
 
 .wx-tabs {
   display: flex;
+  /* Five of them now, and on a phone the fifth ran off the side and took the
+     whole page into horizontal scroll with it. Wrapping to a second line is
+     the friendlier answer for navigation: a tab you cannot see is a tab you
+     do not know is there, which a hidden sideways scroll would not fix. */
+  flex-wrap: wrap;
   gap: var(--sp-2);
   margin-bottom: var(--sp-5);
   border-bottom: 1px solid var(--line);

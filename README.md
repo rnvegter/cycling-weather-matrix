@@ -318,6 +318,56 @@ one you cannot argue with.
 Once there are enough wet rides it keeps a separate correction for them. Plenty of riders run
 hot in the dry and cold in the wet, and one number cannot hold both.
 
+## Backups
+
+`state.prev.json` is one step of insurance: the version before the last write. That is the
+wrong thing entirely when what you want is the gear list as it stood in March, or the history
+back from before an afternoon of edits went sideways. The two stores here cannot be
+regenerated from anything — the gear list is your own calibration of every garment you own,
+the history is the only record of how the model has done — so the **Backup** tab keeps dated
+versions of both.
+
+**In a directory of its own, and that is the point.** Updating this app means replacing the
+files in its own directory: a `git pull`, a fresh clone, a rebuilt container. Anything sitting
+among them is at the mercy of that. Backups go to `BACKUP_DIR`, which defaults to a `backups/`
+directory inside `STATE_DIR` — under systemd that is already outside the app, and locally it
+is a directory git neither tracks nor checks out over. Point `BACKUP_DIR` at an external disk
+or a synced folder and nothing else changes.
+
+Each version is one JSON file holding the whole document inside an envelope that says when it
+was taken and why. The envelope earns its place on the way back in: a restore can check that a
+file is one of these before it overwrites anything, rather than trusting a filename. Names are
+dated, so sorting them by name sorts them by time, and carry no colons — illegal in a Windows
+filename, a nuisance in a shell.
+
+**On a schedule, kept by the server rather than the page.** A backup that only happens while a
+tab is open is not a schedule, it is a coincidence — and the morning you most want yesterday's
+copy is the one you never opened the app. It is off until you ask for it, because writing files
+on someone's disk uninvited is not a decision an app should make for itself. Retention is a
+plain count: the newest N survive, the rest are pruned oldest-first. A run that finds nothing
+changed since the last version writes no file, so a fortnight off the bike does not fill the
+directory with the same document thirty times — and `savedAt` is excluded from that comparison,
+since the sync stamps it on every push whether or not anything you own actually moved.
+
+**Restoring replaces rather than merges**, and that is the whole difference between a restore
+and the History tab's import. Import is for bringing another browser's rides in alongside your
+own; restore is for putting back what you had. Merging here would make it impossible to undo a
+bad afternoon, which is the main thing anyone ever wants a backup for. A copy of the current
+state is taken first and the restore stops if that copy cannot be written, so a restore is
+itself undoable. The restored gear list is stamped with the current time rather than the
+backup's own, or the next sync from a device still holding the newer list would quietly bring
+back the very thing you just undid.
+
+**With no server there is no list and no schedule**, and the tab says so instead of showing
+dead buttons. The two things that never needed one still work: download a copy to your disk,
+and restore from a file you downloaded earlier.
+
+Names that arrive from the browser are checked twice before they address a file — against the
+pattern this writes, and against the directory listing — so a name can only ever reach
+something the app put there. The backup directory is refused by the static file server by
+name as well as by extension, and backup actions have their own rate limit rather than sharing
+the gear lookup's, which had meant a handful of lookups could leave a restore refused.
+
 ## Does the model work?
 
 The calibration above takes every rating you give and collapses it into one mean. That is
@@ -419,11 +469,11 @@ INSTALL.md if you want to self-host them for a genuinely offline install.
 
 | File | |
 |---|---|
-| `index.html` | Four screens — ride, history, model, gear |
+| `index.html` | Five screens — ride, history, model, gear, backup |
 | `model.js` | Ride-feel, heat balance, outfit selection |
 | `gear.js` | Seeded inventory and storage |
 | `insulation.js` | Inference engine, runs in both browser and Node |
-| `server.js` | Static files plus `/api/lookup` |
+| `server.js` | Static files, `/api/lookup`, the synced state, and the backups |
 | `app.js` | Forecast, form wiring, rendering |
 | `gearui.js` | Gear screen: add, edit, delete, lookup |
 | `sync.js` | Local-first sync of gear and history |
@@ -433,6 +483,7 @@ INSTALL.md if you want to self-host them for a genuinely offline install.
 | `feedback.js` | Turning ratings into a temperature correction |
 | `scorecard.js` | Whether the model and that correction are any good |
 | `scorecardui.js` | The model screen |
+| `backupui.js` | The backup screen: versions, restore, schedule |
 | `map.js` | Slippy-map projection, tiles, and the drawn overlay |
 | `styles.css` | The Weather Effect design system, plus app chrome |
 

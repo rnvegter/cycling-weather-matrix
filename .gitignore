@@ -6,3 +6,9 @@ node_modules/
 state.json
 state.prev.json
 state.json.tmp
+
+# Dated backups of the gear list and ride history, plus the schedule that
+# writes them. Never tracked, so an update cannot check over them — which is
+# the whole reason they live in a directory of their own. BACKUP_DIR moves
+# them somewhere else entirely.
+backups/

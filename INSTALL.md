@@ -430,11 +430,51 @@ systemd unit puts that file in `/var/lib/cycling-weather-matrix` via `StateDirec
 is what lets the app directory stay mounted read-only.
 
 **That file is the one thing here worth backing up**, since the ratings behind the learned
-calibration cannot be regenerated:
+calibration cannot be regenerated. The **Backup tab** does it for you — dated versions, a
+schedule, and restore — and a file copy still works if you would rather:
 
 ```bash
 sudo cp /var/lib/cycling-weather-matrix/state.json ~/cwem-backup-$(date +%F).json
 ```
+
+### Where backups go
+
+`BACKUP_DIR`, which defaults to a `backups/` directory inside `STATE_DIR`. Under systemd that
+is `/var/lib/cycling-weather-matrix/backups`, outside the app entirely and untouched by an
+update. Running the app by hand it falls back to `backups/` beside the app — still a directory
+of its own, listed in `.gitignore`, so `git pull` neither tracks nor checks out over it.
+
+Point it anywhere you like:
+
+```bash
+BACKUP_DIR=/mnt/usb/cwem-backups node server.js
+```
+
+For systemd, add it beside the existing `STATE_DIR` line:
+
+```ini
+Environment=BACKUP_DIR=/var/lib/cycling-weather-matrix/backups
+```
+
+For Docker, the volume that already carries the state carries the backups with it — they are
+inside it by default. To send them somewhere else, mount a second volume and point at it:
+
+```bash
+docker run -d --name cwem -p 8765:8765 \
+  -v cwem-state:/state -e STATE_DIR=/state \
+  -v cwem-backups:/backups -e BACKUP_DIR=/backups cycling-weather-matrix
+```
+
+**Scheduled backups are off until you turn them on**, on the Backup tab. The schedule is kept
+by the server rather than the browser, so it runs whether or not a tab is open — and it lives
+in `schedule.json` in the backup directory, which means it survives an update along with the
+backups themselves. `BACKUP_RATE` caps backup actions per minute (default 60) if you ever need
+to change it.
+
+Two things worth knowing about the retention: the newest **N** versions are kept and the rest
+pruned oldest-first, and a scheduled run that finds nothing changed since the last version
+writes no file at all — so a fortnight off the bike does not fill the directory with identical
+copies.
 
 The endpoint that writes it has no authentication of its own. On a public deployment anyone who
 can reach the app can read and overwrite your gear and rides, so put auth in front of it —
