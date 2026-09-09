@@ -305,6 +305,10 @@ async function rideFromActivity(text, fileName){
     dist: r1(stats.distance), hours: r1(stats.elapsedH), speed: r1(stats.speed),
     feel: feel.feel, extFeel: feel.extFeel, air: r1(feel.air),
     wet: feel.wet, raining: feel.raining,
+    // Kept so the scorecard can ask whether the model is worse in the wind.
+    // Rides recorded before this was stored carry no reading, and the split
+    // reports them as uncovered rather than assuming they were calm.
+    wind: r1(w.wind), gust: Math.round(w.gust),
     rider: state.rider, mode: state.mode,
     routeName: parsed.name || null,
     kit: out.wear.map(i => i.name),
@@ -1114,6 +1118,7 @@ $("#go").onclick = async () => {
       dist: r1(dist), hours: r1(hours), speed: r1(n.speed),
       feel: feelNow.feel, extFeel: feelNow.extFeel, air: r1(feelNow.air),
       wet: feelNow.wet, raining: feelNow.raining,
+      wind: r1(w.wind), gust: Math.round(w.gust),
       rider: state.rider, mode: state.mode,
       routeName: route ? (route.name || "route") : null,
       kit: out0.wear.map(i => i.name)

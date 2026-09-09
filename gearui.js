@@ -16,15 +16,18 @@ let lastLookup = null;
 let originalItem = null;    // snapshot, to detect edits
 
 /* --- Screens ---------------------------------------------------- */
-const SCREENS = ["ride", "history", "gear"];
+const SCREENS = ["ride", "history", "model", "gear"];
 
 function showScreen(name){
   if (!SCREENS.includes(name)) name = "ride";
   SCREENS.forEach(s =>
     document.getElementById("screen-" + s).classList.toggle("wx-hidden", s !== name));
   // The history list can change while another screen is open — a ride saved on
-  // the ride screen, say — so it is rebuilt on arrival rather than once.
+  // the ride screen, say — so it is rebuilt on arrival rather than once. The
+  // scorecard is read from that same list and moves whenever a rating does,
+  // which is on the history screen, so it too is built on arrival.
   if (name === "history" && typeof renderHistory === "function") renderHistory();
+  if (name === "model" && typeof renderScorecard === "function") renderScorecard();
   document.querySelectorAll(".wx-tab[data-screen]").forEach(t =>
     t.setAttribute("aria-pressed", t.dataset.screen === name ? "true" : "false"));
   document.body.dataset.screen = name;

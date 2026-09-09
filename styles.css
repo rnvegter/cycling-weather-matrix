@@ -1285,3 +1285,54 @@ label.wx-linkbtn { display: inline-block; }
 /* --- Sync state, quiet unless it needs you --- */
 .wx-sync { display: block; margin-top: var(--sp-2); font-family: var(--data); font-size: .66rem; }
 .wx-sync.is-error { color: var(--signal); }
+
+/* ---------- 23. The scorecard -------------------------------- */
+
+/* No temperature ramp anywhere in here. Colour is data in this app and it
+   means temperature; a mean error of +0.8° is the difference between two
+   temperatures rather than a temperature, and painting it warm would say
+   something untrue before a word is read. */
+
+.wx-score {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--sp-3);
+  margin: var(--sp-4) 0;
+}
+.wx-score__cell {
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.wx-score__value { font-size: var(--step-3); line-height: 1.1; }
+.wx-score__label {
+  font-family: var(--display); font-size: var(--step--1); font-weight: 600;
+  letter-spacing: .05em; text-transform: uppercase;
+  margin-top: var(--sp-2);
+}
+.wx-score__note { font-size: var(--step--1); color: var(--text-dim); margin-top: 2px; }
+
+/* The count behind a figure, never far from it: a mean error with no n beside
+   it is the one number on this page that could mislead. */
+.wx-score__n {
+  display: block;
+  /* Below the bottom of the scale on purpose: it sits under a figure and must
+     read as its footnote, not compete with it. Same trick as .wx-sync. */
+  font-family: var(--data); font-size: .68rem; color: var(--text-dim);
+}
+
+/* How the verdicts fell. Bars rather than a pie because the question is which
+   verdict came up most, and length answers that where angle does not. */
+.wx-vbars { display: flex; flex-direction: column; gap: var(--sp-1); margin: var(--sp-3) 0; }
+.wx-vbar { display: grid; grid-template-columns: 8.5rem 1fr 2rem; gap: var(--sp-3); align-items: center; }
+.wx-vbar__label { font-size: var(--step--1); color: var(--text-dim); }
+.wx-vbar__track { height: 12px; background: var(--surface-2); border-radius: 2px; }
+.wx-vbar__fill { display: block; height: 100%; border-radius: 2px; background: var(--text-dim); }
+/* "About right" is the one bar you want long, so it is the one that is lit. */
+.wx-vbar__fill.is-hit { background: var(--temp); }
+.wx-vbar__n { text-align: right; font-size: var(--step--1); }
+
+@media (max-width: 34rem) {
+  .wx-vbar { grid-template-columns: 6.5rem 1fr 1.75rem; gap: var(--sp-2); }
+}

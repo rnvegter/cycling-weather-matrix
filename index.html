@@ -48,6 +48,7 @@
 <nav class="wx-tabs">
   <button class="wx-tab" data-screen="ride" aria-pressed="true">Ride</button>
   <button class="wx-tab" data-screen="history" aria-pressed="false">History</button>
+  <button class="wx-tab" data-screen="model" aria-pressed="false">Model</button>
   <button class="wx-tab" data-screen="gear" aria-pressed="false">Gear</button>
 </nav>
 
@@ -177,6 +178,21 @@
   </div>
 </section>
 
+<!-- ================= MODEL ================= -->
+<section id="screen-model" class="wx-hidden">
+  <div class="wx-card wx-card--flat">
+    <div class="wx-card__head">
+      <h2 class="wx-heading">Does the model work?</h2>
+      <span class="wx-eyebrow" id="scorecount" style="margin:0"></span>
+    </div>
+    <p class="wx-note">Every other screen argues with the model's inputs. This one argues
+      with the model. It reads the rides you have rated and asks what they actually say:
+      how often it was called right, which conditions it is wrong in, and whether the
+      correction it draws from your ratings does any good on a ride it had not seen.</p>
+    <div id="scorebody"></div>
+  </div>
+</section>
+
 <!-- ================= GEAR ================= -->
 <section id="screen-gear" class="wx-hidden">
   <div class="wx-card wx-card--flat">
@@ -290,10 +306,12 @@
 <script src="history.js"></script>
 <script src="feedback.js"></script>
 <script src="gear.js"></script>
+<script src="scorecard.js"></script>
 <script src="model.js"></script>
 <script src="app.js"></script>
 <script src="gearui.js"></script>
 <script src="historyui.js"></script>
+<script src="scorecardui.js"></script>
 <script src="sync.js"></script>
 </body>
 </html>

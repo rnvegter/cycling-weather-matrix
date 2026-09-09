@@ -318,6 +318,78 @@ one you cannot argue with.
 Once there are enough wet rides it keeps a separate correction for them. Plenty of riders run
 hot in the dry and cold in the wet, and one number cannot hold both.
 
+## Does the model work?
+
+The calibration above takes every rating you give and collapses it into one mean. That is
+the least interesting thing that can be done with them. The ratings are a record of **when
+the model was wrong, and in which direction** — read whole, they say *where* it is biased
+rather than only by how much on average, and whether the correction it draws from them is
+worth anything at all.
+
+So the **Model** tab argues with the model the way the effect matrix argues with its inputs.
+
+Three figures at the top. **Called it right** is the share of rides you answered *about
+right*, counted from your verdicts and nothing else. **Mean error** is the average signed
+error, and its sign is the part worth being careful about: a verdict of *too warm* is +2,
+because you were overdressed, which means the model predicted a colder ride than you got. So
+a positive mean means the model **reads cold** — it under-states ride-feel and overdresses
+you. **Typical miss** is the same error with the direction thrown away.
+
+The mean is only allowed to claim a bias when it clears its own noise: **anything inside two
+standard errors of zero is reported as noise**, not as a finding, because a mean error of
++1.2 over four rides and the same figure over forty are not the same claim. Every figure on
+the page carries the number of rides behind it.
+
+### Where it is biased
+
+The same summary again, over each half of the splits the model already treats as different
+cases: rain, air temperature at 5 °C, wind, length, and where the ride came from. **The
+thresholds are the model's own** — windy is what the outfit picker calls windy, three hours
+is what it calls a long ride — because inventing new ones here would measure a model nobody
+is running.
+
+The last split is a provenance check rather than a condition. This README claims a ride
+rebuilt from a recorded GPX is better evidence than a forecast one; that row is where the
+claim can be read off instead of asserted.
+
+A split can also say **don't know**, which is not the same as false. Rides recorded before
+the wind was stored carry no wind reading, and counting those as calm would invent evidence,
+so they are reported as uncovered. And a side with three or four rides on it is shown greyed
+and labelled rather than hidden — a hint about where to look next, not a finding.
+
+One number saying the model is half a degree out cannot tell you it is two degrees out in the
+wet and right in the dry. That is a different problem with a different fix, and it is the
+reason this section exists.
+
+### Leave one out
+
+The correction is a mean of your ratings, so scoring it against those same ratings would
+flatter it — it would do well by construction. So each rated ride is set aside in turn, the
+correction is worked out from **every other** ride, and then applied to the ride it never
+saw. Against the only baseline that matters: **doing nothing**.
+
+It reports the average miss, the same weighted so that one 3° miss counts for more than three
+1° ones, and how many rides would have been called right. **The two can disagree, and when
+they do it says so** rather than quoting whichever flatters the feature: shifting every ride
+by one number pulls the far misses in and pushes the rides that were already spot on off
+their mark. It is entirely possible for a mean of scattered ratings to be worse than no
+correction at all, and if that is what the rides say, the page says it.
+
+The wet correction gets the same treatment. `feedback.js` keeps a second mean for rides in
+the rain on the argument that a rider can run hot in the dry and cold in the wet and one
+number cannot hold both. That is a claim, and it is checked the same way: for each wet ride,
+is the wet-only mean of the others closer to it than the pooled mean?
+
+**What this cannot tell you** is on the page too, in as many words. Leaving one out is not a
+replay of your season — it does not take the ratings in the order they arrived, so it says
+whether the correction generalises, not whether it would have helped on any particular
+morning. And every figure rests on one rider's memory of how a ride felt, recorded
+afterwards. That is the right evidence for the question, and it is the only evidence there
+is, but it is not a measurement.
+
+Nothing in the tab is a second model. It reuses the same `learnedOffset` the app applies,
+because a scorecard grading its own reimplementation of the estimator grades the wrong thing.
+
 ## Look
 
 An instrument rather than a lifestyle app: it gets read on a phone at 06:40 in December,
@@ -347,7 +419,7 @@ INSTALL.md if you want to self-host them for a genuinely offline install.
 
 | File | |
 |---|---|
-| `index.html` | Three screens — ride, history, gear |
+| `index.html` | Four screens — ride, history, model, gear |
 | `model.js` | Ride-feel, heat balance, outfit selection |
 | `gear.js` | Seeded inventory and storage |
 | `insulation.js` | Inference engine, runs in both browser and Node |
@@ -359,6 +431,8 @@ INSTALL.md if you want to self-host them for a genuinely offline install.
 | `history.js` | Ride records, and the calibration's source of truth |
 | `historyui.js` | The history screen |
 | `feedback.js` | Turning ratings into a temperature correction |
+| `scorecard.js` | Whether the model and that correction are any good |
+| `scorecardui.js` | The model screen |
 | `map.js` | Slippy-map projection, tiles, and the drawn overlay |
 | `styles.css` | The Weather Effect design system, plus app chrome |
 
