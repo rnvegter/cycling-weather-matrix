@@ -119,19 +119,41 @@ row anywhere else selects it; double-clicking it opens the editor, which saves a
 to the toolbar for anything near the bottom of a long list. Opening the editor either way
 scrolls it into view.
 
+**Five columns, not nine.** The table shows what you scan a wardrobe for — whether it counts,
+who made it, which garment, what it competes with, and the range it covers. clo, wind and
+water are two or three characters each and flags is a word, but a column's width is set by its
+heading, and every heading carries a label, a sort button and a filter control: those four
+were charging 100–115px apiece to display a 32px number. Nine columns is also why this screen
+used to widen the whole page from 44 to 82rem, moving the header, the tabs and the footer as
+you arrived. One page width now, and the table fits inside it.
+
+The three flags travel with the model instead, as small **SS / PACK / RAIN** badges beside the
+garment's name — whether something packs into a pocket is worth seeing while reading down the
+list, and it is what the route packing plan reads to decide what can go on at the roadside.
+
+Clicking a row opens a **detail line** underneath it with clo, wind, water, the flags, the
+range and the garment's note — more than the columns ever showed, since no column had room for
+the note. Not a tooltip, deliberately: this app is read on a phone at 06:40 with cold hands,
+and hover does not exist there, so the numbers would have been unreachable on the device that
+matters most. One tap works everywhere.
+
 Brand and model are separate fields, so the table sorts and filters by maker. Every column
 header carries its description on hover or keyboard focus, plus a sort button cycling
 ascending, descending and off, and a filter shaped to the column: a checklist for brand and
-type, contains-text for model, min and max for the numbers, and for the range a single
-temperature that asks the question actually worth asking — *what covers 8°C?* Filters stack,
-and the row count says how many are showing.
+type, contains-text for model, and for the range a single temperature that asks the question
+actually worth asking — *what covers 8°C?* Filters stack, and the row count says how many are
+showing. Sorting and filtering by clo, wind, water or flags went with their columns; the
+values themselves are a tap away, and in the editor.
 
 The range column is a chart, so it carries a scale: ticks every 5 °C under the heading and
 gridlines at the same spacing on every row, which is what lets one bar be read as a
 temperature rather than only as longer or shorter than its neighbours.
 
 Columns are declared once in `GEAR_COLS`, which carries each label, description, sort
-accessor and filter type, so the header controls can't drift out of step with the data. Both the add and edit flows offer a
+accessor and filter type, so the header controls can't drift out of step with the data. The
+four that left the table are still declared there, marked `inTable: false` — a column this app
+stops drawing is not a column it stops knowing about, and the detail line reads their labels
+and descriptions straight from those definitions. Both the add and edit flows offer a
 lookup that fetches manufacturer and retailer pages through the local service and extracts
 the quoted temperature range and fabric technology. Found values are shown next to yours with
 per-field checkboxes — nothing is overwritten silently.

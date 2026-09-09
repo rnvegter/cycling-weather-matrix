@@ -136,7 +136,15 @@ body {
   outline-offset: 3px;
 }
 
-body[data-screen="gear"] { --shell: 82rem; }
+/* One page width on every screen.
+
+   The gear screen used to set this to 82rem to fit nine columns, and because
+   --shell drives the whole page, arriving at that tab moved the header, the
+   tabs and the footer with it. The four columns that made nine necessary are
+   gone -- see GEAR_COLS -- and the table scrolls inside the card on a narrow
+   window, which it always did anyway: at anything under about 1300px the
+   82rem shell was already scrolling, so the width jump was cost without
+   benefit on any laptop. */
 
 /* ---------- 3. Type roles ------------------------------------ */
 
@@ -727,7 +735,12 @@ input[type="checkbox"] { accent-color: var(--temp); width: auto; min-height: 0; 
 
 /* --- Gear list --- */
 
-.wx-gear { min-width: 46rem; }
+/* A floor so the columns stay legible rather than collapsing to nothing on a
+   phone, where the scroller takes over instead. 46rem was the floor for nine
+   columns, and it was the real reason the table would not fit a 44rem page --
+   every other measurement came back at exactly 736px because this said so.
+   Five columns want about 38. */
+.wx-gear { min-width: 38rem; }
 .wx-gear tbody tr { cursor: pointer; }
 .wx-gear tbody tr:hover td { background: var(--surface-2); }
 .wx-gear tr.is-off td { opacity: .38; }
@@ -735,7 +748,10 @@ input[type="checkbox"] { accent-color: var(--temp); width: auto; min-height: 0; 
 .wx-gear tr.is-off .wx-item { text-decoration: line-through; }
 .wx-gear tr.is-sel td { background: var(--surface-2); }
 .wx-gear tr.is-sel td:first-child { box-shadow: inset var(--edge) 0 0 var(--temp); }
-.wx-gear td:first-child { text-align: center; width: 4.4rem; }
+/* Scoped to the garment rows. Unscoped it also caught the detail row's single
+   colspan cell -- which IS a first child -- and centred a paragraph of notes
+   inside a 4.4rem column hint meant for an In/Out button. */
+.wx-gear tbody tr[data-i] td:first-child { text-align: center; width: 4.4rem; }
 
 /* In or out of the advice. A labelled two-state button rather than a tick box:
    the state is readable without decoding it, and it is a real tap target. */
@@ -766,6 +782,60 @@ input[type="checkbox"] { accent-color: var(--temp); width: auto; min-height: 0; 
 [data-touch="gloves"] .wx-toggle { min-height: var(--tap); min-width: 4rem; }
 .wx-gear .wx-item { font-weight: 500; color: var(--text); }
 .wx-gear .wx-flagcell { font-family: var(--data); font-size: .62rem; color: var(--text-dim); white-space: nowrap; }
+
+/* --- Flags, beside the model they belong to ---------------------
+   They had a column of their own, which charged 114px of table width to show
+   a word. As badges they cost the slack the model column had anyway, and they
+   read better next to the garment than three columns away from it. */
+.wx-badge {
+  display: inline-block;
+  margin-left: 1px;
+  padding: 1px 5px;
+  font-family: var(--data); font-size: .6rem; font-weight: 400;
+  letter-spacing: .04em;
+  color: var(--text-dim);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  white-space: nowrap;
+  vertical-align: 1px;
+  cursor: help;
+}
+.wx-badge:focus-visible { outline: 2px solid var(--temp); outline-offset: 1px; }
+tr.is-off .wx-badge { opacity: .55; }
+
+/* --- The detail line under the selected row ---------------------
+   Where clo, wind, water and the flags went, plus the note, which no column
+   ever had room for. It is a row of the same table so it moves with its
+   garment and inherits the row's temperature edge. */
+.wx-detail > td {
+  padding: var(--sp-2) var(--sp-3) var(--sp-3);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+}
+/* The detail cell spans the whole table, and on a phone the table is wider
+   than the screen -- so without a cap the note wrapped at the table's width
+   and half of every line sat off to the right, behind a sideways scroll. The
+   cap keeps it inside the visible column instead. */
+.wx-detail__row, .wx-detail__note, .wx-detail__hint {
+  max-width: calc(100vw - 3rem);
+}
+.wx-detail__row { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); }
+.wx-detail__cell { display: flex; align-items: baseline; gap: var(--sp-2); font-size: var(--step--1); }
+.wx-detail__k {
+  font-family: var(--display); font-size: .68rem; font-weight: 600;
+  letter-spacing: .05em; text-transform: uppercase;
+  color: var(--text-dim);
+  cursor: help;
+}
+.wx-detail__k:focus-visible { outline: 2px solid var(--temp); outline-offset: 1px; }
+.wx-detail__note {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--step--1); line-height: 1.5; color: var(--text-dim);
+}
+.wx-detail__hint {
+  margin: var(--sp-2) 0 0;
+  font-family: var(--data); font-size: .62rem; color: var(--text-dim);
+}
 
 /* The range column drawn rather than written: same band chart as the
    torso lanes, so a gap in the wardrobe is visible as a gap. */
@@ -960,7 +1030,15 @@ input[type="checkbox"] { accent-color: var(--temp); width: auto; min-height: 0; 
 
 /* ---------- 17. Gear table header controls ------------------- */
 
-.wx-th { display: flex; align-items: center; gap: var(--sp-2); white-space: nowrap; }
+/* The heading may wrap; its buttons may not.
+
+   nowrap here was what actually set the column widths -- "Ride-feel range" on
+   one line was costing 188px for a chart, and "In advice" 140px for a cell
+   holding a 40px button. The browser only wraps a heading when the column is
+   squeezed, so on a wide screen nothing looks different and on a narrow one
+   the table fits instead of scrolling. */
+.wx-th { display: flex; align-items: center; gap: var(--sp-2); white-space: normal; }
+.wx-th__btns { white-space: nowrap; }
 /* On a right-aligned column the buttons are rendered before the label, so they
    sit inside the cell rather than hard against the next column's heading. */
 .wx-right .wx-th { justify-content: flex-end; }
@@ -975,7 +1053,14 @@ input[type="checkbox"] { accent-color: var(--temp); width: auto; min-height: 0; 
 .wx-th__label { cursor: help; border-bottom: 1px dotted var(--line); }
 .wx-th__label:hover, .wx-th__label:focus-visible { color: var(--text); border-bottom-color: var(--text-dim); }
 
-.wx-th__btns { display: flex; gap: 1px; flex: 0 0 auto; }
+.wx-th__btns { display: flex; gap: 1px; flex: 0 0 auto; align-self: flex-end; }
+
+/* A table may use the card's padding as table width. Prose wants the inset;
+   a grid of numbers would rather have the 32px, and running to the card's own
+   border reads as deliberate rather than cramped. */
+.wx-scroll--bleed { margin-left: calc(-1 * var(--sp-4)); margin-right: calc(-1 * var(--sp-4)); }
+.wx-scroll--bleed > table { width: 100%; }
+#geartable tbody td:last-child, #geartable thead th:last-child { padding-right: var(--sp-3); }
 
 /* --- Scale under the range heading --- */
 .wx-axis {

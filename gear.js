@@ -207,6 +207,27 @@ function normaliseItem(it){
    description shown on hover, how it sorts, and what kind of filter it takes —
    so the header controls stay in step with the data instead of drifting.
 ----------------------------------------------------------------*/
+/* ---------------------------------------------------------------
+   The columns.
+
+   Nine of these once had a column each, which cost the gear screen its own
+   page width: the shell was widened from 44rem to 82rem to fit them, and since
+   that variable drives the whole page, arriving at this tab moved the header,
+   the tabs and the footer with it.
+
+   Four of them were not paying for the space. clo, wind and water are two or
+   three characters each, and flags is a word or two -- but a column's width is
+   set by its HEADING, and each heading carries a label, a sort button and a
+   filter control. They were charging 100 to 115px apiece to show a number 32px
+   wide.
+
+   So `inTable: false` keeps them out of the table while leaving them
+   everywhere else they are needed: the editor, the lookup, and the detail line
+   under a selected row, which shows all four together along with the note --
+   more than the columns ever did. The definitions stay whole because they
+   carry the description, the sort accessor and the filter shape, and a column
+   this app stops drawing is not a column it stops knowing about.
+----------------------------------------------------------------*/
 const GEAR_COLS = [
   {key:"use", label:"In advice", type:"use", align:"center",
    desc:"Whether this garment is considered when picking kit. Switch it Out for anything lent out, in the wash, or not packed for a trip.",
@@ -228,20 +249,35 @@ const GEAR_COLS = [
    desc:"The coldest and warmest ride-feel °C this works at — your own calibration, not the maker's air-temperature claim. Ranges pick the garment; clo sizes the stack.",
    val: g => (g.tmin + g.tmax) / 2, text: g => `${g.tmin} to ${g.tmax}`},
 
-  {key:"clo", label:"clo", type:"num", align:"right",
+  {key:"clo", inTable: false, label:"clo", type:"num", align:"right",
    desc:"Thermal insulation, where 1.0 is a business suit and a summer jersey is about 0.10. Used to size the whole outfit against what the conditions require.",
    val: g => g.clo, text: g => g.clo},
 
-  {key:"wind", label:"Wind", type:"num", align:"right",
+  {key:"wind", inTable: false, label:"Wind", type:"num", align:"right",
    desc:"Windproofness from 0 to 1. It matters more than thickness on a bike: the outermost layer decides how much of the stack beneath it survives the airflow.",
    val: g => g.wind, text: g => g.wind},
 
-  {key:"water", label:"Water", type:"num", align:"right",
+  {key:"water", inTable: false, label:"Water", type:"num", align:"right",
    desc:"Waterproofness from 0 to 1. Around 0.5 is water-resistant and will wet through in sustained rain; 0.9 and above is a taped, genuinely waterproof shell.",
    val: g => g.water, text: g => g.water},
 
-  {key:"flags", label:"Flags", type:"flags",
+  {key:"flags", inTable: false, label:"Flags", type:"flags",
    desc:"SS marks short sleeves or shorts, which is what triggers arm and leg warmers. PACK means it fits in a pocket, so it can be carried. RAIN means it only appears when it's wet.",
    val: g => (g.short?4:0) + (g.pack?2:0) + (g.rainOnly?1:0),
    text: g => [g.short && "SS", g.pack && "PACK", g.rainOnly && "RAIN"].filter(Boolean).join(" ")}
+];
+
+/* What the table actually draws. The flags travel with the model instead, as
+   badges beside its name: whether a garment packs into a pocket is worth
+   seeing while reading down the list, and it is what the route packing plan
+   reads to decide what can go on at the roadside. */
+const GEAR_TABLE_COLS = GEAR_COLS.filter(c => c.inTable !== false);
+
+/* The three flags, as short badges with the explanation behind them. The badge
+   text is the information; the tip only says what it means, so nothing is lost
+   on a touch screen where there is no hover. */
+const GEAR_FLAGS = [
+  ["short",    "SS",   "Short sleeves or shorts, which is what triggers arm and leg warmers."],
+  ["pack",     "PACK", "Fits in a pocket, so it can be carried rather than worn from the start."],
+  ["rainOnly", "RAIN", "Only considered when it is wet."]
 ];

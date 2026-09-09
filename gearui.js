@@ -118,7 +118,7 @@ function rangeAxis(){
 
 function renderGearHead(){
   const thead = document.querySelector("#geartable thead");
-  thead.innerHTML = "<tr>" + GEAR_COLS.map(c => {
+  thead.innerHTML = "<tr>" + GEAR_TABLE_COLS.map(c => {
     const sorted = gearSort.key === c.key;
     const arrow = !sorted ? "↕" : (gearSort.dir === 1 ? "↑" : "↓");
     const filtered = gearFilters[c.key] != null && gearFilters[c.key] !== ""
@@ -142,6 +142,47 @@ function renderGearHead(){
   }).join("") + "</tr>";
 }
 
+/* The flags, beside the model name they belong to.
+
+   The spaces are load-bearing. Without one between the name and the first
+   badge, "Brimmed cap under the helmet" plus PACK and RAIN became a single
+   unbreakable run 130px wide, and that one cell was setting the width of the
+   whole column -- and so of the table. A break opportunity lets the badges
+   drop under a long name on a narrow screen instead. */
+const flagBadges = it => GEAR_FLAGS.filter(([k]) => it[k])
+  .map(([, label, why]) =>
+    ` <span class="wx-badge" data-tip="${escHtml(why)}" tabindex="0">${label}</span>`).join("");
+
+/* What the four dropped columns became: one line under the row you picked.
+
+   Better than the columns were, and better than a tooltip would have been. A
+   tooltip needs hover, and this app is read on a phone at 06:40 with cold
+   hands -- there is no hover there, so the numbers would have been out of
+   reach on the device that matters most. One tap opens this instead, and it
+   has room for the note as well, which no column ever showed. */
+function gearDetail(it, span){
+  const num = key => {
+    const col = colBy(key);
+    return `<span class="wx-detail__cell">
+      <span class="wx-detail__k" data-tip="${escHtml(col.desc)}" tabindex="0">${col.label}</span>
+      <b class="wx-num">${col.text(it)}</b></span>`;
+  };
+  const flags = colBy("flags").text(it);
+  return `<tr class="wx-detail"><td colspan="${span}">
+    <div class="wx-detail__row">
+      ${num("clo")}${num("wind")}${num("water")}
+      <span class="wx-detail__cell">
+        <span class="wx-detail__k" data-tip="${escHtml(colBy("flags").desc)}" tabindex="0">Flags</span>
+        <b>${flags || "—"}</b></span>
+      <span class="wx-detail__cell">
+        <span class="wx-detail__k">Range</span>
+        <b class="wx-num">${it.tmin} to ${it.tmax}&deg;C</b></span>
+    </div>
+    ${it.notes ? `<p class="wx-detail__note">${escHtml(it.notes)}</p>` : ""}
+    <p class="wx-detail__hint">Double-click the row to change any of this.</p>
+  </td></tr>`;
+}
+
 function renderGear(){
   renderGearHead();
   const rows = visibleGear();
@@ -160,16 +201,12 @@ function renderGear(){
             title="${inUse ? "Counted in the advice. Click to leave it out." : "Left out of the advice. Click to put it back."}"
           >${inUse ? "In" : "Out"}</button></td>
       <td class="wx-dim">${escHtml(it.brand) || "—"}</td>
-      <td class="wx-item">${escHtml(it.model)}</td>
+      <td class="wx-item">${escHtml(it.model)}${flagBadges(it)}</td>
       <td class="wx-dim">${SLOT_LABEL[it.slot] || it.slot}</td>
       <td><div class="wx-lane" title="${it.tmin} to ${it.tmax}&deg;C">${bar}</div></td>
-      <td class="wx-right wx-num">${it.clo}</td>
-      <td class="wx-right wx-num">${it.wind}</td>
-      <td class="wx-right wx-num">${it.water}</td>
-      <td class="wx-flagcell">${colBy("flags").text(it)}</td>
-    </tr>`;
+    </tr>${i === selected ? gearDetail(it, GEAR_TABLE_COLS.length) : ""}`;
   }).join("")
-  : `<tr><td colspan="${GEAR_COLS.length}" class="wx-empty">
+  : `<tr><td colspan="${GEAR_TABLE_COLS.length}" class="wx-empty">
        Nothing matches these filters. <button class="wx-link" id="gearclear">Clear them</button>
      </td></tr>`;
 
