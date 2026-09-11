@@ -39,6 +39,14 @@ let lastError = null;
 const gearStamp = () => { try{ return localStorage.getItem(GEAR_STAMP_KEY) || ""; }catch(e){ return ""; } };
 const setGearStamp = v => { try{ localStorage.setItem(GEAR_STAMP_KEY, v); }catch(e){} };
 
+// Favourites follow the gear's rule, so they need the same kind of stamp.
+const hasFavourites = typeof loadFavourites === "function" && typeof FAV_STAMP_KEY === "string";
+const favStamp = () => {
+  if (!hasFavourites) return "";
+  try{ return localStorage.getItem(FAV_STAMP_KEY) || ""; }catch(e){ return ""; }
+};
+const setFavStamp = v => { if (hasFavourites) try{ localStorage.setItem(FAV_STAMP_KEY, v); }catch(e){} };
+
 /* --- Status ------------------------------------------------------ */
 
 function syncStatusText(){
@@ -79,6 +87,27 @@ function mergeIncoming(doc){
         if (typeof renderGear === "function") renderGear();
       }
     }
+
+    /* Favourites: the newest list wins outright, as the gear does. They are
+       edited deliberately and rarely in two places at once, and whole-list
+       means a favourite deleted on one device cannot be merged back in by
+       another that still has it. An empty list counts — deleting the last one
+       is a real change — which is why this does not test for length the way
+       the gear does. */
+    if (hasFavourites && Array.isArray(doc.favourites)){
+      const theirs = String(doc.favouritesUpdatedAt || "");
+      if (theirs && theirs > favStamp()){
+        try{
+          saveFavourites(doc.favourites.map(normaliseFavourite).filter(Boolean));
+          setFavStamp(theirs);
+        }catch(e){
+          // A full browser must not take the rest of sync down with it.
+          lastError = e.message;
+        }
+        if (typeof renderFavourites === "function") renderFavourites();
+        if (typeof refreshFavButton === "function") refreshFavButton();
+      }
+    }
   } finally { syncBusy = false; }
 }
 
@@ -87,6 +116,8 @@ function localDocument(){
     gear: loadGear(),
     gearUpdatedAt: gearStamp(),
     history: loadHistory(),
+    favourites: hasFavourites ? loadFavourites() : undefined,
+    favouritesUpdatedAt: favStamp(),
     updatedAt: new Date().toISOString()
   };
 }
@@ -156,6 +187,14 @@ saveHistory = function(list){
   _saveHistory(list);
   if (!syncBusy) syncPush(false);
 };
+
+if (hasFavourites){
+  const _saveFavourites = saveFavourites;
+  saveFavourites = function(list){
+    _saveFavourites(list);          // throws when storage is full — let it reach the UI
+    if (!syncBusy){ setFavStamp(new Date().toISOString()); syncPush(false); }
+  };
+}
 
 /* A last-gasp attempt on the way out, for a change made seconds before the tab
    closes. Best-effort by design — the change is already safe locally. */

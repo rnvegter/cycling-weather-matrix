@@ -85,6 +85,46 @@ function parseGPX(text){
 
 /* --- Shape ------------------------------------------------------ */
 
+/* Thin a track to roughly one point per `spacing` metres, and never more than
+   `max` points in all.
+
+   A recorded ride is stamped every second, so four hours is some 14,000
+   points — the best part of a megabyte to keep. Nothing downstream needs that:
+   the route check cuts a ride into legs of several kilometres. What it does
+   need is the summit, and thinning by distance alone would shave it off
+   whenever the highest point fell between two kept ones, understating exactly
+   the climb the route was loaded to find. So the highest and lowest points are
+   always kept, along with the start and the finish. */
+function simplifyTrack(points, spacing = 50, max = 2500){
+  if (!Array.isArray(points)) return [];
+  const n = points.length;
+  if (n <= 2) return points.slice();
+
+  let hi = -1, lo = -1;
+  for (let i = 0; i < n; i++){
+    const e = points[i].ele;
+    if (e == null) continue;
+    if (hi < 0 || e > points[hi].ele) hi = i;
+    if (lo < 0 || e < points[lo].ele) lo = i;
+  }
+
+  const pass = gap => {
+    const keep = [0];
+    let since = 0;                                  // metres since the last kept point
+    for (let i = 1; i < n - 1; i++){
+      since += haversine(points[i - 1], points[i]) * 1000;
+      if (since >= gap || i === hi || i === lo){ keep.push(i); since = 0; }
+    }
+    keep.push(n - 1);
+    return keep;
+  };
+
+  // A very long ride at 50 m spacing can still exceed the cap; widen until it fits.
+  let gap = spacing, keep = pass(gap);
+  while (keep.length > max && gap < 20000){ gap *= 1.5; keep = pass(gap); }
+  return keep.map(i => points[i]);
+}
+
 function routeStats(points){
   let dist = 0, ascent = 0, descent = 0;
   let minEle = Infinity, maxEle = -Infinity;

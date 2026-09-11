@@ -47,6 +47,7 @@
 
 <nav class="wx-tabs">
   <button class="wx-tab" data-screen="ride" aria-pressed="true">Ride</button>
+  <button class="wx-tab" data-screen="favourites" aria-pressed="false">Favourites</button>
   <button class="wx-tab" data-screen="history" aria-pressed="false">History</button>
   <button class="wx-tab" data-screen="model" aria-pressed="false">Model</button>
   <button class="wx-tab" data-screen="gear" aria-pressed="false">Gear</button>
@@ -82,6 +83,7 @@
       <label class="wx-file" for="gpx">Load a route</label>
       <input type="file" id="gpx" accept=".gpx,application/gpx+xml,text/xml" class="wx-hidden">
       <button id="gpxclear" class="wx-btn wx-btn--quiet wx-hidden">Drop route</button>
+      <button id="gpxfav" class="wx-btn wx-btn--quiet wx-hidden">Save as favourite</button>
       <span id="gpxnote" class="wx-note" style="margin:0">
         Optional. A GPX checks the kit against the whole ride — where you'll be, how high,
         and which way you're pointing — rather than only the start.
@@ -144,6 +146,33 @@
 </section>
 
 <!-- ================= HISTORY ================= -->
+<!-- ================= FAVOURITES ================= -->
+<section id="screen-favourites" class="wx-hidden">
+  <div class="wx-card wx-card--flat">
+    <div class="wx-card__head">
+      <h2 class="wx-heading">Favourite rides</h2>
+      <span class="wx-eyebrow" style="margin:0" id="favcount"></span>
+    </div>
+    <p class="wx-note" style="margin-top:0">
+      Routes you ride again. <b>Ride now</b> puts one on the Ride tab — the route, where it
+      starts, the surface and your usual speed — and leaves the date and time to you. Add a GPX
+      here, or load one on the Ride tab and press <b>Save as favourite</b>. A recorded ride
+      brings its own average speed with it; a planned route uses the Ride tab's until you give
+      it one.
+    </p>
+
+    <div class="wx-bar-row">
+      <label class="wx-btn" for="favgpx">Add from GPX</label>
+      <input type="file" id="favgpx" accept=".gpx,application/gpx+xml,text/xml" multiple class="wx-hidden">
+      <span class="wx-spacer"></span>
+      <span class="wx-note" id="favsize" style="margin:0"></span>
+    </div>
+
+    <div id="favstatus" class="wx-status wx-hidden" role="status"></div>
+    <div id="favlist" class="wx-favs"></div>
+  </div>
+</section>
+
 <section id="screen-history" class="wx-hidden">
   <div class="wx-card wx-card--flat">
     <div class="wx-card__head">
@@ -316,6 +345,7 @@
 <script src="weather.js"></script>
 <script src="insulation.js"></script>
 <script src="history.js"></script>
+<script src="favourites.js"></script>
 <script src="feedback.js"></script>
 <script src="gear.js"></script>
 <script src="scorecard.js"></script>
@@ -323,6 +353,7 @@
 <script src="app.js"></script>
 <script src="gearui.js"></script>
 <script src="historyui.js"></script>
+<script src="favouritesui.js"></script>
 <script src="scorecardui.js"></script>
 <script src="sync.js"></script>
 <script src="backupui.js"></script>

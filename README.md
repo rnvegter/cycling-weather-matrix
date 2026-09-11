@@ -253,6 +253,37 @@ balance at the coldest leg. If a pocket can't close it, the conflict is named as
 with the trade either way, plus any workaround the wardrobe has — the shorts-and-warmers route
 to where tights reach. If nothing closes it, it says so and suggests shortening the ride.
 
+## Favourite rides
+
+The routes you ride again live on the **Favourites** tab. Add them from GPX files there — a
+planned route or a recorded ride, several at once — or load one on the Ride tab and press
+**Save as favourite**. **Ride now** puts a favourite back on the Ride tab: the route, where it
+starts, its surface and your usual speed on it. It deliberately stops short of asking for the
+forecast, because the date and start time are the one thing a favourite cannot know, and advice
+for the wrong morning is worse than a second click.
+
+A favourite always moves the start point to the route's own start, where loading a file only
+fills it in when nothing is set. That is the difference between a place you searched for on
+purpose and a ride that starts where it starts; keeping Utrecht in the box while loading a
+route from Amerongen would forecast for the wrong town without a word. It also clears any
+leftover ride duration, which would otherwise override the favourite's speed.
+
+A **recorded** ride brings its own average speed, read off the timestamps of the full recording.
+A planned route has none until you give it one, and meanwhile uses the Ride tab's assumption
+for the surface and pace — so it follows those instead of freezing a guess.
+
+Tracks are kept thinned to about one point per 50 m, never more than 2,500. A four-hour
+recording is some 14,000 points and the best part of a megabyte, and favourites share
+localStorage's 5 MB with the gear and history and sync into a state file capped at 4 MB. In
+testing, a 677 KB recorded file and a second planned route took 43 KB between them once thinned
+and packed. The start, finish, highest and lowest points are always kept, since the summit is
+the reason to check a route at all.
+
+Favourites sync between devices and go into backups like the rest. Whole-list, newest wins, as
+the gear does — so a favourite deleted on one device cannot be merged back in by another that
+still has it, and deleting the last one counts. Restoring a backup taken before favourites
+existed leaves the current list alone rather than wiping it.
+
 ## Syncing
 
 The gear list and the ride history are the two things here that cannot be regenerated, and
@@ -491,17 +522,19 @@ INSTALL.md if you want to self-host them for a genuinely offline install.
 
 | File | |
 |---|---|
-| `index.html` | Five screens — ride, history, model, gear, backup |
+| `index.html` | Six screens — ride, favourites, history, model, gear, backup |
 | `model.js` | Ride-feel, heat balance, outfit selection |
 | `gear.js` | Seeded inventory and storage |
 | `insulation.js` | Inference engine, runs in both browser and Node |
 | `server.js` | Static files, `/api/lookup`, the synced state, and the backups |
 | `app.js` | Forecast, form wiring, rendering |
 | `gearui.js` | Gear screen: add, edit, delete, lookup |
-| `sync.js` | Local-first sync of gear and history |
-| `gpx.js` | Route parsing, leg sampling, headwind and lapse rate |
+| `sync.js` | Local-first sync of gear, history and favourites |
+| `gpx.js` | Route parsing, thinning, leg sampling, headwind and lapse rate |
 | `history.js` | Ride records, and the calibration's source of truth |
 | `historyui.js` | The history screen |
+| `favourites.js` | Favourite routes: storage, thinning, duplicates |
+| `favouritesui.js` | The favourites screen, Ride now, and Save as favourite |
 | `feedback.js` | Turning ratings into a temperature correction |
 | `scorecard.js` | Whether the model and that correction are any good |
 | `scorecardui.js` | The model screen |

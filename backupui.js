@@ -101,7 +101,14 @@ function applyRestore(state){
     items = gear.length;
     if (typeof setGearStamp === "function") setGearStamp(new Date().toISOString());
   }
-  ["renderGear", "renderHistory", "renderScorecard"].forEach(fn => {
+  /* Only when the backup has them. One taken before favourites existed says
+     nothing about them either way, and wiping the list you have now because an
+     old file predates the feature would be restore destroying data it was
+     never asked about. */
+  if (Array.isArray(state.favourites) && typeof saveFavourites === "function"){
+    saveFavourites(state.favourites.map(normaliseFavourite).filter(Boolean));
+  }
+  ["renderGear", "renderHistory", "renderScorecard", "renderFavourites"].forEach(fn => {
     if (typeof window[fn] === "function") window[fn]();
   });
   return {rides, items};

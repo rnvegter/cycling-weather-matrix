@@ -16,7 +16,7 @@ let lastLookup = null;
 let originalItem = null;    // snapshot, to detect edits
 
 /* --- Screens ---------------------------------------------------- */
-const SCREENS = ["ride", "history", "model", "gear", "backup"];
+const SCREENS = ["ride", "favourites", "history", "model", "gear", "backup"];
 
 function showScreen(name){
   if (!SCREENS.includes(name)) name = "ride";
@@ -27,6 +27,9 @@ function showScreen(name){
   // scorecard is read from that same list and moves whenever a rating does,
   // which is on the history screen, so it too is built on arrival.
   if (name === "history" && typeof renderHistory === "function") renderHistory();
+  // A favourite can arrive from the Ride tab's Save button or from another
+  // device through sync, so the list is rebuilt on arrival too.
+  if (name === "favourites" && typeof renderFavourites === "function") renderFavourites();
   if (name === "model" && typeof renderScorecard === "function") renderScorecard();
   /* The backup list is on the server, and a scheduled run can have added to it
      since this tab was last looked at, so arriving asks rather than assumes. */

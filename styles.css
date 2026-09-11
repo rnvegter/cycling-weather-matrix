@@ -847,7 +847,10 @@ tr.is-off .wx-badge { opacity: .55; }
 /* --- Toolbar --- */
 
 .wx-bar-row { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; margin-top: var(--sp-4); }
-.wx-bar-row .wx-spacer { flex: 1; }
+/* Global rather than bar-row only: the card footers on History and Favourites
+   use it too, to push Edit and Delete away from the main action, and scoped to
+   .wx-bar-row it did nothing there. */
+.wx-spacer { flex: 1; }
 .wx-file {
   display: inline-flex; align-items: center;
   font-family: var(--display); font-size: var(--step-0); font-weight: 600;
@@ -1311,7 +1314,7 @@ tr.is-off .wx-badge { opacity: .55; }
    after the ride rather than forecast before it. */
 .wx-tag {
   display: inline-block; vertical-align: 1px; margin-left: .35em;
-  padding: .1em .45em; border: 1px solid var(--rule); border-radius: 2px;
+  padding: .1em .45em; border: 1px solid var(--line); border-radius: 2px;
   font-family: var(--display); font-size: .62rem; font-weight: 500;
   letter-spacing: .04em; text-transform: uppercase; color: var(--text-dim);
   cursor: help;
@@ -1336,6 +1339,47 @@ tr.is-off .wx-badge { opacity: .55; }
   margin-top: var(--sp-3); padding-top: var(--sp-3);
   border-top: 1px solid var(--line);
 }
+/* ---------- Favourites ------------------------------------------
+   The same card as a ride, minus the temperature edge: that stripe is the
+   ride-feel colour, and a favourite has no temperature until it is ridden on
+   a particular day. The route's own outline identifies it instead. */
+.wx-favs { display: flex; flex-direction: column; gap: var(--sp-3); margin-top: var(--sp-4); }
+.wx-fav {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--sp-3) var(--sp-4);
+}
+.wx-fav.is-editing { border-color: var(--text-dim); }
+.wx-fav__body { display: flex; align-items: flex-start; gap: var(--sp-4); }
+.wx-fav__map {
+  flex: 0 0 auto; width: 96px; height: 72px;
+  background: var(--surface-2); border-radius: var(--radius);
+}
+.wx-fav__line {
+  fill: none; stroke: var(--text-dim); stroke-width: 1.6;
+  stroke-linejoin: round; stroke-linecap: round;
+}
+.wx-fav__start { fill: var(--temp); }                        /* where you set off */
+.wx-fav__end { fill: var(--surface-2); stroke: var(--text); stroke-width: 1.3; }
+.wx-fav__text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+.wx-fav__name {
+  font-family: var(--display); font-size: var(--step-1); font-weight: 600;
+  letter-spacing: .03em; color: var(--text); margin: 0; overflow-wrap: anywhere;
+}
+.wx-fav__meta { font-family: var(--data); font-size: .7rem; color: var(--text-dim); margin: 0; }
+.wx-fav__field { display: flex; flex-direction: column; gap: var(--sp-1); }
+.wx-fav__speed { max-width: 9rem; }
+.wx-fav__foot {
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2);
+  margin-top: var(--sp-3); padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+}
+@media (max-width: 30rem){
+  .wx-fav__map { width: 72px; height: 54px; }
+  .wx-fav__body { gap: var(--sp-3); }
+}
+
 .wx-choice--tight .wx-chip { min-height: 30px; padding: 0 var(--sp-2); font-size: .72rem; }
 [data-touch="gloves"] .wx-choice--tight .wx-chip { min-height: var(--tap); font-size: var(--step--1); }
 

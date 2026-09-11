@@ -23,14 +23,18 @@ function load(){
   if (state.place) showPlace(state.place);
   syncPills();
 }
+/* Only the rows that name a setting belong to these two. Other chip rows — the
+   History filter, a favourite's surface while it is being edited — keep their
+   own state, and syncing them against state[undefined] cleared every chip in
+   them. */
 function syncPills(){
-  document.querySelectorAll(".wx-choice").forEach(row => {
+  document.querySelectorAll(".wx-choice[data-group]").forEach(row => {
     const g = row.dataset.group;
     row.querySelectorAll(".wx-chip").forEach(p =>
       p.setAttribute("aria-pressed", p.dataset.v === state[g] ? "true" : "false"));
   });
 }
-document.querySelectorAll(".wx-choice").forEach(row => {
+document.querySelectorAll(".wx-choice[data-group]").forEach(row => {
   row.addEventListener("click", e => {
     const b = e.target.closest(".wx-chip");
     if (!b) return;
@@ -141,34 +145,53 @@ function status(msg, isErr){
 ----------------------------------------------------------------*/
 let route = null;
 
+/* Put a route on the ride screen. The file picker here and Ride now on the
+   Favourites tab both come through this, so a favourite is described and
+   checked exactly as the file it came from would be.
+
+   `movePlace` is the one difference. A file picked here fills in the start
+   point only when none is set, because a place you searched for may be
+   deliberate. A favourite always moves it: the route starts where it starts,
+   and leaving the forecast on whatever town was last typed would advise for
+   the wrong place without saying so. */
+function useRoute(parsed, opts){
+  const movePlace = !!(opts && opts.movePlace);
+  const stats = routeStats(parsed.points);
+  if (!(stats.distance > 0.5)) throw new Error("That route is shorter than half a kilometre.");
+  route = {name: parsed.name, points: parsed.points, stats, recorded: !!parsed.recorded};
+
+  // The route knows the distance better than the form does.
+  $("#dist").value = Math.round(stats.distance);
+  updateSpeedHint();
+  if (movePlace || !state.place){
+    state.place = {name: parsed.name || "Route start",
+      latitude: parsed.points[0].lat, longitude: parsed.points[0].lon};
+    save();
+  }
+  showPlace(state.place);
+
+  $("#gpxnote").innerHTML =
+    `<b>${route.name ? escapeText(route.name) + " — " : ""}${r1(stats.distance)} km</b>`
+    + (stats.hasElevation ? `, ${Math.round(stats.ascent)} m up` : ", no elevation data")
+    + (stats.loop ? ", a loop" : ", point to point")
+    + `. ${route.points.length} points.`;
+  $("#gpxclear").classList.remove("wx-hidden");
+  if (typeof refreshFavButton === "function") refreshFavButton();
+  return route;
+}
+
 $("#gpx").onchange = e => {
   const file = e.target.files[0];
   if (!file) return;
   const fr = new FileReader();
   fr.onload = () => {
     try{
-      const parsed = parseGPX(fr.result);
-      const stats = routeStats(parsed.points);
-      if (!(stats.distance > 0.5)) throw new Error("That route is shorter than half a kilometre.");
-      route = {name: parsed.name, points: parsed.points, stats};
-
-      // The route knows the distance better than the form does.
-      $("#dist").value = Math.round(stats.distance);
-      updateSpeedHint();
-      // A route file usually carries its own start point.
-      if (!state.place) state.place = {name: parsed.name || "Route start",
-        latitude: parsed.points[0].lat, longitude: parsed.points[0].lon};
-      showPlace(state.place);
-
-      $("#gpxnote").innerHTML =
-        `<b>${route.name ? escapeText(route.name) + " — " : ""}${r1(stats.distance)} km</b>`
-        + (stats.hasElevation ? `, ${Math.round(stats.ascent)} m up` : ", no elevation data")
-        + (stats.loop ? ", a loop" : ", point to point")
-        + `. ${route.points.length} points.`;
-      $("#gpxclear").classList.remove("wx-hidden");
+      useRoute(parseGPX(fr.result));
+      if (route) route.fileName = file.name;
       status("");
     }catch(err){
       route = null;
+      if (typeof refreshFavButton === "function") refreshFavButton();
       status(err.message, true);
     }
   };
@@ -180,6 +203,7 @@ $("#gpxclear").onclick = () => {
   $("#gpxclear").classList.add("wx-hidden");
   $("#gpxnote").textContent =
     "Optional. A GPX checks the kit against the whole ride — where you'll be, how high, and which way you're pointing — rather than only the start.";
+  if (typeof refreshFavButton === "function") refreshFavButton();
 };
 const escapeText = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");
 
