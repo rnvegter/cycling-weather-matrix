@@ -353,7 +353,16 @@ function renderBackup(){
   </div>
   <div class="wx-bar-row">
     <button id="bksave" class="wx-btn wx-btn--quiet">Save schedule</button>
-    <span class="wx-note" style="margin:0">${sched && sched.enabled
+    <span class="wx-note${sched && sched.enabled && backupState.scheduleFailure ? " is-error" : ""}"
+          style="margin:0">${sched && sched.enabled && backupState.scheduleFailure
+      /* "Last run" on its own would show a stale time and read as healthy,
+         which is exactly how a stopped schedule used to hide. */
+      ? `<b>Scheduled backups are not being written.</b> Failing since
+         ${bkWhen(backupState.scheduleFailure.since)}: ${escHtml(backupState.scheduleFailure.message)}.
+         Check that ${escHtml(backupState.scheduleFailure.dir)} exists and the app can write to it —
+         it retries every few minutes and recovers on its own once it can. The last good run was
+         ${bkWhen(sched.lastAt)}.`
+      : sched && sched.enabled
       ? `Last run ${bkWhen(sched.lastAt)}. The newest ${sched.keep} are kept and the rest
          pruned oldest-first; a run that finds nothing changed writes no file.`
       : "Nothing is written automatically while this is off."}</span>

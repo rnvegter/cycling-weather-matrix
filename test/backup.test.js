@@ -303,6 +303,53 @@ describe("the schedule", () => {
     srv.runScheduledBackup();
     assert.equal(srv.listBackups().length, 3);
   });
+
+  /* The regression this guards: the run used to end in a bare
+     catch(e){ return null; }, which is also what "nothing due" returns. A
+     backup directory that went unwritable stopped every scheduled backup with
+     nothing logged, nothing reported, and the Backup tab still saying it was
+     on. chmod cannot stop root, so this is skipped when run as root. */
+  test("a failing run is reported, not swallowed, and recovers on its own",
+       {skip: typeof process.getuid === "function" && process.getuid() === 0
+              && "chmod does not restrict root"}, () => {
+    clearBackups(); setState(someState());
+    const due = "2020-01-01T00:00:00.000Z";
+    srv.writeSchedule({enabled: true, everyHours: 1, keep: 10, lastAt: due});
+
+    const errors = [], logs = [];
+    const oe = console.error, ol = console.log;
+    console.error = (...a) => errors.push(a.join(" "));
+    console.log = (...a) => logs.push(a.join(" "));
+    fs.chmodSync(srv.BACKUP_DIR, 0o555);          // the unplugged or full disk
+    try{
+      assert.equal(srv.runScheduledBackup(), null, "nothing could be written");
+      srv.runScheduledBackup();
+      srv.runScheduledBackup();
+
+      const f = srv.lastScheduleFailure();
+      assert.ok(f, "the failure is recorded rather than thrown away");
+      assert.match(f.message, /EACCES|EPERM/, "and says why");
+      assert.equal(f.dir, srv.BACKUP_DIR, "and where");
+      assert.equal(errors.length, 1, "logged once for three failing ticks, not three times");
+      assert.match(errors[0], /Scheduled backup failed/);
+      assert.equal(srv.readSchedule().lastAt, due,
+        "the clock does not move on a failure, so the next tick retries");
+      assert.equal(srv.listBackups().length, 0);
+    }finally{
+      fs.chmodSync(srv.BACKUP_DIR, 0o755);        // always, or cleanup cannot delete it
+      console.error = oe; console.log = ol;
+    }
+
+    // The disk is back: the very next tick writes, and says it recovered.
+    const recovered = [];
+    console.log = (...a) => recovered.push(a.join(" "));
+    try{
+      assert.ok(srv.runScheduledBackup(), "recovers without anyone intervening");
+    }finally{ console.log = ol; }
+    assert.equal(srv.lastScheduleFailure(), null, "and the failure clears");
+    assert.ok(recovered.some(l => /working again/.test(l)), "and the recovery is logged");
+    assert.ok(Date.parse(srv.readSchedule().lastAt) > Date.parse(due));
+  });
 });
 
 /* --- Limits ----------------------------------------------------- */

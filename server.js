@@ -549,6 +549,27 @@ function backupDue(sched, now){
   return now - last >= sched.everyHours * 3600 * 1000;
 }
 
+/* The scheduled run that is currently failing, if one is.
+
+   This used to be a bare `catch(e){ return null; }`, and null is also what
+   "nothing due" returns — so the ticker could not tell a failure from a quiet
+   tick, its own "Scheduled backup failed" log line could never fire, and a
+   backup directory that went unwritable (an external disk unplugged or full, a
+   bind mount with the wrong owner) stopped every scheduled backup without a
+   single trace anywhere. The Backup tab went on saying the schedule was on.
+
+   For a backup that is the worst failure there is, because you only find out
+   when you need the file that was never written. So a failure is now held
+   here, logged when it starts and again only if the reason changes (the tick
+   retries every five minutes and a line per tick would bury it), logged again
+   when it recovers, and reported to the Backup tab through /api/backups.
+
+   lastAt deliberately does not advance on failure. The run stays due, so it
+   retries every tick and succeeds the moment the disk is back, rather than
+   waiting out a full interval with nothing written. */
+let scheduleFailure = null;
+const lastScheduleFailure = () => scheduleFailure;
+
 function runScheduledBackup(now){
   const sched = readSchedule();
   if (!backupDue(sched, now == null ? Date.now() : now)) return null;
@@ -556,7 +577,20 @@ function runScheduledBackup(now){
   try{
     name = writeBackup("scheduled", {skipIfUnchanged: true});
     pruneBackups(sched.keep);
-  }catch(e){ return null; }
+  }catch(e){
+    const message = String((e && e.message) || e);
+    const at = new Date().toISOString();
+    if (!scheduleFailure || scheduleFailure.message !== message){
+      console.error(`Scheduled backup failed, retrying every ${SCHEDULE_TICK_MS / 60000} min: `
+                  + `${message} (backup directory ${BACKUP_DIR})`);
+    }
+    scheduleFailure = {since: scheduleFailure ? scheduleFailure.since : at, at, message, dir: BACKUP_DIR};
+    return null;
+  }
+  if (scheduleFailure){
+    console.log(`Scheduled backup working again; it had been failing since ${scheduleFailure.since}.`);
+    scheduleFailure = null;
+  }
   /* The clock moves on whether or not a file was written. Otherwise an
      unchanged state means "not due" is never satisfied and the scheduler
      re-checks, re-reads and re-compares the whole document every tick. */
@@ -667,6 +701,9 @@ const server = http.createServer(async (req, res) => {
         ok: true,
         dir: BACKUP_DIR,
         schedule: readSchedule(),
+        // Null when scheduled backups are healthy (or off); otherwise why they
+        // are not being written, so the Backup tab can say so.
+        scheduleFailure,
         keepMax: KEEP_MAX, everyHoursMin: EVERY_HOURS_MIN, everyHoursMax: EVERY_HOURS_MAX,
         backups: listBackups()
       }));
@@ -835,5 +872,5 @@ if (require.main === module){
 module.exports = {server, isServable, isBlockedAddress, checkedURL, get, clientIP,
                   rateLimited, RATE, BACKUP_RATE, toText, rank, sameOrigin,
                   BACKUP_DIR, BACKUP_NAME, backupPath, listBackups, pruneBackups, writeBackup,
-                  readSchedule, writeSchedule, backupDue, runScheduledBackup,
+                  readSchedule, writeSchedule, backupDue, runScheduledBackup, lastScheduleFailure,
                   KEEP_DEFAULT, KEEP_MAX, EVERY_HOURS_MIN, EVERY_HOURS_MAX};

@@ -1375,6 +1375,10 @@ label.wx-linkbtn { display: inline-block; }
 /* --- Sync state, quiet unless it needs you --- */
 .wx-sync { display: block; margin-top: var(--sp-2); font-family: var(--data); font-size: .66rem; }
 .wx-sync.is-error { color: var(--signal); }
+/* Backup errors — a failed "Back up now", and scheduled backups that have
+   stopped — were toggling this class onto a note with nothing behind it, so
+   they rendered in the same quiet grey as the help text around them. */
+.wx-note.is-error { color: var(--signal); }
 
 /* ---------- 23. The scorecard -------------------------------- */
 

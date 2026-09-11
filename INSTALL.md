@@ -456,14 +456,78 @@ For systemd, add it beside the existing `STATE_DIR` line:
 Environment=BACKUP_DIR=/var/lib/cycling-weather-matrix/backups
 ```
 
-For Docker, the volume that already carries the state carries the backups with it — they are
-inside it by default. To send them somewhere else, mount a second volume and point at it:
+#### Docker: by default, inside the state volume
+
+With the standard run line, backups go to `/state/backups` — inside the `cwem-state` volume,
+beside `state.json`. They survive updates, because the volume does. But a volume is Docker's
+storage rather than a folder you look at: on Linux it sits under
+`/var/lib/docker/volumes/cwem-state/_data/backups`, and on Docker Desktop it lives inside a
+virtual machine where the host cannot see it at all. To get them out:
 
 ```bash
-docker run -d --name cwem -p 8765:8765 \
-  -v cwem-state:/state -e STATE_DIR=/state \
-  -v cwem-backups:/backups -e BACKUP_DIR=/backups cycling-weather-matrix
+docker cp cwem:/state/backups ./cwem-backups
 ```
+
+#### Docker: in a folder on the host
+
+This is the better arrangement if you want to see the files, copy them off the machine, or
+include them in whatever already backs up the server. Mount a host folder at `/backups` and
+point `BACKUP_DIR` at it:
+
+```bash
+sudo mkdir -p /srv/cwem-backups
+sudo chown 1000:1000 /srv/cwem-backups
+
+docker run -d --name cwem --restart unless-stopped \
+  -p 127.0.0.1:8765:8765 \
+  -v cwem-state:/state -e STATE_DIR=/state \
+  -v /srv/cwem-backups:/backups:Z -e BACKUP_DIR=/backups \
+  cycling-weather-matrix
+```
+
+Both of the lines before `docker run` are required. Tested against a real container, a
+host folder needs **two things, independently**, and missing either one gives
+`EACCES: permission denied` on every backup:
+
+| Host folder | without `:Z` | with `:Z` |
+|---|---|---|
+| owned by root (what `mkdir` gives you) | fails | fails |
+| owned by `1000:1000` | fails where SELinux is on | **works** |
+
+- **Ownership `1000:1000`.** The app runs as the `node` user inside the container, which is
+  uid 1000. A bind mount keeps the host's ownership, so a folder `sudo mkdir` just made is
+  root's, and `node` cannot write to it. Nor can you skip the `mkdir`: Docker creates a missing
+  host path owned by root, which fails the same way.
+- **`:Z` on the mount.** On Fedora, RHEL, Rocky, Alma and anything else with SELinux
+  enforcing, a container cannot write to a host folder that has not been labelled for it —
+  whatever the Unix permissions say. `:Z` does the labelling. On Debian and Ubuntu there is no
+  SELinux and Docker ignores it, so it is safe to leave in everywhere.
+
+On a single-user Linux box the first account is usually uid 1000 too, so the files come out
+owned by you and readable without `sudo`. Check with `id -u`.
+
+Rootless Podman maps users differently, so `chown 1000:1000` is not the answer there. Use
+`:Z,U` instead, which lets Podman set the ownership itself:
+
+```bash
+podman run -d --name cwem -p 127.0.0.1:8765:8765 \
+  -v cwem-state:/state -e STATE_DIR=/state \
+  -v /srv/cwem-backups:/backups:Z,U -e BACKUP_DIR=/backups \
+  cycling-weather-matrix
+```
+
+The files then belong to a mapped uid on the host rather than to you; read them with
+`podman unshare ls -l /srv/cwem-backups`, or as root.
+
+**Then check it took.** The startup log names the folder it is using, and a backup made by hand
+should appear on the host straight away:
+
+```bash
+docker logs cwem | grep Backups       # Backups in /backups — ...
+ls -l /srv/cwem-backups                # after pressing Back up now on the Backup tab
+```
+
+If **Back up now** reports `EACCES`, it is one of the two things above.
 
 **Scheduled backups are off until you turn them on**, on the Backup tab. The schedule is kept
 by the server rather than the browser, so it runs whether or not a tab is open — and it lives

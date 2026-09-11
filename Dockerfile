@@ -11,7 +11,14 @@ COPY . .
 # error on every save. And updating a container means replacing it, not
 # restarting it, so anything inside the container is discarded on every update.
 # Mount a named volume here: -v cwem-state:/state
-RUN mkdir -p /state && chown node:node /state
+#
+# /backups exists for the same reason. Point BACKUP_DIR at it and mount a
+# folder from the host there, and your backups live outside the container
+# where you can see them, copy them and back THEM up. It has to exist in the
+# image, owned by node: mount something at a path the image lacks and Docker
+# creates it owned by root, the node process cannot write to it, and every
+# backup — scheduled ones included — fails with EACCES.
+RUN mkdir -p /state /backups && chown node:node /state /backups
 VOLUME ["/state"]
 
 ENV PORT=8765 HOST=0.0.0.0 STATE_DIR=/state
