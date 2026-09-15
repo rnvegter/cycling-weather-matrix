@@ -125,26 +125,160 @@ function simplifyTrack(points, spacing = 50, max = 2500){
   return keep.map(i => points[i]);
 }
 
+/* --- Climbing ----------------------------------------------------
+
+   Measured on the shape of the road, not point to point.
+
+   The count this replaces added every step between consecutive points that
+   rose more than a metre. On a real recording that is wrong both ways at once.
+   A device logging every second moves a fraction of a metre per point up a
+   steady 5% climb, so every step fell under the metre and a clean 150 m climb
+   read 0 m. And GPS elevation jitters by more than a metre from one point to
+   the next, so a noisy recording of the same climb read 365 m. Only sparse
+   route-planner files, whose points sit far enough apart for real climbing to
+   clear the metre, came out right.
+
+   So the elevation is first laid out against distance: averaged into 20 m
+   bins, gaps interpolated, then smoothed over 100 m or more (see
+   smoothingWindow). Averaging is what beats GPS noise, and working in
+   distance rather than points means a recording every 5 m, a route file
+   every 400 m and a favourite thinned to 50 m all describe the same road the
+   same way. Then climbing is counted
+   between turning points, and a turn only counts once the road has come back
+   by at least 2 m — anything smaller is left as noise. That is the same
+   hysteresis a GPS unit's own total uses. It costs a little on the smallest
+   bumps — a canal bridge reads a few metres short — and gains everything on
+   real climbs. */
+const PROFILE_STEP_M = 20;
+const SMOOTH_MIN_M = 100;            // the window every track gets
+const SMOOTH_MAX_M = 400;            // and the most a very noisy one gets
+const NOISE_TARGET_M = 0.4;          // residual noise the window aims for
+const DENSE_TRACK_M = 60;            // points closer than this are a recording
+const CLIMB_TURN_M = 2;
+
+/* How much smoothing this particular track needs.
+
+   A barometric recording and one from a phone with poor reception differ by
+   a factor of ten in elevation noise, and one window cannot suit both: wide
+   enough for the phone flattens the bridges on the clean one, and narrow
+   enough for the bridges lets the phone invent tens of metres of climbing on
+   a dead-flat road. So the noise is measured from the track itself — the
+   spread of second differences between neighbouring points, which a steady
+   gradient cancels out of — and the window is widened until what is left
+   should be under about 0.4 m.
+
+   Only for recordings. A route planner's file puts points hundreds of metres
+   apart with elevation from a terrain model: there is no noise to measure,
+   and at that spacing the second differences are the road genuinely
+   curving over a hill, which would be misread as noise and smoothed away. */
+function smoothingWindow(points, cumKm){
+  const e = [], x = [];
+  for (let i = 0; i < points.length; i++){
+    const v = points[i].ele;
+    if (v != null && Number.isFinite(v)){ e.push(v); x.push(cumKm[i] * 1000); }
+  }
+  if (e.length < 20) return SMOOTH_MIN_M;
+  const gaps = [];
+  for (let i = 1; i < x.length; i++) gaps.push(x[i] - x[i - 1]);
+  gaps.sort((a, b) => a - b);
+  const spacing = Math.max(1, gaps[gaps.length >> 1]);
+  if (spacing > DENSE_TRACK_M) return SMOOTH_MIN_M;
+
+  const d2 = [];
+  for (let i = 1; i < e.length - 1; i++) d2.push(Math.abs(e[i + 1] - 2 * e[i] + e[i - 1]));
+  d2.sort((a, b) => a - b);
+  // Median absolute second difference → standard deviation of the noise.
+  const sigma = d2[d2.length >> 1] / 0.6745 / Math.sqrt(6);
+  const needed = spacing * Math.pow(sigma / NOISE_TARGET_M, 2);
+  return Math.min(SMOOTH_MAX_M, Math.max(SMOOTH_MIN_M, needed));
+}
+
+function elevationProfile(points, cumKm){
+  const totalM = cumKm[cumKm.length - 1] * 1000;
+  const n = Math.max(2, Math.floor(totalM / PROFILE_STEP_M) + 1);
+  const sum = new Float64Array(n), count = new Uint32Array(n);
+  for (let i = 0; i < points.length; i++){
+    const e = points[i].ele;
+    if (e == null || !Number.isFinite(e)) continue;
+    const b = Math.min(n - 1, Math.round(cumKm[i] * 1000 / PROFILE_STEP_M));
+    sum[b] += e; count[b]++;
+  }
+
+  // Bins with no point get a straight line between their neighbours, which
+  // is exactly what a sparse route file means between two of its points.
+  const raw = new Float64Array(n);
+  let prev = -1;
+  for (let b = 0; b < n; b++){
+    if (!count[b]) continue;
+    raw[b] = sum[b] / count[b];
+    if (prev < 0) for (let k = 0; k < b; k++) raw[k] = raw[b];
+    else for (let k = prev + 1; k < b; k++)
+      raw[k] = raw[prev] + (raw[b] - raw[prev]) * (k - prev) / (b - prev);
+    prev = b;
+  }
+  if (prev < 0) return null;
+  for (let k = prev + 1; k < n; k++) raw[k] = raw[prev];
+
+  /* A centred moving average whose window narrows symmetrically at the ends.
+     A window that simply ran off the end would average the finish of a climb
+     with the road below it and shave metres off every route that ends high. */
+  const half = Math.round(smoothingWindow(points, cumKm) / 2 / PROFILE_STEP_M);
+  const pre = new Float64Array(n + 1);
+  for (let b = 0; b < n; b++) pre[b + 1] = pre[b] + raw[b];
+  const smooth = new Float64Array(n);
+  for (let b = 0; b < n; b++){
+    const h = Math.min(half, b, n - 1 - b);
+    smooth[b] = (pre[b + h + 1] - pre[b - h]) / (2 * h + 1);
+  }
+  return smooth;
+}
+
+function climbFromProfile(prof){
+  if (!prof || prof.length < 2) return {up: 0, down: 0};
+  let up = 0, down = 0;
+  let dir = 0, anchor = prof[0], run = prof[0], lo = prof[0], hi = prof[0];
+  for (let i = 1; i < prof.length; i++){
+    const e = prof[i];
+    if (dir === 0){
+      // No direction yet: wait until the road has clearly gone one way.
+      if (e < lo) lo = e;
+      if (e > hi) hi = e;
+      if (e - lo >= CLIMB_TURN_M){ dir = 1; anchor = lo; run = e; }
+      else if (hi - e >= CLIMB_TURN_M){ dir = -1; anchor = hi; run = e; }
+    } else if (dir === 1){
+      if (e > run) run = e;
+      else if (run - e >= CLIMB_TURN_M){ up += run - anchor; anchor = run; dir = -1; run = e; }
+    } else {
+      if (e < run) run = e;
+      else if (e - run >= CLIMB_TURN_M){ down += anchor - run; anchor = run; dir = 1; run = e; }
+    }
+  }
+  if (dir === 1) up += run - anchor;
+  else if (dir === -1) down += anchor - run;
+  return {up, down};
+}
+
 function routeStats(points){
-  let dist = 0, ascent = 0, descent = 0;
+  let dist = 0;
   let minEle = Infinity, maxEle = -Infinity;
   const cum = [0];
-  for (let i = 1; i < points.length; i++){
-    dist += haversine(points[i-1], points[i]);
-    cum.push(dist);
-    const a = points[i-1].ele, b = points[i].ele;
-    if (a != null && b != null){
-      const d = b - a;
-      // A metre of noise per point adds up to a fictional mountain over
-      // thousands of points, so only count moves that are actually climbs.
-      if (d > 1) ascent += d; else if (d < -1) descent += -d;
+  for (let i = 0; i < points.length; i++){
+    if (i > 0){
+      dist += haversine(points[i - 1], points[i]);
+      cum.push(dist);
     }
-    if (points[i].ele != null){
-      minEle = Math.min(minEle, points[i].ele);
-      maxEle = Math.max(maxEle, points[i].ele);
+    // From the first point on. This loop used to start at the second, so a
+    // ride that set off from its highest point reported the wrong summit —
+    // and the summit is what the temperature is corrected to.
+    const e = points[i].ele;
+    if (e != null && Number.isFinite(e)){
+      minEle = Math.min(minEle, e);
+      maxEle = Math.max(maxEle, e);
     }
   }
   const hasEle = Number.isFinite(minEle);
+  const climb = hasEle ? climbFromProfile(elevationProfile(points, cum)) : {up: 0, down: 0};
+  const ascent = climb.up, descent = climb.down;
   return {
     distance: dist, cum, ascent, descent,
     minEle: hasEle ? minEle : null, maxEle: hasEle ? maxEle : null,

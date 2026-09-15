@@ -233,6 +233,17 @@ loaded the route to find. Each leg gets its own position, elevation, heading, an
 arrived at with a gradient-adjusted speed so a col is reached when you'd actually reach it.
 One forecast call covers every leg.
 
+How much a route climbs is measured on the shape of the road, not point to point. Counting
+every rise between consecutive points goes wrong both ways on a real recording: a device
+logging every second moves a fraction of a metre per point up a steady climb, so a clean
+150 m climb read 0 m, while GPS elevation jitters enough that a noisy recording of the same
+climb read 365 m. So elevation is laid out against distance, averaged and smoothed — more for a
+noisy recording, as measured from the track itself, and not at all beyond that for a route
+planner's terrain-model file — and a climb only counts once the road has turned back by 2 m.
+Recordings, route files and favourites now agree on the same road to within a few metres. The
+one compromise is small bumps under poor GPS reception: an 8 m bridge reads short rather than a
+flat road reading hilly.
+
 Climbing and descending are treated as opposite problems, which they are: climbing at 7% is
 the warmest you'll be all day — hard effort, low speed, almost no airflow — and the descent
 that follows is the cold one.
