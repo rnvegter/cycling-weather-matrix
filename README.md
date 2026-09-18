@@ -194,8 +194,9 @@ one you can state from experience when you have no idea how long a route will ta
 the usual case for a route you have not ridden. Give all three and the two facts win, and it
 says so rather than quietly ignoring what you typed.
 
-Wind gets a map, a compass rose, a **Beaufort** force with what that force means on a bike, and a
-bearing to set off on. The rule is out into it, home with it: the return leg is the one ridden
+Wind gets a map, a **Beaufort** force with what that force means on a bike, and a bearing to
+set off on. The map carries the direction on its own — the compass rose that used to sit beside
+it said the same thing a second time. The rule is out into it, home with it: the return leg is the one ridden
 tired, and a headwind there is what actually makes people cold. The bearing follows the wind
 in the **second half** of the ride rather than the average, because that is the wind the way
 home is ridden in — and when the two differ by more than 40° the app says so rather than
