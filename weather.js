@@ -132,46 +132,6 @@ function beaufort(kmh){
    stops 350° and 10° reading as 340° apart instead of 20°. */
 const angleGap = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
 
-/* A compass showing where the wind comes from, and the bearing to set off on.
-   Out into the wind, home with it: the alternative is arriving cold and tired
-   on the leg where you're slowest and least dressed for it. */
-function compassRose(fromDeg, outboundDeg, size){
-  const s = size || 132, c = s / 2, r = c - 20;
-  const pt = (deg, rad) => {
-    const a = (deg - 90) * Math.PI / 180;
-    return [c + Math.cos(a) * rad, c + Math.sin(a) * rad];
-  };
-  const ticks = Array.from({length:16}, (_, i) => {
-    const deg = i * 22.5, major = i % 4 === 0;
-    const [x1,y1] = pt(deg, r), [x2,y2] = pt(deg, r - (major ? 7 : 3.5));
-    return `<path d="M${x1.toFixed(1)} ${y1.toFixed(1)}L${x2.toFixed(1)} ${y2.toFixed(1)}"
-      stroke="var(--line)" stroke-width="${major ? 1.6 : 1}"/>`;
-  }).join("");
-  const label = (deg, txt) => {
-    const [x,y] = pt(deg, r + 11);
-    return `<text x="${x.toFixed(1)}" y="${(y + 3.5).toFixed(1)}" text-anchor="middle"
-      font-size="10" font-family="var(--data)" fill="var(--text-dim)">${txt}</text>`;
-  };
-  // The wind blows towards fromDeg + 180.
-  const flow = (fromDeg + 180) % 360;
-  const [fx, fy] = pt(flow, r - 12), [bx, by] = pt(fromDeg, r - 12);
-  const [ox, oy] = pt(outboundDeg, r - 26);
-
-  return `<svg viewBox="0 0 ${s} ${s}" width="${s}" height="${s}" class="wx-rose" aria-hidden="true">
-    <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="var(--line)"/>
-    ${ticks}
-    ${label(0,"N")}${label(90,"E")}${label(180,"S")}${label(270,"W")}
-    <defs><marker id="wx-arrow" viewBox="0 0 10 10" refX="8" refY="5"
-        markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-      <path d="M0 0 L10 5 L0 10 z" fill="var(--minus)"/></marker></defs>
-    <path d="M${bx.toFixed(1)} ${by.toFixed(1)}L${fx.toFixed(1)} ${fy.toFixed(1)}"
-      stroke="var(--minus)" stroke-width="2.5" marker-end="url(#wx-arrow)"/>
-    <path d="M${c} ${c}L${ox.toFixed(1)} ${oy.toFixed(1)}"
-      stroke="var(--temp)" stroke-width="2" stroke-dasharray="3 3"/>
-    <circle cx="${ox.toFixed(1)}" cy="${oy.toFixed(1)}" r="3.5" fill="var(--temp)"/>
-  </svg>`;
-}
-
 /* Small inline arrow for the hourly strip: points the way the air travels. */
 function windArrow(fromDeg, size){
   const s = size || 15;

@@ -53,7 +53,7 @@ function renderHistory(){
   if (!rows.length){
     el.innerHTML = `<p class="wx-empty">${
       list.length ? "Nothing matches that filter." :
-      "No rides yet. Work one out on the Ride tab and it will be kept here."}</p>`;
+      "No rides yet. Every ride you work out on the Ride tab is kept here, and waits until it has started before asking how it felt. For a ride you didn't plan here, use <b>Add a ride from GPX</b>."}</p>`;
     return;
   }
 

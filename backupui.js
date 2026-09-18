@@ -291,10 +291,9 @@ function renderBackup(){
     ? `${list.length} version${list.length === 1 ? "" : "s"} kept`
     : backupServer === false ? "no server — download only" : "";
 
-  const held = `<p class="wx-note">This browser is holding
-    <b>${bkCount(rides, "ride")}</b> and <b>${bkCount(items, "gear item")}</b>. Neither can be worked out again from
-    anything else: the gear list is your own calibration of what you own, and the history is
-    the only record of how the model has done.</p>`;
+  const favs = typeof loadFavourites === "function" ? loadFavourites().length : 0;
+  const held = `<p class="wx-note">This browser holds <b>${bkCount(rides, "ride")}</b>,
+    <b>${bkCount(items, "gear item")}</b> and <b>${bkCount(favs, "favourite")}</b>.</p>`;
 
   if (backupServer === null){
     el.innerHTML = `${held}<p class="wx-note">Looking for a server to keep versions on…</p>`;
@@ -312,7 +311,7 @@ function renderBackup(){
         <label class="wx-file" for="bkfile">Restore from a file</label>
         <input type="file" id="bkfile" accept=".json,application/json" class="wx-hidden">
       </div>
-      <p class="wx-note" id="bkstatus" style="margin-top:var(--sp-3)"></p>`;
+      <p class="wx-note" id="bkstatus" role="status" style="margin-top:var(--sp-3)"></p>`;
     wireBackup();
     return;
   }
@@ -325,7 +324,7 @@ function renderBackup(){
     <label class="wx-file" for="bkfile">Restore from a file</label>
     <input type="file" id="bkfile" accept=".json,application/json" class="wx-hidden">
   </div>
-  <p class="wx-note" id="bkstatus" style="margin-top:var(--sp-3)"></p>
+  <p class="wx-note" id="bkstatus" role="status" style="margin-top:var(--sp-3)"></p>
 
   <p class="wx-note"><b>Where they are kept.</b>
     <span class="wx-num">${backupState.dir || "—"}</span><br>

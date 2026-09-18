@@ -90,7 +90,7 @@
       </span>
     </div>
 
-    <div class="wx-grid wx-grid--2" style="margin-top:var(--sp-4)">
+    <div class="wx-grid wx-grid--3" style="margin-top:var(--sp-4)">
       <div>
         <span class="wx-label">Surface</span>
         <div class="wx-choice" data-group="type">
@@ -114,22 +114,30 @@
           <button class="wx-chip" data-v="exposed">Exposed</button>
         </div>
       </div>
-      <div>
-        <span class="wx-label">You run</span>
-        <div class="wx-choice" data-group="rider">
-          <button class="wx-chip" data-v="cold">Cold</button>
-          <button class="wx-chip" data-v="normal">Normal</button>
-          <button class="wx-chip" data-v="hot">Hot</button>
-        </div>
-      </div>
-      <div>
-        <span class="wx-label">Kit from</span>
-        <div class="wx-choice" data-group="mode">
-          <button class="wx-chip" data-v="wardrobe">My gear</button>
-          <button class="wx-chip" data-v="generic">Generic</button>
-        </div>
-      </div>
     </div>
+
+    <!-- Standing choices rather than per-ride ones, so they fold away. The
+         summary says what they are set to (paintSettings in app.js). -->
+    <details class="wx-more wx-settings">
+      <summary>Settings:&nbsp;<span id="settingsnow"></span></summary>
+      <div class="wx-grid wx-grid--2">
+        <div>
+          <span class="wx-label">You run</span>
+          <div class="wx-choice" data-group="rider">
+            <button class="wx-chip" data-v="cold">Cold</button>
+            <button class="wx-chip" data-v="normal">Normal</button>
+            <button class="wx-chip" data-v="hot">Hot</button>
+          </div>
+        </div>
+        <div>
+          <span class="wx-label">Kit from</span>
+          <div class="wx-choice" data-group="mode">
+            <button class="wx-chip" data-v="wardrobe">My gear</button>
+            <button class="wx-chip" data-v="generic">Generic</button>
+          </div>
+        </div>
+      </div>
+    </details>
 
     <div class="wx-bar-row">
       <button class="wx-btn wx-btn--primary" id="go">Read the weather</button>
@@ -139,7 +147,7 @@
       <button class="wx-btn wx-btn--quiet" id="gloves" aria-pressed="false"
               title="Bigger targets and type, for reading this with cold hands">Glove mode</button>
     </div>
-    <div id="status" class="wx-hidden"></div>
+    <div id="status" class="wx-hidden" role="status"></div>
   </div>
 
   <div id="out"></div>
@@ -154,11 +162,7 @@
       <span class="wx-eyebrow" style="margin:0" id="favcount"></span>
     </div>
     <p class="wx-note" style="margin-top:0">
-      Routes you ride again. <b>Ride now</b> puts one on the Ride tab — the route, where it
-      starts, the surface and your usual speed — and leaves the date and time to you. Add a GPX
-      here, or load one on the Ride tab and press <b>Save as favourite</b>. A recorded ride
-      brings its own average speed with it; a planned route uses the Ride tab's until you give
-      it one.
+      Routes you ride again. <b>Ride now</b> sets one up on the Ride tab; you pick the day and time.
     </p>
 
     <div class="wx-bar-row">
@@ -180,11 +184,7 @@
       <span class="wx-eyebrow" style="margin:0" id="histcount"></span>
     </div>
     <p class="wx-note" style="margin-top:0">
-      Every ride the model has worked out. Rate the ones you've actually ridden — that is what
-      corrects the rider setting, and it is a question you can only answer afterwards. Rides
-      still in the future wait here until their start time passes.
-      Import <strong>merges</strong> rather than replaces, so bringing a file over from another
-      browser adds to what's here instead of overwriting it.
+      Rate the rides you've done — that's how the advice learns how warm you run.
     </p>
 
     <div class="wx-bar-row">
@@ -197,13 +197,14 @@
       <label class="wx-btn" for="histgpx">Add a ride from GPX</label>
       <input type="file" id="histgpx" accept=".gpx,application/gpx+xml,text/xml" class="wx-hidden">
       <button id="histexport" class="wx-btn wx-btn--quiet">Export</button>
-      <label class="wx-file" for="histimport">Import</label>
+      <label class="wx-file" for="histimport"
+             title="Adds the rides in a file to the ones here. Nothing is replaced.">Import</label>
       <input type="file" id="histimport" accept="application/json" class="wx-hidden">
       <button id="histclear" class="wx-btn wx-btn--quiet">Clear all</button>
     </div>
 
     <p class="wx-note" id="histlearned"></p>
-    <div id="histstatus" class="wx-status wx-hidden"></div>
+    <div id="histstatus" class="wx-status wx-hidden" role="status"></div>
     <div id="histlist" class="wx-rides"></div>
   </div>
 </section>
@@ -215,10 +216,8 @@
       <h2 class="wx-heading">Does the model work?</h2>
       <span class="wx-eyebrow" id="scorecount" style="margin:0"></span>
     </div>
-    <p class="wx-note">Every other screen argues with the model's inputs. This one argues
-      with the model. It reads the rides you have rated and asks what they actually say:
-      how often it was called right, which conditions it is wrong in, and whether the
-      correction it draws from your ratings does any good on a ride it had not seen.</p>
+    <p class="wx-note">How often the advice matched how your rated rides felt, and where it
+      is off.</p>
     <div id="scorebody"></div>
   </div>
 </section>
@@ -231,10 +230,7 @@
       <span class="wx-eyebrow" style="margin:0" id="gearcount"></span>
     </div>
     <p class="wx-note" style="margin-top:0">
-      What the advice is drawn from. <b>In</b> means a garment is considered when picking kit;
-      <b>Out</b> leaves it in the wardrobe — for anything lent out, in the wash, or not packed
-      for a trip. Click a row to select it, or double-click it to edit. The bar is the ride-feel
-      range it covers, which is your calibration rather than the maker's air-temperature claim.
+      What the advice picks from. <b>Out</b> leaves a garment out of it; double-click a row to edit.
     </p>
 
     <div class="wx-bar-row">
@@ -252,7 +248,7 @@
       <button id="gearreset" class="wx-btn wx-btn--quiet">Reset</button>
     </div>
 
-    <div id="gearstatus" class="wx-status wx-hidden"></div>
+    <div id="gearstatus" class="wx-status wx-hidden" role="status"></div>
 
     <!-- ---- Add / edit ---- -->
     <div id="gearform" class="wx-form wx-hidden">

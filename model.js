@@ -39,6 +39,16 @@ function rampFor(t){
 /* Position on the ramp, 0–100%, for markers and range bars. */
 const rampPos = t => clamp((t - RAMP_MIN) / (RAMP_MAX - RAMP_MIN) * 100, 0, 100);
 
+/* The labels under the ramp, each placed by the same rampPos as the marker.
+   They used to be spaced evenly across the full width, but the ramp runs −5
+   to 30, so "25°" sat where 30° is and a 25° reading landed well to the left
+   of its own label. */
+const SCALE_TICKS = [-5, 5, 15, 25];
+function scaleMarkup(){
+  return `<div class="wx-scale" aria-hidden="true">${SCALE_TICKS.map(v =>
+    `<span style="left:${rampPos(v)}%">${v < 0 ? "−" : ""}${Math.abs(v)}&deg;</span>`).join("")}</div>`;
+}
+
 const BASE_SPEED = {road:27, gravel:22, mtb:16};
 const PACE_SPEED = {easy:0.85, steady:1, hard:1.12};
 

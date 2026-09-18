@@ -33,6 +33,19 @@ function syncPills(){
     row.querySelectorAll(".wx-chip").forEach(p =>
       p.setAttribute("aria-pressed", p.dataset.v === state[g] ? "true" : "false"));
   });
+  paintSettings();
+}
+
+/* How warm you run and where the kit comes from are standing choices, not
+   per-ride ones, so they sit folded away under Settings. The folded line
+   still says what they are set to, so nobody is advised on a setting they
+   cannot see. */
+function paintSettings(){
+  const el = document.getElementById("settingsnow");
+  if (!el) return;
+  const run = {cold: "run cold", normal: "run normal", hot: "run hot"}[state.rider] || "";
+  const kit = state.mode === "generic" ? "generic kit" : "my gear";
+  el.textContent = [run, kit].filter(Boolean).join(", ");
 }
 document.querySelectorAll(".wx-choice[data-group]").forEach(row => {
   row.addEventListener("click", e => {
@@ -41,6 +54,7 @@ document.querySelectorAll(".wx-choice[data-group]").forEach(row => {
     row.querySelectorAll(".wx-chip").forEach(p => p.setAttribute("aria-pressed", p === b ? "true" : "false"));
     state[row.dataset.group] = b.dataset.v;
     save();
+    paintSettings();
     if (["type","pace"].includes(row.dataset.group)) updateSpeedHint();
   });
 });
@@ -791,25 +805,11 @@ function render(f, w, opts, place, analysis){
       <b>${r.v > 0 ? "+" : "−"}${Math.abs(r1(r.v))}</b> ${r.label.toLowerCase()}
     </li>`).join("");
 
-  $("#out").innerHTML = `
-  <section class="wx-readout ${ramp}">
-    <p class="wx-eyebrow">${placeLabel(place)} &middot; ${fmtDay(w.times[0].slice(0,10))}
-       &middot; ${hhmm(w.startDT)}–${hhmm(w.endDT)} &middot; ${r1(opts.dist)} km</p>
-    <div class="wx-readout__row">
-      <div>
-        <span class="wx-readout__value">${f.feel}</span>
-        <span class="wx-readout__unit">&deg;C felt</span>
-      </div>
-      <div class="wx-readout__air">
-        ${r1(w.tStart)}&deg;C air, ${r1(w.tEnd)}&deg; by the end<br>
-        wind ${compass(w.dir)} ${Math.round(w.wind)} km/h${w.gust >= 40 ? `, gusts ${Math.round(w.gust)}` : ""}<br>
-        rain ${Math.round(w.prob)}%${w.precipTotal >= 0.1 ? `, ${r1(w.precipTotal)} mm` : ""}
-      </div>
-    </div>
-    <div class="wx-strip"><span class="wx-strip__mark" style="left:${rampPos(f.feel)}%"></span></div>
-    <div class="wx-scale"><span>&minus;5&deg;</span><span>5&deg;</span><span>15&deg;</span><span>25&deg;</span></div>
-  </section>
-
+  /* The order follows the question being asked at 06:40: how cold, what to
+     wear, what to carry, what to watch for — and only then the detail behind
+     it. The hours strip and the map used to sit between the reading and the
+     kit, and the warnings came after the route card, several screens down. */
+  const hoursCard = `
   <section class="wx-card wx-card--flat ${ramp}">
     <div class="wx-card__head">
       <h2 class="wx-heading">The next hours</h2>
@@ -829,13 +829,44 @@ function render(f, w, opts, place, analysis){
       w.outlook.some(h => !h.riding && h.prob >= 50)
         ? `, and it turns wet after you would be home, around ${fmtTime(w.outlook.find(h => !h.riding && h.prob >= 50).time)}`
         : ""}. Arrows point the way the wind is blowing.</p>
+  </section>`;
+
+  // A route whose kit changes along the way changes the answer itself, so it
+  // is said beside the kit rather than three cards further down.
+  const routeFlag = !analysis ? "" : analysis.error
+    ? `<p class="wx-alert"><b>Route check failed.</b> ${analysis.error}
+        The advice above still stands for the start point.</p>`
+    : analysis.changes
+      ? `<p class="wx-alert"><b>This kit doesn't hold for the whole route.</b> It reads
+          ${analysis.coldest.f.feel}&deg; at the coldest point, around
+          ${Math.round(analysis.coldest.fromKm)} km, against ${analysis.warmest.f.feel}&deg; at the
+          warmest. What to carry, and where to put it on, is under Along the route below.</p>`
+      : "";
+
+  const warnings = out.notes.map(n => `<p class="wx-alert">${n}</p>`).join("")
+    + watch.map(x => `<p class="wx-alert"><b>Watch.</b> ${x}</p>`).join("");
+
+  $("#out").innerHTML = `
+  <section class="wx-readout ${ramp}">
+    <p class="wx-eyebrow">${placeLabel(place)} &middot; ${fmtDay(w.times[0].slice(0,10))}
+       &middot; ${hhmm(w.startDT)}–${hhmm(w.endDT)} &middot; ${r1(opts.dist)} km</p>
+    <div class="wx-readout__row">
+      <div>
+        <span class="wx-readout__value">${f.feel}</span>
+        <span class="wx-readout__unit">&deg;C felt</span>
+      </div>
+      <div class="wx-readout__air">
+        ${r1(w.tStart)}&deg;C air, ${r1(w.tEnd)}&deg; by the end<br>
+        wind ${compass(w.dir)} ${Math.round(w.wind)} km/h${w.gust >= 40 ? `, gusts ${Math.round(w.gust)}` : ""}<br>
+        rain ${Math.round(w.prob)}%${w.precipTotal >= 0.1 ? `, ${r1(w.precipTotal)} mm` : ""}
+      </div>
+    </div>
+    <div class="wx-strip"><span class="wx-strip__mark" style="left:${rampPos(f.feel)}%"></span></div>
+    ${scaleMarkup()}
   </section>
 
   <section class="wx-card ${ramp}">
-    <div class="wx-card__head">
-      <h2 class="wx-heading">Wear</h2>
-      <span class="wx-eyebrow" style="margin:0">Head to feet</span>
-    </div>
+    <h2 class="wx-heading">Wear</h2>
     <div class="wx-kit">${kitRows(out.wear)}</div>
   </section>
 
@@ -849,6 +880,10 @@ function render(f, w, opts, place, analysis){
       </div>`).join("")}</div>
   </section>` : ""}
 
+  ${routeFlag}
+  ${warnings}
+  ${hoursCard}
+
   ${(() => {
     const bft = beaufort(w.wind), gustBft = beaufort(w.gust);
     // Ride out into the wind so the way home has it behind: the return leg is
@@ -858,10 +893,7 @@ function render(f, w, opts, place, analysis){
     const matters = bft.force >= 3;
     return `
   <section class="wx-card ${ramp}">
-    <div class="wx-card__head">
-      <h2 class="wx-heading">Wind, and which way to go</h2>
-      <span class="wx-eyebrow" style="margin:0">Out into it, home with it</span>
-    </div>
+    <h2 class="wx-heading">${matters ? "Wind, and which way to go" : "Wind"}</h2>
     ${(() => {
       // The bearing only means something if you can see where it points. With a
       // route loaded that is the route itself; without one, the start point.
@@ -880,9 +912,7 @@ function render(f, w, opts, place, analysis){
       </p>`;
     })()}
 
-    <div class="wx-windgrid">
-      <div class="wx-rosewrap">${compassRose(w.dir, outbound, 148)}</div>
-      <div>
+    <div>
         <div class="wx-bft">
           <span class="wx-bft__n">${bft.force}</span>
           <span class="wx-bft__u">Bft</span>
@@ -918,16 +948,13 @@ function render(f, w, opts, place, analysis){
           you will actually be riding home in.</p>` : ""}`
         : `<p class="wx-note">Force ${bft.force} is not worth planning a route around.
            Go whichever way you like.</p>`}
-      </div>
     </div>
   </section>`;
   })()}
 
   ${(() => {
-    if (!analysis) return "";
-    if (analysis.error)
-      return `<p class="wx-alert"><b>Route check failed.</b> ${analysis.error}
-        The advice above still stands for the start point.</p>`;
+    // A failed check is already said beside the kit, in routeFlag.
+    if (!analysis || analysis.error) return "";
 
     const {legs, coldest, warmest, extra, shed, swaps, changes, spread, wetThrough} = analysis;
     const consistent = !changes;
@@ -1038,9 +1065,6 @@ function render(f, w, opts, place, analysis){
     })()}
   </section>`;
   })()}
-
-  ${out.notes.map(n => `<p class="wx-alert">${n}</p>`).join("")}
-  ${watch.map(x => `<p class="wx-alert"><b>Watch.</b> ${x}</p>`).join("")}
 
   <h2 class="wx-heading" style="margin-top:var(--sp-6)">Air &rarr; ride-feel</h2>
   <p class="wx-eyebrow">${r1(f.air)}&deg;C air, ${f.feel}&deg; felt${

@@ -42,6 +42,8 @@
   --body: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --data: "IBM Plex Mono", ui-monospace, "SF Mono", monospace;
 
+  --step--3: 0.62rem;   /* scale ticks, table heads — the smallest text there is */
+  --step--2: 0.7rem;    /* metadata lines, small labels */
   --step--1: 0.78rem;
   --step-0:  0.95rem;
   --step-1:  1.15rem;
@@ -82,7 +84,7 @@
   --surface-2: #F2F5F4;
   --line:      #D2D8D9;
   --text:      #14202A;
-  --text-dim:  #5E6D78;
+  --text-dim:  #56646F;   /* 5.0:1 on --bg; #5E6D78 was 4.4 */
   --shadow: none;
 }
 
@@ -93,7 +95,7 @@
     --surface-2: #F2F5F4;
     --line:      #D2D8D9;
     --text:      #14202A;
-    --text-dim:  #5E6D78;
+    --text-dim:  #56646F;   /* 5.0:1 on --bg; #5E6D78 was 4.4 */
     --shadow: none;
   }
 }
@@ -248,14 +250,18 @@ body {
   transition: left .3s var(--ease);
 }
 
+/* Each label is placed at its own value by scaleMarkup() in model.js, so the
+   row is a positioning box rather than an evenly spaced flex row. */
 .wx-scale {
-  display: flex;
-  justify-content: space-between;
+  position: relative;
+  height: 1.4em;
   font-family: var(--data);
-  font-size: .62rem;
+  font-size: var(--step--3);
   color: var(--text-dim);
   margin-top: var(--sp-1);
 }
+.wx-scale > span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+.wx-scale > span:first-child { transform: none; }
 
 /* ---------- 5. Surfaces -------------------------------------- */
 /* Every card carries a temperature edge on its left. The chrome
@@ -383,7 +389,7 @@ body {
 
 .wx-bar__range {
   font-family: var(--data);
-  font-size: .62rem;
+  font-size: var(--step--3);
   opacity: .7;
   margin-left: var(--sp-2);
 }
@@ -467,7 +473,7 @@ body {
 .wx-table th {
   font-family: var(--data);
   font-weight: 500;
-  font-size: .64rem;
+  font-size: var(--step--3);
   letter-spacing: .12em;
   text-transform: uppercase;
   color: var(--text-dim);
@@ -507,6 +513,8 @@ body {
    Bigger targets, bigger type, more contrast, fewer taps. */
 
 [data-touch="gloves"] {
+  --step--3: 0.78rem;
+  --step--2: 0.84rem;
   --step--1: 0.9rem;
   --step-0:  1.1rem;
   --step-1:  1.35rem;
@@ -573,6 +581,12 @@ body {
   cursor: pointer;
 }
 .wx-tab[aria-pressed="true"] { color: var(--text); border-bottom-color: var(--temp); }
+/* Tighter tabs on a phone, so the six of them wrap onto as few lines as they
+   can. At full size and padding they ran to three. */
+@media (max-width: 30rem) {
+  .wx-tabs { gap: var(--sp-1); }
+  .wx-tab { font-size: var(--step-0); letter-spacing: .03em; padding: 0 var(--sp-2); }
+}
 
 /* --- Fields --- */
 
@@ -724,6 +738,8 @@ input[type="checkbox"] { accent-color: var(--temp); width: auto; min-height: 0; 
 }
 .wx-more > summary:hover { color: var(--text); }
 .wx-more[open] > summary { color: var(--text); margin-bottom: var(--sp-3); }
+.wx-settings { margin-top: var(--sp-2); }
+.wx-settings > summary span { color: var(--text-dim); letter-spacing: .06em; }
 
 /* --- Tables that must scroll rather than squash the page --- */
 
@@ -781,7 +797,7 @@ input[type="checkbox"] { accent-color: var(--temp); width: auto; min-height: 0; 
 .wx-toggle:hover { border-color: var(--text); }
 [data-touch="gloves"] .wx-toggle { min-height: var(--tap); min-width: 4rem; }
 .wx-gear .wx-item { font-weight: 500; color: var(--text); }
-.wx-gear .wx-flagcell { font-family: var(--data); font-size: .62rem; color: var(--text-dim); white-space: nowrap; }
+.wx-gear .wx-flagcell { font-family: var(--data); font-size: var(--step--3); color: var(--text-dim); white-space: nowrap; }
 
 /* --- Flags, beside the model they belong to ---------------------
    They had a column of their own, which charged 114px of table width to show
@@ -791,7 +807,7 @@ input[type="checkbox"] { accent-color: var(--temp); width: auto; min-height: 0; 
   display: inline-block;
   margin-left: 1px;
   padding: 1px 5px;
-  font-family: var(--data); font-size: .6rem; font-weight: 400;
+  font-family: var(--data); font-size: var(--step--3); font-weight: 400;
   letter-spacing: .04em;
   color: var(--text-dim);
   border: 1px solid var(--line);
@@ -822,7 +838,7 @@ tr.is-off .wx-badge { opacity: .55; }
 .wx-detail__row { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); }
 .wx-detail__cell { display: flex; align-items: baseline; gap: var(--sp-2); font-size: var(--step--1); }
 .wx-detail__k {
-  font-family: var(--display); font-size: .68rem; font-weight: 600;
+  font-family: var(--display); font-size: var(--step--2); font-weight: 600;
   letter-spacing: .05em; text-transform: uppercase;
   color: var(--text-dim);
   cursor: help;
@@ -834,13 +850,13 @@ tr.is-off .wx-badge { opacity: .55; }
 }
 .wx-detail__hint {
   margin: var(--sp-2) 0 0;
-  font-family: var(--data); font-size: .62rem; color: var(--text-dim);
+  font-family: var(--data); font-size: var(--step--3); color: var(--text-dim);
 }
 
 /* The range column drawn rather than written: same band chart as the
    torso lanes, so a gap in the wardrobe is visible as a gap. */
 .wx-gear .wx-lane { height: 18px; min-width: 8rem; margin: 0; }
-.wx-gear .wx-bar { font-size: .62rem; padding: 0 var(--sp-1); }
+.wx-gear .wx-bar { font-size: var(--step--3); padding: 0 var(--sp-1); }
 
 .wx-bar--empty { background: none; border: 1px dashed var(--line); color: var(--text-dim); }
 
@@ -897,7 +913,7 @@ tr.is-off .wx-badge { opacity: .55; }
 
 .wx-badge {
   font-family: var(--data);
-  font-size: .62rem; font-weight: 600;
+  font-size: var(--step--3); font-weight: 600;
   letter-spacing: .12em; text-transform: uppercase;
   padding: 2px var(--sp-2);
   border: 1px solid currentColor;
@@ -960,7 +976,7 @@ tr.is-off .wx-badge { opacity: .55; }
 
 .wx-hour__time {
   font-family: var(--data);
-  font-size: .68rem;
+  font-size: var(--step--2);
   letter-spacing: .04em;
   color: var(--text-dim);
 }
@@ -972,9 +988,9 @@ tr.is-off .wx-badge { opacity: .55; }
 }
 .wx-hour__wind {
   display: flex; align-items: center; gap: 2px;
-  font-size: .66rem; color: var(--text-dim);
+  font-size: var(--step--2); color: var(--text-dim);
 }
-.wx-hour__rain { font-family: var(--data); font-size: .64rem; color: var(--text-dim); }
+.wx-hour__rain { font-family: var(--data); font-size: var(--step--3); color: var(--text-dim); }
 .wx-hour__rain.is-wet { color: var(--minus); font-weight: 600; }
 
 .wx-ico { display: block; }
@@ -982,22 +998,10 @@ tr.is-off .wx-badge { opacity: .55; }
 
 /* --- Wind and route --- */
 
-.wx-windgrid {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: var(--sp-5);
-  align-items: center;
-}
-@media (max-width: 30rem) {
-  .wx-windgrid { grid-template-columns: 1fr; gap: var(--sp-3); justify-items: center; }
-  .wx-windgrid > div:last-child { justify-self: stretch; }
-}
-.wx-rosewrap { line-height: 0; }
-.wx-rose { display: block; }
 
 /* Beaufort, because that is the unit the forecast gets discussed in here,
    and the number carries more than a speed does. */
-.wx-bft { display: flex; align-items: baseline; gap: var(--sp-2); flex-wrap: wrap; }
+.wx-bft { display: flex; align-items: baseline; gap: var(--sp-2); flex-wrap: wrap; margin-top: var(--sp-3); }
 .wx-bft__n {
   font-family: var(--data);
   font-weight: 600;
@@ -1077,7 +1081,7 @@ tr.is-off .wx-badge { opacity: .55; }
   top: 2px;
   transform: translateX(-50%);
   font-family: var(--data);
-  font-size: .56rem;
+  font-size: var(--step--3);
   font-weight: 400;
   letter-spacing: 0;
   color: var(--text-dim);
@@ -1167,7 +1171,7 @@ tr.is-off .wx-badge { opacity: .55; }
 
 .wx-leg__km {
   font-family: var(--data);
-  font-size: .62rem;
+  font-size: var(--step--3);
   letter-spacing: .04em;
   color: var(--text);
 }
@@ -1180,12 +1184,12 @@ tr.is-off .wx-badge { opacity: .55; }
 }
 .wx-leg__air, .wx-leg__ele, .wx-leg__time {
   font-family: var(--data);
-  font-size: .58rem;
+  font-size: var(--step--3);
   color: var(--text-dim);
 }
 .wx-leg__wind {
   display: flex; align-items: center; gap: 2px;
-  font-size: .6rem; color: var(--text-dim);
+  font-size: var(--step--3); color: var(--text-dim);
 }
 /* Riding into it is the case worth seeing without reading the number. */
 .wx-leg__wind .wx-num { color: var(--minus); font-weight: 600; }
@@ -1250,7 +1254,7 @@ tr.is-off .wx-badge { opacity: .55; }
 .wx-map__credit {
   position: absolute; right: 0; bottom: 0;
   margin: 0; padding: 1px 5px;
-  font-size: .58rem;
+  font-size: var(--step--3);
   color: var(--text-dim);
   background: color-mix(in srgb, var(--surface) 78%, transparent);
 }
@@ -1279,7 +1283,7 @@ tr.is-off .wx-badge { opacity: .55; }
   font-size: var(--step--1);
   color: var(--text-dim);
 }
-.wx-agree b { font-family: var(--data); font-size: .72rem; letter-spacing: .06em; }
+.wx-agree b { font-family: var(--data); font-size: var(--step--2); letter-spacing: .06em; }
 .wx-agree.is-tight { border-left-color: var(--t-cool); }
 .wx-agree.is-tight b { color: var(--t-cool); }
 .wx-agree.is-loose { border-left-color: var(--signal); }
@@ -1306,7 +1310,7 @@ tr.is-off .wx-badge { opacity: .55; }
   gap: var(--sp-3);
 }
 .wx-ride__when {
-  font-family: var(--data); font-size: .74rem; letter-spacing: .06em;
+  font-family: var(--data); font-size: var(--step--2); letter-spacing: .06em;
   text-transform: uppercase; color: var(--text); margin: 0;
 }
 .wx-ride__where { font-size: var(--step--1); color: var(--text-dim); margin: 2px 0 0; }
@@ -1315,7 +1319,7 @@ tr.is-off .wx-badge { opacity: .55; }
 .wx-tag {
   display: inline-block; vertical-align: 1px; margin-left: .35em;
   padding: .1em .45em; border: 1px solid var(--line); border-radius: 2px;
-  font-family: var(--display); font-size: .62rem; font-weight: 500;
+  font-family: var(--display); font-size: var(--step--3); font-weight: 500;
   letter-spacing: .04em; text-transform: uppercase; color: var(--text-dim);
   cursor: help;
 }
@@ -1324,12 +1328,12 @@ tr.is-off .wx-badge { opacity: .55; }
   font-family: var(--data); font-weight: 600; font-size: var(--step-2); line-height: 1;
 }
 .wx-ride__feel small {
-  display: block; font-family: var(--display); font-size: .62rem; font-weight: 500;
+  display: block; font-family: var(--display); font-size: var(--step--3); font-weight: 500;
   letter-spacing: .08em; text-transform: uppercase; color: var(--text-dim); margin-top: 3px;
 }
 
 .wx-ride__meta {
-  font-family: var(--data); font-size: .66rem; color: var(--text-dim);
+  font-family: var(--data); font-size: var(--step--2); color: var(--text-dim);
   margin: var(--sp-2) 0 0;
 }
 .wx-ride__kit { font-size: var(--step--1); color: var(--text-dim); margin: var(--sp-1) 0 0; }
@@ -1367,7 +1371,7 @@ tr.is-off .wx-badge { opacity: .55; }
   font-family: var(--display); font-size: var(--step-1); font-weight: 600;
   letter-spacing: .03em; color: var(--text); margin: 0; overflow-wrap: anywhere;
 }
-.wx-fav__meta { font-family: var(--data); font-size: .7rem; color: var(--text-dim); margin: 0; }
+.wx-fav__meta { font-family: var(--data); font-size: var(--step--2); color: var(--text-dim); margin: 0; }
 .wx-fav__field { display: flex; flex-direction: column; gap: var(--sp-1); }
 .wx-fav__speed { max-width: 9rem; }
 .wx-fav__foot {
@@ -1380,13 +1384,13 @@ tr.is-off .wx-badge { opacity: .55; }
   .wx-fav__body { gap: var(--sp-3); }
 }
 
-.wx-choice--tight .wx-chip { min-height: 30px; padding: 0 var(--sp-2); font-size: .72rem; }
+.wx-choice--tight .wx-chip { min-height: 30px; padding: 0 var(--sp-2); font-size: var(--step--2); }
 [data-touch="gloves"] .wx-choice--tight .wx-chip { min-height: var(--tap); font-size: var(--step--1); }
 
 .wx-verdict-set { font-size: var(--step--1); color: var(--text-dim); }
 .wx-verdict-set b { color: var(--temp); font-weight: 600; }
 .wx-waiting {
-  font-family: var(--data); font-size: .66rem; letter-spacing: .08em;
+  font-family: var(--data); font-size: var(--step--2); letter-spacing: .08em;
   text-transform: uppercase; color: var(--text-dim);
 }
 
@@ -1417,7 +1421,7 @@ tr.is-off .wx-badge { opacity: .55; }
 label.wx-linkbtn { display: inline-block; }
 
 /* --- Sync state, quiet unless it needs you --- */
-.wx-sync { display: block; margin-top: var(--sp-2); font-family: var(--data); font-size: .66rem; }
+.wx-sync { display: block; margin-top: var(--sp-2); font-family: var(--data); font-size: var(--step--2); }
 .wx-sync.is-error { color: var(--signal); }
 /* Backup errors — a failed "Back up now", and scheduled backups that have
    stopped — were toggling this class onto a note with nothing behind it, so
@@ -1457,7 +1461,7 @@ label.wx-linkbtn { display: inline-block; }
   display: block;
   /* Below the bottom of the scale on purpose: it sits under a figure and must
      read as its footnote, not compete with it. Same trick as .wx-sync. */
-  font-family: var(--data); font-size: .68rem; color: var(--text-dim);
+  font-family: var(--data); font-size: var(--step--2); color: var(--text-dim);
 }
 
 /* How the verdicts fell. Bars rather than a pie because the question is which
