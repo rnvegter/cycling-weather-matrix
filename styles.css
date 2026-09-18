@@ -31,9 +31,12 @@
 
   /* Set per component to tint its edge. Defaults to mild. */
   --temp: var(--t-mild);
+  --temp-ink: var(--t-mild-ink);   /* the same band, as readable text */
 
   /* Semantic */
-  --signal:  #C8452C;   /* gaps, warnings, "your kit runs out here" */
+  /* --signal (gaps, warnings, "your kit runs out here") is set per theme below:
+     it has to read as text on both grounds, and the old #C8452C sat 4 units from
+     "baking", so a warning on a hot day looked like part of the scale. */
   --plus:    #D9A441;   /* adjustments that add degrees */
   --minus:   #6FA8C7;   /* adjustments that subtract */
 
@@ -76,6 +79,16 @@
   --text:      #E8EDEB;
   --text-dim:  #8CA3AF;
   --shadow: 0 1px 0 rgba(255,255,255,.04) inset;
+  --signal:    #F95C8F;
+  /* The ramp as TEXT. Bars and edges use the ramp itself; figures drawn in a
+     band's colour use its ink, which clears 4.5:1 on every surface here. */
+  --t-frozen-ink: #5C9ACF;
+  --t-cold-ink: #649DB5;
+  --t-cool-ink: #729E97;
+  --t-mild-ink: #A3A075;
+  --t-warm-ink: #C9A03F;
+  --t-hot-ink: #DF8B26;
+  --t-baking-ink: #E67548;
 }
 
 [data-theme="light"] {
@@ -86,6 +99,16 @@
   --text:      #14202A;
   --text-dim:  #56646F;   /* 5.0:1 on --bg; #5E6D78 was 4.4 */
   --shadow: none;
+  --signal:    #BE3265;
+  /* The ramp was drawn for a dark ground: on this one cool, mild, warm and
+     hot read at 2.0-2.6:1. Same hues, darkened until they clear 4.5:1. */
+  --t-frozen-ink: #2E6C9E;
+  --t-cold-ink: #3C7085;
+  --t-cool-ink: #4B706A;
+  --t-mild-ink: #6C6A48;
+  --t-warm-ink: #836413;
+  --t-hot-ink: #9B5900;
+  --t-baking-ink: #AE4A1D;
 }
 
 @media (prefers-color-scheme: light) {
@@ -97,18 +120,28 @@
     --text:      #14202A;
     --text-dim:  #56646F;   /* 5.0:1 on --bg; #5E6D78 was 4.4 */
     --shadow: none;
+    --signal:    #BE3265;
+    /* The ramp was drawn for a dark ground: on this one cool, mild, warm and
+       hot read at 2.0-2.6:1. Same hues, darkened until they clear 4.5:1. */
+    --t-frozen-ink: #2E6C9E;
+    --t-cold-ink: #3C7085;
+    --t-cool-ink: #4B706A;
+    --t-mild-ink: #6C6A48;
+    --t-warm-ink: #836413;
+    --t-hot-ink: #9B5900;
+    --t-baking-ink: #AE4A1D;
   }
 }
 
 /* Temperature utility classes — put on any element to set its
    --temp, which tints edges, markers and bars beneath it. */
-.t-frozen { --temp: var(--t-frozen); }
-.t-cold   { --temp: var(--t-cold); }
-.t-cool   { --temp: var(--t-cool); }
-.t-mild   { --temp: var(--t-mild); }
-.t-warm   { --temp: var(--t-warm); }
-.t-hot    { --temp: var(--t-hot); }
-.t-baking { --temp: var(--t-baking); }
+.t-frozen { --temp: var(--t-frozen); --temp-ink: var(--t-frozen-ink); }
+.t-cold   { --temp: var(--t-cold); --temp-ink: var(--t-cold-ink); }
+.t-cool   { --temp: var(--t-cool); --temp-ink: var(--t-cool-ink); }
+.t-mild   { --temp: var(--t-mild); --temp-ink: var(--t-mild-ink); }
+.t-warm   { --temp: var(--t-warm); --temp-ink: var(--t-warm-ink); }
+.t-hot    { --temp: var(--t-hot); --temp-ink: var(--t-hot-ink); }
+.t-baking { --temp: var(--t-baking); --temp-ink: var(--t-baking-ink); }
 
 /* ---------- 2. Base ------------------------------------------ */
 
@@ -212,7 +245,7 @@ body {
   line-height: .84;
   letter-spacing: -.03em;
   font-variant-numeric: tabular-nums;
-  color: var(--temp);
+  color: var(--temp-ink);
   transition: color .3s var(--ease);
 }
 
@@ -317,6 +350,27 @@ body {
   color: var(--text-dim);
 }
 
+/* A garment's standing note: one line, the rest on tap. The whole text is in
+   the button, so a screen reader reads all of it either way. */
+.wx-kit__note {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  overflow: hidden;
+  width: 100%;
+  margin: 2px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--step--1);
+  color: var(--text-dim);
+  text-align: left;
+  cursor: pointer;
+}
+.wx-kit__note[aria-expanded="true"] { display: block; -webkit-line-clamp: unset; }
+.wx-kit__note:hover { color: var(--text); }
+
 /* ---------- 7. Adjustment chips ------------------------------ */
 /* Air temperature → ride-feel. Sign is carried by colour so the
    arithmetic scans without reading. */
@@ -387,6 +441,7 @@ body {
 
 .wx-bar[data-active="false"] { opacity: .25; }
 
+.wx-bar__print { display: none; font-family: var(--data); font-size: var(--step--3); color: #000; padding-left: 2px; }
 .wx-bar__range {
   font-family: var(--data);
   font-size: var(--step--3);
@@ -421,12 +476,13 @@ body {
 
 .wx-btn:hover { background: var(--text); color: var(--bg); }
 
+/* Neutral, not a temperature: the ramp is data, and a control is not a reading. */
 .wx-btn--primary {
-  background: var(--temp);
-  border-color: var(--temp);
-  color: #0E1A24;
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--bg);
 }
-.wx-btn--primary:hover { filter: brightness(1.12); background: var(--temp); color: #0E1A24; }
+.wx-btn--primary:hover { opacity: .86; background: var(--text); color: var(--bg); }
 
 .wx-btn--quiet {
   border-color: var(--line);
@@ -492,7 +548,7 @@ body {
 .wx-table .wx-feel {
   font-family: var(--data);
   font-weight: 600;
-  color: var(--temp);
+  color: var(--temp-ink);
 }
 
 /* ---------- 11. Alert ---------------------------------------- */
@@ -541,7 +597,13 @@ body {
 }
 
 @media print {
-  :root { --bg: #fff; --surface: #fff; --text: #000; --text-dim: #444; --line: #bbb; }
+  .wx-bar__print { display: inline; }
+  /* Paper is a light ground whatever the screen theme was, so it takes the
+     light inks and a light track under the range bars. */
+  :root { --bg: #fff; --surface: #fff; --surface-2: #F2F2F2; --text: #000; --text-dim: #444; --line: #bbb;
+          --signal: #BE3265;
+          --t-frozen-ink: #2E6C9E; --t-cold-ink: #3C7085; --t-cool-ink: #4B706A; --t-mild-ink: #6C6A48;
+          --t-warm-ink: #836413; --t-hot-ink: #9B5900; --t-baking-ink: #AE4A1D; }
   body { background: #fff; }
   .wx-slider, .wx-btn { display: none; }
   .wx-bar[data-active="false"] { opacity: 1; }
@@ -580,7 +642,7 @@ body {
   color: var(--text-dim);
   cursor: pointer;
 }
-.wx-tab[aria-pressed="true"] { color: var(--text); border-bottom-color: var(--temp); }
+.wx-tab[aria-pressed="true"] { color: var(--text); border-bottom-color: var(--text); }
 /* Tighter tabs on a phone, so the six of them wrap onto as few lines as they
    can. At full size and padding they ran to three. */
 @media (max-width: 30rem) {
@@ -614,9 +676,9 @@ body {
   border: 1px solid var(--line);
   border-radius: var(--radius);
 }
-.wx-input:focus { outline: 2px solid var(--temp); outline-offset: -1px; border-color: var(--temp); }
+.wx-input:focus { outline: 2px solid var(--text); outline-offset: -1px; border-color: var(--text); }
 select.wx-input { font-family: var(--body); cursor: pointer; }
-input[type="checkbox"] { accent-color: var(--temp); width: auto; min-height: 0; }
+input[type="checkbox"] { accent-color: var(--text); width: auto; min-height: 0; }
 
 .wx-grid { display: grid; gap: var(--sp-3); }
 .wx-grid--2 { grid-template-columns: repeat(2, 1fr); }
@@ -679,8 +741,8 @@ input[type="checkbox"] { accent-color: var(--temp); width: auto; min-height: 0; 
   font-family: var(--body);
 }
 .wx-choice .wx-chip[aria-pressed="true"] {
-  background: var(--temp);
-  border-color: var(--temp);
+  background: var(--text);
+  border-color: var(--text);
   color: var(--bg);
 }
 
@@ -816,7 +878,7 @@ input[type="checkbox"] { accent-color: var(--temp); width: auto; min-height: 0; 
   vertical-align: 1px;
   cursor: help;
 }
-.wx-badge:focus-visible { outline: 2px solid var(--temp); outline-offset: 1px; }
+.wx-badge:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
 tr.is-off .wx-badge { opacity: .55; }
 
 /* --- The detail line under the selected row ---------------------
@@ -843,7 +905,7 @@ tr.is-off .wx-badge { opacity: .55; }
   color: var(--text-dim);
   cursor: help;
 }
-.wx-detail__k:focus-visible { outline: 2px solid var(--temp); outline-offset: 1px; }
+.wx-detail__k:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
 .wx-detail__note {
   margin: var(--sp-2) 0 0;
   font-size: var(--step--1); line-height: 1.5; color: var(--text-dim);
@@ -923,7 +985,7 @@ tr.is-off .wx-badge { opacity: .55; }
 .wx-badge--medium { color: var(--plus); }
 .wx-badge--low { color: var(--signal); }
 
-.wx-cmp td.wx-new { color: var(--temp); font-weight: 600; }
+.wx-cmp td.wx-new { color: var(--temp-ink); font-weight: 600; }
 .wx-cmp td:last-child, .wx-cmp th:last-child { text-align: center; width: 3rem; }
 
 .wx-note { font-size: var(--step--1); color: var(--text-dim); margin: var(--sp-3) 0 0; }
@@ -984,7 +1046,7 @@ tr.is-off .wx-badge { opacity: .55; }
   font-family: var(--data);
   font-weight: 600;
   font-size: var(--step-0);
-  color: var(--temp);
+  color: var(--temp-ink);
 }
 .wx-hour__wind {
   display: flex; align-items: center; gap: 2px;
@@ -1029,7 +1091,7 @@ tr.is-off .wx-badge { opacity: .55; }
   border-left: var(--edge) solid var(--temp);
   font-size: var(--step-0);
 }
-.wx-startdir b { color: var(--temp); }
+.wx-startdir b { color: var(--temp-ink); }
 
 [data-touch="gloves"] .wx-hour { flex-basis: 4.8rem; }
 
@@ -1180,7 +1242,7 @@ tr.is-off .wx-badge { opacity: .55; }
   font-weight: 600;
   font-size: var(--step-1);
   line-height: 1.1;
-  color: var(--temp);
+  color: var(--temp-ink);
 }
 .wx-leg__air, .wx-leg__ele, .wx-leg__time {
   font-family: var(--data);
@@ -1324,7 +1386,7 @@ tr.is-off .wx-badge { opacity: .55; }
   cursor: help;
 }
 .wx-ride__feel {
-  text-align: right; white-space: nowrap; color: var(--temp);
+  text-align: right; white-space: nowrap; color: var(--temp-ink);
   font-family: var(--data); font-weight: 600; font-size: var(--step-2); line-height: 1;
 }
 .wx-ride__feel small {
@@ -1388,7 +1450,7 @@ tr.is-off .wx-badge { opacity: .55; }
 [data-touch="gloves"] .wx-choice--tight .wx-chip { min-height: var(--tap); font-size: var(--step--1); }
 
 .wx-verdict-set { font-size: var(--step--1); color: var(--text-dim); }
-.wx-verdict-set b { color: var(--temp); font-weight: 600; }
+.wx-verdict-set b { color: var(--temp-ink); font-weight: 600; }
 .wx-waiting {
   font-family: var(--data); font-size: var(--step--2); letter-spacing: .08em;
   text-transform: uppercase; color: var(--text-dim);
@@ -1413,7 +1475,7 @@ tr.is-off .wx-badge { opacity: .55; }
 }
 .wx-actual__line { font-size: var(--step--1); color: var(--text); margin: 0; }
 .wx-actual__line b { font-weight: 600; }
-.wx-actual__line .wx-num { color: var(--temp); }
+.wx-actual__line .wx-num { color: var(--temp-ink); }
 .wx-actual__note {
   font-size: var(--step--1); color: var(--text-dim); margin: var(--sp-1) 0 0;
 }

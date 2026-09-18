@@ -197,7 +197,9 @@ function renderGear(){
     const lo = rampPos(it.tmin), hi = rampPos(it.tmax);
     const bar = it.slot === "eyes"
       ? `<div class="wx-bar wx-bar--empty" style="left:0;right:0">any</div>`
-      : `<div class="wx-bar" style="left:${lo}%;right:${100 - hi}%"></div>`;
+      // The numbers ride along for print: on screen the range is on hover, and
+      // paper has no hover — nor, in greyscale, colour to tell cold from baking.
+      : `<div class="wx-bar" style="left:${lo}%;right:${100 - hi}%"><span class="wx-bar__print">${it.tmin}&ndash;${it.tmax}&deg;</span></div>`;
     const inUse = !it.off;
     return `<tr data-i="${i}" class="${rampFor((it.tmin + it.tmax)/2)}${it.off ? " is-off" : ""}${i === selected ? " is-sel" : ""}">
       <td><button class="wx-toggle" data-act="use" aria-pressed="${inUse}"

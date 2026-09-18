@@ -515,13 +515,23 @@ that don't shift width as they count.
 Colour is data. A seven-step temperature ramp runs from frozen blue to baking rust, and every
 non-chrome colour comes from it: the ride-feel figure, the mark on the scale beneath it, the
 left edge of each card, and the range bars on the gear screen, which are the same band chart
-in miniature — a gap in the wardrobe reads as a gap in the column.
+in miniature — a gap in the wardrobe reads as a gap in the column. Controls are the other way
+round: buttons, selected choices and the tab underline are neutral, because a control is not a
+reading and used to wear "mild" khaki by default.
 
-The mark is the app rather than a picture of a bicycle: the temperature ramp wrapped into a
-wheel and cut into its seven bands, with a needle reading off it. It is drawn from the same
-gradient stops as `--ramp`, so the logo and the scale under the ride-feel figure cannot drift
-apart, and it takes the theme's ink for the needle so it inverts with everything else. The
-favicon is the same mark with the colours baked in, inline as a data URI — no image file.
+Each band has an **ink** as well as a colour. Bars and edges use the ramp itself; figures drawn
+in a band's colour use its ink, which clears 4.5:1 on every surface in its theme. The ramp was
+drawn for a dark background, and on the light one cool, mild, warm and hot read at 2.0–2.6:1 —
+the ride-feel figure for nearly every ride. Warnings have their own crimson, per theme, chosen
+to sit well clear of "baking": the old warning red was close enough to it that a warning on a
+hot day read as part of the scale.
+
+The mark is the app rather than a picture of a bicycle: the ramp as a **gauge**, seven arcs in
+order from frozen at the bottom left round to baking at the bottom right, open at the bottom
+like a dial, with a needle on "warm". `logo.js` draws it — both the header mark, which follows
+the theme, and the tab icon, which carries the same ramp as hex and drops the gaps and thickens
+the needle so it survives 16 pixels. One drawing, so the two cannot drift apart as the old
+hand-written copies did.
 
 **Glove mode** enlarges tap targets and type for cold hands. It lives on the ride screen,
 where it is needed, rather than in the tab row, where it would read as a destination.
@@ -552,6 +562,7 @@ INSTALL.md if you want to self-host them for a genuinely offline install.
 | `scorecardui.js` | The model screen |
 | `backupui.js` | The backup screen: versions, restore, schedule |
 | `map.js` | Slippy-map projection, tiles, and the drawn overlay |
+| `logo.js` | The mark and the tab icon, from one drawing |
 | `styles.css` | The Weather Effect design system, plus app chrome |
 
 Forecast data from [Open-Meteo](https://open-meteo.com/). Wind correction after

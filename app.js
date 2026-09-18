@@ -791,11 +791,20 @@ function render(f, w, opts, place, analysis){
     const ia = ZONE_ORDER.indexOf(a.slot), ib = ZONE_ORDER.indexOf(b.slot);
     return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
   });
+  /* A reason given for this ride (_why) is short and specific, so it stays in
+     full. A garment's standing note is often a paragraph; shown whole it made
+     the Wear card a screen tall and pushed Carry and the warnings below the
+     fold, so it is one line until tapped. Both are escaped: the notes come
+     from the gear list, which you edit and which syncs. */
   const kitRows = items => byZone(items).map(it => `
     <div class="wx-kit__row">
       <div class="wx-kit__zone">${it._label || ZONE_LABEL[it.slot] || ""}</div>
-      <p class="wx-kit__items">${it.name}${it._why || it.notes
-        ? ` <em>${it._why || it.notes}</em>` : ""}</p>
+      <div class="wx-kit__items">${escapeText(it.name)}${it._why
+        ? ` <em>${it._why}</em>`
+        : it.notes
+          ? `<button type="button" class="wx-kit__note" aria-expanded="false"
+               title="Show the whole note">${escapeText(it.notes)}</button>`
+          : ""}</div>
     </div>`).join("");
 
   // Air -> ride-feel, as chips. Sign is carried by colour so the arithmetic
@@ -876,7 +885,7 @@ function render(f, w, opts, place, analysis){
     <div class="wx-kit">${out.pocket.map(([it, why]) => `
       <div class="wx-kit__row">
         <div class="wx-kit__zone">Pocket</div>
-        <p class="wx-kit__items">${it.name}${why ? ` <em>${why}</em>` : ""}</p>
+        <p class="wx-kit__items">${escapeText(it.name)}${why ? ` <em>${why}</em>` : ""}</p>
       </div>`).join("")}</div>
   </section>` : ""}
 
@@ -1107,6 +1116,14 @@ function render(f, w, opts, place, analysis){
   $("#out").scrollIntoView({behavior:"smooth", block:"start"});
 
 }
+
+// One line of a garment's note until you ask for the rest. Delegated, because
+// the Wear list is rebuilt on every reading.
+$("#out").addEventListener("click", e => {
+  const note = e.target.closest(".wx-kit__note");
+  if (note) note.setAttribute("aria-expanded",
+    note.getAttribute("aria-expanded") === "true" ? "false" : "true");
+});
 
 /* ---------------------------------------------------------------
    Go

@@ -8,37 +8,18 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="%232E6C9E"/><stop offset="20%" stop-color="%234A8299"/><stop offset="38%" stop-color="%236E9A93"/><stop offset="54%" stop-color="%23A3A075"/><stop offset="70%" stop-color="%23C9A03F"/><stop offset="86%" stop-color="%23DF8B26"/><stop offset="100%" stop-color="%23C85A2B"/></linearGradient></defs><rect width="44" height="44" rx="6" fill="%230E1A24"/><circle cx="22" cy="22" r="15.5" fill="none" stroke="url(%23g)" stroke-width="4.5" stroke-dasharray="11.9 2" transform="rotate(-90 22 22)"/><path d="M22 22 L30.4 13.6" stroke="%23E8EDEB" stroke-width="2.6" stroke-linecap="round"/><circle cx="22" cy="22" r="3" fill="%230E1A24" stroke="%23E8EDEB" stroke-width="2.2"/></svg>'>
+<!-- Drawn by logo.js from the same geometry as the header mark. Blank until
+     then, so the browser does not go looking for a favicon.ico that is not there. -->
+<link rel="icon" href="data:,">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <div class="wx-shell">
 
 <header class="wx-brand">
-  <!-- The mark is the app: the temperature ramp wrapped into a wheel, cut into
-       its seven bands, with a needle reading off it. Same gradient stops as
-       --ramp, so the logo and the scale under the ride-feel figure can never
-       drift apart. -->
-  <svg class="wx-logo" viewBox="0 0 44 44" role="img" aria-label="Weather Effect">
-    <defs>
-      <linearGradient id="wx-logo-ramp" x1="0" y1="0" x2="1" y2="0">
-        <stop offset="0%"   stop-color="var(--t-frozen)"/>
-        <stop offset="20%"  stop-color="var(--t-cold)"/>
-        <stop offset="38%"  stop-color="var(--t-cool)"/>
-        <stop offset="54%"  stop-color="var(--t-mild)"/>
-        <stop offset="70%"  stop-color="var(--t-warm)"/>
-        <stop offset="86%"  stop-color="var(--t-hot)"/>
-        <stop offset="100%" stop-color="var(--t-baking)"/>
-      </linearGradient>
-    </defs>
-    <!-- Seven arcs: dash 13.26 + gap 2 divides the 106.81 circumference exactly. -->
-    <circle cx="22" cy="22" r="17" fill="none" stroke="url(#wx-logo-ramp)"
-            stroke-width="4" stroke-dasharray="13.26 2"
-            transform="rotate(-90 22 22)"/>
-    <path d="M22 22 L31.2 12.8" stroke="var(--bg)" stroke-width="4.5" stroke-linecap="round"/>
-    <path d="M22 22 L31.2 12.8" stroke="var(--text)" stroke-width="2.2" stroke-linecap="round"/>
-    <circle cx="22" cy="22" r="3.4" fill="var(--bg)" stroke="var(--text)" stroke-width="2.2"/>
-  </svg>
+  <!-- The mark, drawn by logo.js: the ramp as a gauge, with a needle reading it.
+       The empty frame holds its place so nothing moves when it arrives. -->
+  <svg class="wx-logo" id="logo" viewBox="0 0 44 44" role="img" aria-label="Weather Effect"></svg>
   <div>
     <p class="wx-eyebrow">Cycling kit</p>
     <h1 class="wx-title">Weather effect</h1>
@@ -336,6 +317,7 @@
 
 </div>
 
+<script src="logo.js"></script>
 <script src="gpx.js"></script>
 <script src="map.js"></script>
 <script src="weather.js"></script>
