@@ -10,7 +10,7 @@ node server.js          # http://localhost:8765
 ```
 
 No build step, no npm dependencies, no API key. To put it on a server, see
-[INSTALL.md](INSTALL.md).
+[INSTALL.md](INSTALL.md); for a Proxmox LXC container, [INSTALL-PROXMOX.md](INSTALL-PROXMOX.md).
 
 ## Why ride-feel rather than "feels like"
 

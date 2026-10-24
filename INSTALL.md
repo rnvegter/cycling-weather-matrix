@@ -53,6 +53,7 @@ outage at 3am. The whole config is about ten lines, and one of them is your doma
 | **Docker or Podman + Caddy** | You want the app isolated, or you deploy several things to the same box. Podman if you would rather not run a root daemon. |
 | **Apache** | Only if it's already there. `mod_proxy` will do it, but neither of the above needs as much configuring. |
 | **Fly.io / Render / Railway** | You'd rather not run a server at all. A Node app with no dependencies deploys to these almost unchanged. |
+| **Proxmox VE** | You run a Proxmox host. One unprivileged LXC container running Option A below; the Proxmox-specific steps are in [INSTALL-PROXMOX.md](INSTALL-PROXMOX.md). |
 
 Configuration files for the first two are in [`deploy/`](deploy/), along with a systemd unit.
 
