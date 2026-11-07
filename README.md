@@ -181,6 +181,30 @@ The inference fallback is fitted against the seeded wardrobe: mean error 0.016 c
 The fallback means the button always returns something, but treat a low-confidence result as
 a starting point rather than an answer.
 
+## Fuel and drink
+
+Beside what to wear and what to carry, a card says what goes in the bottles and in the
+pockets. Drinking follows the warmest hour of the ride and whether the air will take the
+sweat — the same evaporation the humidity section works out — so a muggy 24° asks for more
+than a dry one. Eating follows how long and how hard: up to about an hour your own stores
+cover it, beyond that the range climbs towards the 90 g an hour a trained gut takes from a
+glucose–fructose mix. Bottles are counted at 750 ml; more than two gets a refill time.
+Electrolyte is suggested in the heat, on long rides, and when the sweat can't leave.
+Everything ramps, so a ride of 89 minutes and one of 91 get the same advice. These are
+general sports-nutrition ranges, not a sweat test.
+
+How hard comes from the pace chips — or, for a session planned in Fietscoach, from its
+effort score. Fietscoach links here with the ride in the address:
+
+```
+/?date=2026-11-14&time=09:30&hours=2.25&pace=steady&effort=3&name=Long%20ride#ride
+```
+
+Date, start, hours and pace are filled in and stay editable; the effort is used for the
+fuel card until you change the hours or the pace yourself. The query is dropped from the
+address after it is read, so a reload does not apply it again. Malformed values are ignored
+rather than guessed at.
+
 ## The hours ahead, and which way to set off
 
 The forecast runs from the start hour to a few hours past the planned finish, so a shower
@@ -546,6 +570,7 @@ INSTALL.md if you want to self-host them for a genuinely offline install.
 |---|---|
 | `index.html` | Six screens — ride, favourites, history, model, gear, backup |
 | `model.js` | Ride-feel, heat balance, outfit selection |
+| `fuel.js` | Fuel and drink for the ride, and reading a ride handed over by Fietscoach |
 | `gear.js` | Seeded inventory and storage |
 | `insulation.js` | Inference engine, runs in both browser and Node |
 | `server.js` | Static files, `/api/lookup`, the synced state, and the backups |

@@ -53,6 +53,7 @@ document.querySelectorAll(".wx-choice[data-group]").forEach(row => {
     if (!b) return;
     row.querySelectorAll(".wx-chip").forEach(p => p.setAttribute("aria-pressed", p === b ? "true" : "false"));
     state[row.dataset.group] = b.dataset.v;
+    if (row.dataset.group === "pace") dropHandoff();
     save();
     paintSettings();
     if (["type","pace"].includes(row.dataset.group)) updateSpeedHint();
@@ -65,6 +66,29 @@ document.querySelectorAll(".wx-choice[data-group]").forEach(row => {
   $("#date").value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
   $("#time").value = `${String(d.getHours()).padStart(2,"0")}:00`;
 })();
+
+/* A ride handed over by the training planner (Fietscoach): date, start, hours,
+   pace and how hard the session is. Applied once on arrival; the query is then
+   dropped from the address bar so a reload or a shared link does not keep
+   re-applying it. The effort is only used for fuelling, and is forgotten as
+   soon as the hours or pace are changed by hand, because that is another ride. */
+let handoff = readHandoff(location.search);
+(function applyHandoff(){
+  if (!handoff) return;
+  if (handoff.date) $("#date").value = handoff.date;
+  if (handoff.time) $("#time").value = handoff.time;
+  if (handoff.hours){ $("#dur").value = handoff.hours; $("#dist").value = ""; }
+  const el = $("#handoff");
+  el.textContent = `From Fietscoach${handoff.name ? ": " + handoff.name : ""}${
+    handoff.effort ? ` · effort ${handoff.effort} of 5` : ""}. The fuel advice uses it.`;
+  el.classList.remove("wx-hidden");
+  history.replaceState(null, "", location.pathname + location.hash);
+})();
+function dropHandoff(){
+  if (!handoff) return;
+  handoff = null;
+  $("#handoff").classList.add("wx-hidden");
+}
 
 /* Distance, time and speed: any two give the third. Speed is the one you can
    state from experience when you don't know how long a route will take, which
@@ -103,7 +127,7 @@ function updateSpeedHint(){
   }
 }
 $("#dist").addEventListener("input", updateSpeedHint);
-$("#dur").addEventListener("input", updateSpeedHint);
+$("#dur").addEventListener("input", () => { dropHandoff(); updateSpeedHint(); });
 $("#speed").addEventListener("input", updateSpeedHint);
 
 /* ---------------------------------------------------------------
@@ -715,6 +739,38 @@ function packingPlan(analysis, opts){
           worn: r2(hb.worn), required: r2(hb.required)};
 }
 
+/* Bottles and food, beside what to wear and what to carry: it is the same
+   question at the door. */
+function fuelCard(p, ramp, opts){
+  // One unit per range: "400–500 ml", "0.9–1.1 L", never "900 ml–1.1 L".
+  const range = ([a, b]) => b >= 1000
+    ? `${r1(a / 1000)}–${r1(b / 1000)} L` : `${Math.round(a)}–${Math.round(b)} ml`;
+  const drink = `${range(p.perHour)} an hour, ${range(p.total)} in all`;
+  const eat = p.carbs
+    ? `${p.carbs[0]}–${p.carbs[1]} g carbohydrate an hour, ${p.carbTotal[0]}–${p.carbTotal[1]} g in all`
+    : "Nothing needed for this one. A bar in the pocket in case it runs long.";
+  return `
+  <section class="wx-card wx-card--flat ${ramp}">
+    <div class="wx-card__head">
+      <h2 class="wx-heading">Fuel and drink</h2>
+      <span class="wx-eyebrow" style="margin:0">${p.fromPlanner ? `effort ${p.effort} of 5` : `${opts.pace} pace`}</span>
+    </div>
+    <div class="wx-kit">
+      <div class="wx-kit__row">
+        <div class="wx-kit__zone">Bottles</div>
+        <p class="wx-kit__items">${p.bottles} × ${BOTTLE_ML} ml${p.salt ? ", electrolyte in at least one" : ", water"}
+          <em>${drink}</em></p>
+      </div>
+      <div class="wx-kit__row">
+        <div class="wx-kit__zone">Food</div>
+        <p class="wx-kit__items">${p.carbs ? `About ${p.gels} gels or half-bars` : "None"}
+          <em>${eat}</em></p>
+      </div>
+    </div>
+    ${p.notes.map(n => `<p class="wx-note">${n}</p>`).join("")}
+  </section>`;
+}
+
 /* Does one outfit differ from another in a way worth mentioning? */
 const outfitKey = out => out.wear.map(i => i.name).sort().join("|");
 
@@ -888,6 +944,8 @@ function render(f, w, opts, place, analysis){
         <p class="wx-kit__items">${escapeText(it.name)}${why ? ` <em>${why}</em>` : ""}</p>
       </div>`).join("")}</div>
   </section>` : ""}
+
+  ${fuelCard(fuelPlan(w, f, opts), ramp, opts)}
 
   ${routeFlag}
   ${warnings}
@@ -1136,7 +1194,7 @@ $("#go").onclick = async () => {
   const n = rideNumbers();
   const dist = n.dist, hours = n.hours;
   const opts = {dist, hours, speed:n.speed, pace:state.pace, terrain:state.terrain,
-                rider:state.rider, type:state.type};
+                rider:state.rider, type:state.type, effort: handoff ? handoff.effort : null};
   status("Fetching forecast…");
   $("#go").disabled = true;
   try{
@@ -1197,4 +1255,7 @@ $("#go").onclick = async () => {
 };
 
 load();
+// After load(), which restores the saved chips: a handed-over pace wins for this
+// ride without becoming the saved default.
+if (handoff && handoff.pace){ state.pace = handoff.pace; syncPills(); }
 updateSpeedHint();
