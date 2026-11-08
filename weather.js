@@ -186,22 +186,66 @@ const OM_CACHE_MS = 15 * 60 * 1000;
 const OM_CACHE_MAX = 40;
 const omCache = new Map();     // url → {at, data} or {at, pending}
 
-/* fetchFn and now are there for the tests; the app passes neither. */
-async function openMeteoJSON(url, what, fetchFn, now){
+/* ---------------------------------------------------------------
+   The last forecast, for a morning with no signal.
+
+   The app is read at 06:40, often in a garage or a stairwell. With `keep`,
+   the answer is also put in localStorage (the last two places), and when the
+   network fails outright — not when Open-Meteo refuses, which is an answer —
+   a kept answer up to 36 hours old is used instead, marked with when it was
+   fetched (offlineFrom) so the page can say so. A 16-day forecast from last
+   night still covers this morning; it is just not the newest.
+----------------------------------------------------------------*/
+const OM_KEEP_KEY = "cwem-last-forecast";
+const OM_KEEP_MAX_AGE = 36 * 3600 * 1000;
+const OM_KEEP_N = 2;
+
+function keepAnswer(url, at, data){
+  try{
+    const list = JSON.parse(localStorage.getItem(OM_KEEP_KEY) || "[]").filter(x => x && x.url !== url);
+    list.unshift({url, at, data});
+    localStorage.setItem(OM_KEEP_KEY, JSON.stringify(list.slice(0, OM_KEEP_N)));
+  }catch(e){
+    // A full browser keeps the rides and the gear rather than a spare forecast.
+    try{ localStorage.removeItem(OM_KEEP_KEY); }catch(e2){}
+  }
+}
+function keptAnswer(url, now){
+  try{
+    const hit = JSON.parse(localStorage.getItem(OM_KEEP_KEY) || "[]").find(x => x && x.url === url);
+    return hit && now - hit.at <= OM_KEEP_MAX_AGE && hit.data ? hit : null;
+  }catch(e){ return null; }
+}
+
+/* fetchFn and now are there for the tests; the app passes neither.
+   opts.keep: store the answer for use offline (see above). */
+async function openMeteoJSON(url, what, fetchFn, now, opts){
   const t = now != null ? now : Date.now();
+  const keep = !!(opts && opts.keep);
   const hit = omCache.get(url);
   if (hit && t - hit.at < OM_CACHE_MS){
     const data = hit.pending ? await hit.pending : hit.data;
     return structuredClone(data);
   }
   const pending = (async () => {
-    const r = await (fetchFn || fetch)(url);
+    let r;
+    try{ r = await (fetchFn || fetch)(url); }
+    catch(netErr){
+      // No answer at all. A kept one beats none, said as what it is.
+      const kept = keep ? keptAnswer(url, t) : null;
+      if (kept) return Object.assign(structuredClone(kept.data), {offlineFrom: kept.at});
+      throw new Error(`${what} could not be reached — no connection?`);
+    }
     if (!r.ok) throw await openMeteoError(r, what);
-    return r.json();
+    const data = await r.json();
+    if (keep) keepAnswer(url, t, data);
+    return data;
   })();
   omCache.set(url, {at: t, pending});
   try{
     const data = await pending;
+    // An offline stand-in is not remembered: the next reading tries the network.
+    if (data.offlineFrom != null){ omCache.delete(url); return structuredClone(data); }
     omCache.set(url, {at: t, data});
     // Oldest out first; a Map keeps insertion order.
     while (omCache.size > OM_CACHE_MAX) omCache.delete(omCache.keys().next().value);

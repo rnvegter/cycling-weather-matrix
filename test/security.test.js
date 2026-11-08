@@ -167,7 +167,20 @@ describe("static file allow-list", () => {
 
   test("still serves what the browser actually needs", () => {
     ["index.html", "styles.css", "app.js", "model.js", "gear.js", "gpx.js",
-     "history.js", "historyui.js", "sync.js", "insulation.js", "weather.js", "map.js"]
+     "history.js", "historyui.js", "sync.js", "insulation.js", "weather.js", "map.js",
+     "sw.js", "pwa.js", "manifest.webmanifest", rel("icons/icon-192.png"), rel("icons/apple-touch-icon.png")]
       .forEach(p => assert.equal(isServable(p), true, `${p} should be servable`));
+  });
+
+  test("every file index.html and the manifest ask for exists and is servable", () => {
+    const fs = require("fs"), root = path.join(__dirname, "..");
+    const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+    const man = JSON.parse(fs.readFileSync(path.join(root, "manifest.webmanifest"), "utf8"));
+    const wanted = [...html.matchAll(/(?:src|href)="([^"#:]+)"/g)].map(m => m[1])
+      .concat(man.icons.map(i => i.src));
+    for (const f of wanted){
+      assert.ok(fs.existsSync(path.join(root, f)), `${f} is missing`);
+      assert.equal(isServable(rel(f)), true, `${f} is asked for but would be refused`);
+    }
   });
 });

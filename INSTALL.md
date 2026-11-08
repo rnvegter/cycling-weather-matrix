@@ -248,7 +248,7 @@ and labels every result accordingly.
 
 ```bash
 sudo mkdir -p /var/www/cycling-weather-matrix
-sudo cp -r index.html styles.css *.js /var/www/cycling-weather-matrix/
+sudo cp -r index.html styles.css *.js manifest.webmanifest icons /var/www/cycling-weather-matrix/
 ```
 
 Then a Caddyfile of:
@@ -679,7 +679,8 @@ podman image prune
 ```bash
 cd cycling-weather-matrix
 git pull
-sudo cp index.html styles.css *.js /var/www/cycling-weather-matrix/
+sudo cp index.html styles.css *.js manifest.webmanifest /var/www/cycling-weather-matrix/
+sudo cp -r icons /var/www/cycling-weather-matrix/
 ```
 
 `cp` will not remove a file that the update deleted, so if a `.js` file is ever dropped from
@@ -689,7 +690,8 @@ goes in rather than what stays out:
 ```bash
 sudo rsync -a --delete \
   --exclude server.js \
-  --include '*.js' --include index.html --include styles.css --exclude '*' \
+  --include '*.js' --include index.html --include styles.css \
+  --include manifest.webmanifest --include 'icons/' --include 'icons/*.png' --exclude '*' \
   ./ /var/www/cycling-weather-matrix/
 ```
 
@@ -767,6 +769,10 @@ Then the service itself:
 curl -sI https://kit.example.com | head -1
 curl -s "https://kit.example.com/api/lookup?name=Castelli%20Perfetto%20RoS&slot=shell" | head -c 200
 ```
+
+The service worker (`sw.js`) fetches from the network first and only falls back to its cache
+when there is no connection, so it never serves an old version over a new one. It needs HTTPS
+(or localhost); on plain `http://` it simply is not registered and the app works online only.
 
 Then open the app and run one ride. If the page loads but behaves oddly, the usual cause is a
 browser holding old JavaScript against new HTML — hard-reload once (Cmd/Ctrl + Shift + R). The

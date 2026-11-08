@@ -260,9 +260,10 @@ async function forecast(lat, lon){
     // which the rain-timing code treats as "fall back to the hour".
     + "&minutely_15=precipitation"
     + "&daily=sunrise,sunset&timezone=auto&forecast_days=16&past_days=2";
-  const fc = await openMeteoJSON(url, "The forecast");
-  // Said on the hours card, since a reading within the quarter hour reuses it.
-  fc.fetchedAt = openMeteoFetchedAt(url);
+  const fc = await openMeteoJSON(url, "The forecast", null, null, {keep: true});
+  // Said on the hours card, since a reading within the quarter hour reuses it,
+  // and a reading with no connection uses the one kept from last time.
+  fc.fetchedAt = fc.offlineFrom != null ? fc.offlineFrom : openMeteoFetchedAt(url);
   return fc;
 }
 
@@ -953,7 +954,9 @@ function hoursCard(w, ramp){
       w.outlook.some(h => !h.riding && h.prob >= 50)
         ? `, and it turns wet after you would be home, around ${fmtTime(w.outlook.find(h => !h.riding && h.prob >= 50).time)}`
         : ""}. Arrows point the way the wind is blowing.${
-      w.fetchedAt ? ` Forecast as of ${hhmm(new Date(w.fetchedAt))}.` : ""}</p>
+      w.offlineFrom != null ? ` <b>No connection: this is the forecast kept from ${
+        new Date(w.offlineFrom).toLocaleDateString(undefined, {weekday: "short"})} ${hhmm(new Date(w.offlineFrom))}.</b>`
+      : w.fetchedAt ? ` Forecast as of ${hhmm(new Date(w.fetchedAt))}.` : ""}</p>
   </section>`;
 }
 
@@ -1303,6 +1306,7 @@ $("#go").onclick = async () => {
     const fc = await forecast(state.place.latitude, state.place.longitude);
     const w = rideWindow(fc, date, time, hours);
     w.fetchedAt = fc.fetchedAt;
+    w.offlineFrom = fc.offlineFrom != null ? fc.offlineFrom : null;
     // The highest ground the ride reaches — the route's summit if one is
     // loaded, otherwise the model's terrain height at the start point.
     opts.maxElevation = (route && route.stats.hasElevation)
@@ -1367,6 +1371,8 @@ $("#go").onclick = async () => {
     });
     if (typeof renderHistory === "function") renderHistory();
     render(rideFeel(w, opts), w, opts, state.place, analysis);
+    if (w.offlineFrom != null) status(`No connection, so this is the forecast kept from ${
+      new Date(w.offlineFrom).toLocaleString(undefined, {weekday: "short", hour: "2-digit", minute: "2-digit"})}. Read again when you have signal.`);
   }catch(e){
     status(e.message, true);
     $("#out").innerHTML = "";

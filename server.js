@@ -141,7 +141,8 @@ const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
 const MIME = {
   ".html":"text/html; charset=utf-8", ".js":"text/javascript; charset=utf-8",
   ".css":"text/css; charset=utf-8", ".json":"application/json; charset=utf-8",
-  ".svg":"image/svg+xml", ".ico":"image/x-icon"
+  ".svg":"image/svg+xml", ".ico":"image/x-icon", ".png":"image/png",
+  ".webmanifest":"application/manifest+json; charset=utf-8"
 };
 
 /* --- Fetching --------------------------------------------------- */

@@ -251,3 +251,42 @@ describe("openMeteoJSON", () => {
     assert.deepEqual(b.hourly.x, [1]);
   });
 });
+
+describe("the last forecast, offline", () => {
+  const store = new Map();
+  before(() => { globalThis.localStorage = {getItem: k => store.has(k) ? store.get(k) : null,
+                                            setItem: (k, v) => store.set(k, String(v)), removeItem: k => store.delete(k)}; });
+  const ok = body => async () => ({ok: true, status: 200, json: async () => body});
+  const down = async () => { throw new TypeError("Failed to fetch"); };
+  const refuse = async () => ({ok: false, status: 429, json: async () => ({reason: "limit"})});
+  const H = 3600 * 1000;
+
+  test("with no connection, the forecast kept last night is used and says when it is from", async () => {
+    await openMeteoJSON("https://api.open-meteo.com/k/1", "The forecast", ok({a: 1}), 0, {keep: true});
+    const b = await openMeteoJSON("https://api.open-meteo.com/k/1", "The forecast", down, 10 * H, {keep: true});
+    assert.equal(b.a, 1);
+    assert.equal(b.offlineFrom, 0);
+  });
+
+  test("the stand-in is not remembered: the next reading tries the network again", async () => {
+    await openMeteoJSON("https://api.open-meteo.com/k/2", "The forecast", ok({a: 1}), 0, {keep: true});
+    await openMeteoJSON("https://api.open-meteo.com/k/2", "The forecast", down, 20 * H, {keep: true});
+    const c = await openMeteoJSON("https://api.open-meteo.com/k/2", "The forecast", ok({a: 2}), 20 * H + 1000, {keep: true});
+    assert.equal(c.a, 2);
+    assert.equal(c.offlineFrom, undefined);
+  });
+
+  test("older than 36 hours is too old; a refusal is said, not papered over", async () => {
+    await openMeteoJSON("https://api.open-meteo.com/k/3", "The forecast", ok({a: 1}), 0, {keep: true});
+    await assert.rejects(openMeteoJSON("https://api.open-meteo.com/k/3", "The forecast", down, 37 * H, {keep: true}), /no connection/);
+    await openMeteoJSON("https://api.open-meteo.com/k/4", "The forecast", ok({a: 1}), 0, {keep: true});
+    await assert.rejects(openMeteoJSON("https://api.open-meteo.com/k/4", "The forecast", refuse, 20 * H, {keep: true}), /limit/);
+  });
+
+  test("only the last two places are kept, and only when asked", async () => {
+    store.clear();
+    for (const n of [5, 6, 7]) await openMeteoJSON(`https://api.open-meteo.com/k/${n}`, "The forecast", ok({n}), 0, {keep: true});
+    await openMeteoJSON("https://api.open-meteo.com/k/8", "The ensemble", ok({n: 8}), 0);
+    assert.deepEqual(JSON.parse(store.get("cwem-last-forecast")).map(x => x.data.n), [7, 6]);
+  });
+});

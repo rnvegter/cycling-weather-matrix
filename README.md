@@ -350,6 +350,23 @@ Where a layer that cannot come off is the trade-off, the plan says on which side
 it would run warm. With no change across the hours, nothing is added: the headline already
 says the same kit works.
 
+## On the phone, the evening before
+
+**Install it.** Served over HTTPS (or on localhost), the app can be added to a home screen and
+opens like an app, with its own icon — drawn from the same geometry as the logo.
+
+**It opens with no signal.** A service worker keeps every file of the app as it loads and
+serves them only when the network fails; with a connection it always fetches afresh, so an
+update lands on the next load exactly as before. The last forecast for your two most recent
+places is kept too, for up to 36 hours: with no connection, Read the weather uses it and says
+so in words — "No connection, so this is the forecast kept from Sun 22:10." A refusal from
+Open-Meteo is an answer and is shown as one, not papered over with an old forecast. The API
+(sync, lookups, backups) is never served from the cache.
+
+**A usual start for a favourite.** Give a favourite the time you usually ride it and its
+button reads *Ride tomorrow 08:00* (or *today*, while there is still half an hour to go): it
+fills in route, surface, speed, date and time, and Read the weather does the rest.
+
 ## Favourite rides
 
 The routes you ride again live on the **Favourites** tab. Add them from GPX files there — a
@@ -705,6 +722,8 @@ INSTALL.md if you want to self-host them for a genuinely offline install.
 | `backupui.js` | The backup screen: versions, restore, schedule |
 | `map.js` | Slippy-map projection, tiles, and the drawn overlay |
 | `logo.js` | The mark and the tab icon, from one drawing |
+| `sw.js` / `pwa.js` | Opening offline: the service worker, and registering it |
+| `manifest.webmanifest`, `icons/` | Installing to a home screen |
 | `styles.css` | The Weather Effect design system, plus app chrome |
 
 Forecast data from [Open-Meteo](https://open-meteo.com/). Wind correction after
