@@ -370,7 +370,8 @@ by itself.
   date, the start time (when one was planned), the hours, and the pace and effort from the
   training load per hour, which the fuel card reads — the same way the Fietscoach link does.
 - **Favourites → Routes from intervals.icu.** The routes intervals.icu has found in rides you
-  repeat, most ridden first; Add keeps one as a favourite. intervals.icu stores a route's path
+  repeat, most ridden first; Add keeps one as a favourite. On the Favourites tab these come
+first, ahead of routes added from files, each group with the last ridden on top. intervals.icu stores a route's path
   without height, so climbing is unknown for these.
 
 The key stays on the server: the browser only ever sees the few fields above. Rides synced to

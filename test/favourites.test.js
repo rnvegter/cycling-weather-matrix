@@ -266,3 +266,21 @@ describe("usual start time", () => {
     assert.equal(nextStart(null), null);
   });
 });
+
+/* --- Order on the Favourites tab ----------------------------------- */
+
+describe("favourites in order", () => {
+  const fav = extra => normaliseFavourite(Object.assign({points: [[52, 5, 1], [52.1, 5.1, 2]], addedAt: "2026-10-01T08:00:00Z"}, extra));
+
+  test("routes from intervals.icu first, each group by last ridden, then by added", () => {
+    const list = [
+      fav({name: "Own, ridden yesterday", lastRiddenAt: "2026-11-07T08:00:00Z"}),
+      fav({name: "From intervals.icu, never ridden here", icuRouteId: "5", addedAt: "2026-11-01T08:00:00Z"}),
+      fav({name: "From intervals.icu, ridden last week", icuRouteId: "6", lastRiddenAt: "2026-11-01T08:00:00Z"}),
+      fav({name: "Own, never ridden", addedAt: "2026-11-05T08:00:00Z"})
+    ];
+    assert.deepEqual(favouritesInOrder(list).map(f => f.name), [
+      "From intervals.icu, ridden last week", "From intervals.icu, never ridden here",
+      "Own, ridden yesterday", "Own, never ridden"]);
+  });
+});

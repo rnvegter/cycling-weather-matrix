@@ -105,8 +105,12 @@ function saveFavourites(list){
 }
 
 /* Newest use first, then newest added: the route you ride most rises to the top. */
+/* Routes from intervals.icu first — the ones you actually ride, found there
+   in your recordings — then the rest; within each, the last ridden first,
+   then the newest. */
 const favouritesInOrder = list => list.slice().sort((a, b) =>
-  String(b.lastRiddenAt || "").localeCompare(String(a.lastRiddenAt || ""))
+  (b.icuRouteId ? 1 : 0) - (a.icuRouteId ? 1 : 0)
+  || String(b.lastRiddenAt || "").localeCompare(String(a.lastRiddenAt || ""))
   || String(b.addedAt).localeCompare(String(a.addedAt)));
 
 /* What a favourite looks like as a route: the same shape parseGPX returns, so
