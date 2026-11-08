@@ -69,11 +69,38 @@ describe("outbound address filter", () => {
     ]) assert.equal(await checkedURL(bad), null, `${bad} should be refused`);
   });
 
+  /* DNS is answered here rather than asked: a test that needs the real
+     resolver fails wherever there is none (a CI box, a sandbox), and what is
+     under test is what checkedURL does with an answer, not the resolver. */
+  const withDNS = async (answers, fn) => {
+    const dns = require("dns").promises, real = dns.lookup;
+    dns.lookup = async (host, opts) => {
+      if (!(host in answers)) return real.call(dns, host, opts);
+      const list = answers[host].map(a => ({address: a, family: a.includes(":") ? 6 : 4}));
+      return opts && opts.all ? list : list[0];
+    };
+    try{ return await fn(); } finally { dns.lookup = real; }
+  };
+
   test("URL check keeps ordinary product pages, on either standard port", async () => {
-    for (const good of ["https://www.gorewear.com/some-garment",
-                        "http://example.com/x", "https://example.com:443/x"]){
-      assert.ok(await checkedURL(good), `${good} should be allowed`);
-    }
+    await withDNS({"www.gorewear.com": ["104.18.20.31"], "example.com": ["93.184.215.14", "2606:2800:21f:cb07:6820:80da:af6b:8b2c"]}, async () => {
+      for (const good of ["https://www.gorewear.com/some-garment",
+                          "http://example.com/x", "https://example.com:443/x"]){
+        assert.ok(await checkedURL(good), `${good} should be allowed`);
+      }
+    });
+  });
+
+  test("one internal address among public ones is enough to refuse", async () => {
+    await withDNS({"mixed.cwem.test": ["93.184.215.14", "10.0.0.5"]}, async () => {
+      assert.equal(await checkedURL("https://mixed.cwem.test/"), null);
+    });
+  });
+
+  test("a name that does not resolve is refused, not let through", async () => {
+    await withDNS({}, async () => {
+      assert.equal(await checkedURL("https://no-such-host.invalid/"), null);
+    });
   });
 
   test("a hostname that resolves to loopback is refused", async () => {
