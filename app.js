@@ -379,8 +379,9 @@ async function rideFromActivity(text, fileName){
   });
   // The GPX is also the actual-ride record, so attach it in the same step —
   // there is no reason to make you upload the same file twice.
-  attachActual(rideId(`${dateStr}T${timeStr}`, place), stats, fileName);
-  return {stats, feel, place, terrain: opts.terrain};
+  const id = rideId(`${dateStr}T${timeStr}`, place);
+  attachActual(id, stats, fileName);
+  return {id, stats, feel, place, terrain: opts.terrain};
 }
 
 // rideWindow, which turns the forecast into the hours you ride, is in ridewindow.js.

@@ -188,6 +188,18 @@ function attachActual(id, actual, fileName){
   return list;
 }
 
+/* Fields a ride gains from intervals.icu: its id there, and when a rating
+   was written back. Not a rating, so ratedAt does not move. */
+function setRideFields(id, patch){
+  const list = loadHistory();
+  const e = list.find(x => x.id === id);
+  if (!e) return list;
+  if ("icuId" in patch) e.icuId = patch.icuId;
+  if ("icuSentAt" in patch) e.icuSentAt = patch.icuSentAt;
+  saveHistory(list);
+  return list;
+}
+
 function detachActual(id){
   const list = loadHistory();
   const e = list.find(x => x.id === id);
@@ -337,7 +349,11 @@ function normaliseRide(e){
     })(),
     actualFrom: typeof e.actualFrom === "string" ? e.actualFrom : null,
     // Weather looked up after the ride rather than forecast before it.
-    reconstructed: !!e.reconstructed
+    reconstructed: !!e.reconstructed,
+    // The same ride on intervals.icu, and when its rating was last written
+    // back there (intervals.js).
+    icuId: typeof e.icuId === "string" && /^i?\d{1,15}$/.test(e.icuId) ? e.icuId : null,
+    icuSentAt: typeof e.icuSentAt === "string" ? e.icuSentAt : null
   };
 }
 

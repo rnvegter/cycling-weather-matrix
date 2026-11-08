@@ -265,6 +265,30 @@ Do **not** copy `server.js` into a static web root — there is no interpreter b
 would be served as readable text rather than executed. Harmless here, since the file is public
 on GitHub anyway, but it's a bad habit.
 
+## Connecting intervals.icu
+
+Optional. In intervals.icu, *Settings → Developer Settings*, generate an API key, then give it
+to the server as `INTERVALS_API_KEY`. Under systemd, a drop-in keeps it out of the checkout and
+out of the shipped unit:
+
+```bash
+sudo systemctl edit cycling-weather-matrix
+# add:
+# [Service]
+# Environment=INTERVALS_API_KEY=your-key-here
+sudo systemctl restart cycling-weather-matrix
+```
+
+With Docker or Podman, pass `-e INTERVALS_API_KEY=...` (or an env file) when you create the
+container. The buttons appear once the server has a key; nothing is shown without one, and a
+static install cannot use it at all.
+
+The key gives full access to your intervals.icu account, so the usual rule applies with more
+force: the app's API has no login of its own, and anyone who can reach it can list your rides
+and post comments on them. Keep it behind your proxy's authentication. If the key ever leaks,
+regenerate it in intervals.icu. `INTERVALS_ATHLETE_ID` is only needed for an account other than
+the key's own.
+
 ## Serving it under a sub-path
 
 Both the lookup endpoint and the client resolve relative to the current path, so mounting the

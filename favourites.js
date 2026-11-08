@@ -61,7 +61,9 @@ function normaliseFavourite(f){
     lastRiddenAt: favIso(f.lastRiddenAt, null),
     // When this route is usually ridden, "08:00". Lets Ride now fill in the
     // next one, which is the evening-before case: lay the kit out for it.
-    usualTime: validTime(f.usualTime)
+    usualTime: validTime(f.usualTime),
+    // Where it came from on intervals.icu, so the same route is not offered twice.
+    icuRouteId: typeof f.icuRouteId === "string" && /^\d{1,15}$/.test(f.icuRouteId) ? f.icuRouteId : null
   };
 }
 

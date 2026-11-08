@@ -60,6 +60,7 @@ Instructions for working on the Cycling Weather Effect Matrix. They come from ho
 - **Outbound fetches go through `checkedURL`:** resolved, private and link-local ranges refused, redirects re-checked hop by hop, ports 80 and 443 only.
 - **The client IP for rate limiting** is read `TRUST_PROXY_HOPS` entries from the end of `X-Forwarded-For`, and only from a loopback peer.
 - **Every writing route checks `sameOrigin`.** The API has no authentication of its own by design; it relies on the reverse proxy.
+- **The intervals.icu key lives only in the server's environment** (`INTERVALS_API_KEY`). Never send it to the browser, write it to state or a backup, or log it; `/api/intervals/*` answers with the app's own fields, not intervals.icu's objects.
 
 ## Deployment facts to keep straight
 

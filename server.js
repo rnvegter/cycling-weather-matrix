@@ -523,6 +523,172 @@ function mergeHistory(stored, doc){
   return serverWon || result.size !== sent.size || [...result].some(id => !sent.has(id));
 }
 
+/* --- intervals.icu ----------------------------------------------
+   The rider's own account, read with a personal API key: recorded rides (to
+   learn from without uploading each file), planned workouts (to fill in the
+   Ride tab), routes (to keep as favourites), and a comment written back to a
+   ride once it is rated.
+
+   The key lives in the environment (INTERVALS_API_KEY) and nowhere else: it is
+   never sent to the browser, never written to state, never in a backup. Each
+   route below answers with the few fields the app uses, not intervals.icu's
+   own objects, so nothing it adds later leaks through by accident.
+
+   The host is fixed, but the request still goes through checkedTarget and a
+   pinned connection like every outbound request here, with a browser user
+   agent because intervals.icu sits behind Cloudflare, which challenges
+   library defaults. The transport can be replaced (setIcuTransport) so the
+   tests can answer for intervals.icu, and a test harness can route through a
+   proxy where direct connections are not allowed.
+
+   Athlete id "0" means "the owner of this key". */
+const ICU_BASE = "https://intervals.icu/api/v1";
+const ICU_KEY = () => process.env.INTERVALS_API_KEY || "";
+const ICU_ATHLETE = () => (/^i?\d+$/.test(process.env.INTERVALS_ATHLETE_ID || "") ? process.env.INTERVALS_ATHLETE_ID : "0");
+const ICU_RATE = {max: 60, windowMs: 60_000, hits: new Map()};
+const ICU_MAX_BYTES = 8 * 1024 * 1024;
+
+async function icuPinnedTransport(method, url, headers, body){
+  const target = await checkedTarget(url);
+  if (!target) throw new Error("intervals.icu could not be reached from this server");
+  return new Promise((resolve, reject) => {
+    const req = https.request(target.url, {method, headers, lookup: pinnedLookup(target.addrs), timeout: 20000}, res => {
+      let size = 0; const chunks = [];
+      res.on("data", c => {
+        size += c.length;
+        if (size > ICU_MAX_BYTES){ req.destroy(new Error("intervals.icu answer too large")); return; }
+        chunks.push(c);
+      });
+      res.on("end", () => resolve({status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString("utf8")}));
+      res.on("error", reject);
+    });
+    req.on("timeout", () => req.destroy(new Error("intervals.icu did not answer in time")));
+    req.on("error", reject);
+    if (body) req.write(body);
+    req.end();
+  });
+}
+let icuTransport = icuPinnedTransport;
+function setIcuTransport(fn){ icuTransport = fn || icuPinnedTransport; }
+
+/* One call. Answers the parsed JSON (or text, for a GPX), or throws an Error
+   whose message is fit to show the rider. */
+async function icuCall(method, path, query, body){
+  const key = ICU_KEY();
+  if (!key) throw Object.assign(new Error("intervals.icu is not set up on this server (INTERVALS_API_KEY)."), {status: 503});
+  const u = new URL(ICU_BASE + path);
+  for (const [k, v] of Object.entries(query || {})) if (v != null && v !== "") u.searchParams.set(k, String(v));
+  const headers = {
+    authorization: "Basic " + Buffer.from("API_KEY:" + key).toString("base64"),
+    accept: "application/json, application/gpx+xml;q=0.9, */*;q=0.5",
+    "user-agent": UA
+  };
+  let payload = null;
+  if (body != null){ payload = JSON.stringify(body); headers["content-type"] = "application/json"; headers["content-length"] = Buffer.byteLength(payload); }
+  let r;
+  try{ r = await icuTransport(method, u.toString(), headers, payload); }
+  catch(e){ throw Object.assign(new Error(`intervals.icu could not be reached: ${e.message}`), {status: 502}); }
+  if (r.status === 401 || r.status === 403)
+    throw Object.assign(new Error("intervals.icu refused the API key. Check INTERVALS_API_KEY on the server."), {status: 502});
+  if (r.status === 429){
+    const after = parseInt((r.headers || {})["retry-after"], 10);
+    throw Object.assign(new Error(`intervals.icu's request limit is used up${after ? `; try again in ${Math.ceil(after / 60)} minutes` : ""}.`), {status: 429});
+  }
+  if (r.status === 404) throw Object.assign(new Error("intervals.icu has no such item."), {status: 404});
+  if (r.status < 200 || r.status >= 300)
+    throw Object.assign(new Error(`intervals.icu answered ${r.status}.`), {status: 502});
+  const type = String((r.headers || {})["content-type"] || "");
+  if (/json/.test(type)){
+    try{ return JSON.parse(r.body); }catch(e){ throw Object.assign(new Error("intervals.icu sent something unreadable."), {status: 502}); }
+  }
+  return r.body;
+}
+
+const ICU_DAY = /^\d{4}-\d{2}-\d{2}$/;
+const ICU_ACTIVITY_ID = /^i?\d{1,15}$/;
+// Outdoor rides only: a session on the trainer has no weather to learn from.
+const ICU_RIDE_TYPES = new Set(["Ride", "GravelRide", "MountainBikeRide", "EBikeRide", "EMountainBikeRide"]);
+const num = v => (Number.isFinite(+v) ? +v : null);
+const str = (v, n) => (typeof v === "string" ? v.slice(0, n || 200) : null);
+
+const icuRide = a => ({
+  id: String(a.id), name: str(a.name, 120), start: str(a.start_date_local, 19),
+  distanceKm: a.distance != null ? Math.round(num(a.distance) / 10) / 100 : null,
+  movingH: a.moving_time != null ? Math.round(num(a.moving_time) / 36) / 100 : null,
+  speedKmh: a.average_speed != null ? Math.round(num(a.average_speed) * 36) / 10 : null,
+  hasGps: Array.isArray(a.stream_types) ? a.stream_types.includes("latlng") : null,
+  routeId: a.route_id != null ? String(a.route_id) : null
+});
+const icuPlanned = e => ({
+  id: String(e.id), name: str(e.name, 120), start: str(e.start_date_local, 19),
+  hours: e.moving_time ? Math.round(num(e.moving_time) / 36) / 100 : null,
+  distanceKm: e.distance ? Math.round(num(e.distance) / 10) / 100 : null,
+  load: num(e.icu_training_load)
+});
+
+async function icuRoute(req, url, res){
+  const send = (code, obj) => { res.writeHead(code); res.end(JSON.stringify(obj)); };
+  const q = k => url.searchParams.get(k) || "";
+  const action = url.pathname.replace(/.*\/api\/intervals\/?/, "");
+  if (action === "status") return send(200, {configured: !!ICU_KEY()});
+  if (rateLimited(clientIP(req), ICU_RATE)) return send(429, {error: "Too many intervals.icu requests from this browser; wait a minute."});
+  const athlete = ICU_ATHLETE();
+  const days = () => {
+    const oldest = q("oldest"), newest = q("newest");
+    if (!ICU_DAY.test(oldest) || (newest && !ICU_DAY.test(newest))) throw Object.assign(new Error("Dates as YYYY-MM-DD."), {status: 400});
+    return {oldest, newest};
+  };
+  try{
+    if (req.method === "GET" && action === "rides"){
+      const list = await icuCall("GET", `/athlete/${athlete}/activities`, days());
+      return send(200, (Array.isArray(list) ? list : [])
+        .filter(a => a && a.id != null && ICU_RIDE_TYPES.has(a.type) && !a.trainer).map(icuRide));
+    }
+    if (req.method === "GET" && action === "ride-gpx"){
+      const id = q("id");
+      if (!ICU_ACTIVITY_ID.test(id)) return send(400, {error: "No such ride id."});
+      const gpx = await icuCall("GET", `/activity/${id}/gpx-file`);
+      if (typeof gpx !== "string" || !/<gpx[\s>]/.test(gpx)) return send(502, {error: "intervals.icu sent no GPX for that ride."});
+      res.setHeader("content-type", "application/gpx+xml; charset=utf-8");
+      res.writeHead(200); return res.end(gpx);
+    }
+    if (req.method === "GET" && action === "planned"){
+      const list = await icuCall("GET", `/athlete/${athlete}/events.json`, Object.assign({category: "WORKOUT"}, days()));
+      return send(200, (Array.isArray(list) ? list : [])
+        .filter(e => e && e.id != null && ICU_RIDE_TYPES.has(e.type)).map(icuPlanned));
+    }
+    if (req.method === "GET" && action === "routes"){
+      const list = await icuCall("GET", `/athlete/${athlete}/routes`);
+      return send(200, (Array.isArray(list) ? list : []).filter(r => r && r.route_id != null && !r.replaced_by_route_id).map(r => ({
+        id: String(r.route_id), name: str(r.name, 120) || "Unnamed route",
+        distanceKm: r.distance != null ? Math.round(num(r.distance) / 10) / 100 : null,
+        rides: num(r.activity_count), commute: !!r.commute
+      })));
+    }
+    if (req.method === "GET" && action === "route"){
+      const id = q("id");
+      if (!/^\d{1,15}$/.test(id)) return send(400, {error: "No such route id."});
+      const r = await icuCall("GET", `/athlete/${athlete}/routes/${id}`, {includePath: true});
+      const path = (r && Array.isArray(r.latlngs) ? r.latlngs : [])
+        .filter(p => Array.isArray(p) && Number.isFinite(+p[0]) && Number.isFinite(+p[1])).map(p => [+p[0], +p[1]]);
+      return send(200, {id, name: str(r && r.name, 120) || "Unnamed route", path});
+    }
+    if (req.method === "POST" && action === "comment"){
+      // Writes to the rider's account, so the same lock as every other write.
+      if (!sameOrigin(req)) return send(403, {error: "Cross-origin writes are refused."});
+      const b = JSON.parse(await readBody(req, 8 * 1024) || "{}");
+      if (!ICU_ACTIVITY_ID.test(String(b.id || ""))) return send(400, {error: "No such ride id."});
+      const text = typeof b.text === "string" ? b.text.trim().slice(0, 1000) : "";
+      if (!text) return send(400, {error: "Nothing to write."});
+      await icuCall("POST", `/activity/${b.id}/messages`, null, {content: text});
+      return send(200, {ok: true});
+    }
+    return send(404, {error: "No such intervals.icu action."});
+  }catch(e){
+    return send(e.status || 500, {error: String(e.message || e)});
+  }
+}
+
 /* Is this write coming from the app itself rather than from some other page
    the browser happens to have open?
 
@@ -986,6 +1152,11 @@ const server = http.createServer(async (req, res) => {
     return res.end(JSON.stringify({error: "GET to list, POST to act."}));
   }
 
+  if (/\/api\/intervals(\/|$)/.test(url.pathname)){
+    res.setHeader("content-type", "application/json; charset=utf-8");
+    return icuRoute(req, url, res);
+  }
+
   if (url.pathname.endsWith("/api/lookup")){
     const name = (url.searchParams.get("name") || "").trim().slice(0, 120);
     const slot = (url.searchParams.get("slot") || "mid").trim();
@@ -1054,6 +1225,7 @@ if (require.main === module){
 
 module.exports = {server, isServable, isBlockedAddress, checkedURL, checkedTarget, pinnedLookup, requestOnce, get, clientIP,
                   rateLimited, RATE, BACKUP_RATE, toText, rank, sameOrigin, keepNewerLists, mergeHistory, rideWins, STATE_SCHEMA, schemaRefusal,
+                  icuCall, setIcuTransport, ICU_RATE,
                   BACKUP_DIR, BACKUP_NAME, backupPath, listBackups, pruneBackups, writeBackup,
                   readSchedule, writeSchedule, backupDue, runScheduledBackup, lastScheduleFailure,
                   KEEP_DEFAULT, KEEP_MAX, EVERY_HOURS_MIN, EVERY_HOURS_MAX};

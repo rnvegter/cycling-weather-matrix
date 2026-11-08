@@ -350,6 +350,34 @@ Where a layer that cannot come off is the trade-off, the plan says on which side
 it would run warm. With no change across the hours, nothing is added: the headline already
 says the same kit works.
 
+## intervals.icu
+
+With an intervals.icu API key on the server, three buttons appear, and a fourth thing happens
+by itself.
+
+- **History → Import from intervals.icu.** Outdoor rides recorded since the last import (a
+  month back, the first time) come in. A ride within 90 minutes of one planned here becomes
+  that ride's recording — the measured speed replaces the guess, exactly as attaching the file
+  by hand does — and one never planned here is added with the weather from the archive, as
+  "Add a ride from GPX" does. Trainer rides and rides without GPS are left out; a ride from
+  today waits until the archive has the day, and is asked for again next time.
+- **Your rating goes back.** Once a rating has stood for 20 seconds it is written to the ride
+  on intervals.icu as a comment — "Weather Effect: kit a bit cold (hands too cold). Planned at
+  4° ride-feel, 5° air… Wore: …" — so it sits beside the power and heart rate. A comment is
+  added, never the ride's description changed. Change the rating later and the change is sent
+  too.
+- **Ride → Planned in intervals.icu.** The next seven days' planned rides; Use fills in the
+  date, the start time (when one was planned), the hours, and the pace and effort from the
+  training load per hour, which the fuel card reads — the same way the Fietscoach link does.
+- **Favourites → Routes from intervals.icu.** The routes intervals.icu has found in rides you
+  repeat, most ridden first; Add keeps one as a favourite. intervals.icu stores a route's path
+  without height, so climbing is unknown for these.
+
+The key stays on the server: the browser only ever sees the few fields above. Rides synced to
+intervals.icu from Strava cannot be read through its API (Strava's terms), so rides need to
+reach intervals.icu from the head unit or its own app — a Wahoo does that directly. How to set
+the key is in INSTALL.md.
+
 ## There and back
 
 A commute, or a ride to somewhere you spend the day, is ridden twice in one kit with a bag in
@@ -729,6 +757,7 @@ INSTALL.md if you want to self-host them for a genuinely offline install.
 | `favourites.js` | Favourite routes: storage, thinning, duplicates |
 | `favouritesui.js` | The favourites screen, Ride now, and Save as favourite |
 | `feedback.js` | Turning ratings into a temperature correction |
+| `intervals.js` / `intervalsui.js` | intervals.icu: what to import, matching, writing ratings back; and its buttons |
 | `calibrate.js` | Turning ratings into proposals for a garment's range |
 | `scorecard.js` | Whether the model and that correction are any good |
 | `scorecardui.js` | The model screen |

@@ -32,7 +32,8 @@ const ROOT = path.join(__dirname, "..");
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), "cwem-ui-"));
 process.env.STATE_DIR = TMP;
 process.env.BACKUP_DIR = path.join(TMP, "backups");
-const {server} = require(path.join(ROOT, "server.js"));
+process.env.INTERVALS_API_KEY = "ui-test";        // answered below, never sent anywhere
+const {server, setIcuTransport} = require(path.join(ROOT, "server.js"));
 
 /* A fixed forecast: 2° at dawn rising to 14° mid-afternoon, light wind, dry,
    from 6 to 23 November 2026. `tailNulls` blanks the last day after 04:00, as
@@ -222,6 +223,36 @@ async function main(){
     const r = await read(p, {dist: 50, keepPlace: true});
     expect(r.headline != null, `nothing rendered offline; status: ${r.status}`);
     expect(/No connection/.test(r.status), `status: "${r.status}"`);
+    await ctx.close();
+  });
+
+  await check("intervals.icu: a recorded ride finds the one planned here, and its rating is written back", async () => {
+    if (typeof setIcuTransport !== "function") throw new Error("this server has no intervals.icu support");
+    const posted = [];
+    const track = startISO => {
+      let s = `<?xml version="1.0"?><gpx version="1.1" creator="ui-test"><trk><name>Morning Ride</name><trkseg>\n`;
+      for (let i = 0; i < 120; i++) s += `<trkpt lat="${(52.09 + i * 0.0015).toFixed(6)}" lon="5.120000"><ele>5</ele><time>${new Date(Date.parse(startISO) + i * 60000).toISOString()}</time></trkpt>\n`;
+      return s + "</trkseg></trk></gpx>\n";
+    };
+    setIcuTransport(async (method, url, headers, body) => {
+      const p = new URL(url).pathname, json = o => ({status: 200, headers: {"content-type": "application/json"}, body: JSON.stringify(o)});
+      if (p.endsWith("/activities")) return json([{id: "i101", type: "Ride", name: "Morning Ride", start_date_local: "2026-11-09T08:05:00", stream_types: ["latlng"]}]);
+      if (p.endsWith("/activity/i101/gpx-file")) return {status: 200, headers: {"content-type": "application/gpx+xml"}, body: track("2026-11-09T07:05:00Z")};
+      if (p.endsWith("/messages")){ posted.push(JSON.parse(body).content); return json({id: 1}); }
+      return {status: 404, headers: {}, body: ""};
+    });
+    const {p, ctx} = await page({screen: "history"});
+    await p.clock.install({time: new Date("2026-11-09T19:00:00+01:00")});
+    await p.reload(); await p.waitForTimeout(300);
+    await p.evaluate(() => recordRide({startISO: "2026-11-09T08:00", place: "Utrecht", feel: 4, extFeel: 1, air: 5, speed: 24, kit: ["Jacket"]}));
+    await p.click("#icuimport");
+    await p.waitForFunction(() => /Imported|Not yet/.test(document.getElementById("histstatus").textContent), null, {timeout: 15000});
+    const e = await p.evaluate(() => loadHistory().find(x => x.icuId === "i101"));
+    expect(e && e.startISO === "2026-11-09T08:00" && e.actual, "the recorded ride did not attach to the planned one");
+    await p.evaluate(id => rateRide(id, "bit-cold"), e.id);
+    await p.clock.fastForward(36000); await p.waitForTimeout(500);
+    expect(posted.length === 1 && /kit a bit cold/.test(posted[0]), `posted: ${JSON.stringify(posted)}`);
+    setIcuTransport(null);
     await ctx.close();
   });
 

@@ -287,6 +287,13 @@ you rebuild after a dead disk.
   want, since the host already has those files, but make sure something does back the host
   folder up.
 
+## intervals.icu (optional)
+
+To import rides and routes from intervals.icu, give the service your API key with a drop-in
+inside the container, as [INSTALL.md, Connecting intervals.icu](INSTALL.md#connecting-intervalsicu)
+describes (`systemctl edit cycling-weather-matrix`, then `Environment=INTERVALS_API_KEY=...`).
+The container needs outbound HTTPS to `intervals.icu`, which an ordinary LAN allows.
+
 ## Updating
 
 Inside the container the steps are the same as

@@ -67,6 +67,9 @@
     </div>
     <p id="speedhint" class="wx-note"></p>
     <p id="handoff" class="wx-note wx-hidden"></p>
+    <!-- Planned workouts from intervals.icu (intervalsui.js); hidden without a key. -->
+    <button id="icuplanned" class="wx-btn wx-btn--quiet wx-hidden">Planned in intervals.icu</button>
+    <div id="icuplannedlist" class="wx-hidden"></div>
 
     <div class="wx-bar-row" style="margin-top:var(--sp-3)">
       <label class="wx-file" for="gpx">Load a route</label>
@@ -157,11 +160,13 @@
     <div class="wx-bar-row">
       <label class="wx-btn" for="favgpx">Add from GPX</label>
       <input type="file" id="favgpx" accept=".gpx,application/gpx+xml,text/xml" multiple class="wx-hidden">
+      <button id="icuroutes" class="wx-btn wx-btn--quiet wx-hidden">Routes from intervals.icu</button>
       <span class="wx-spacer"></span>
       <span class="wx-note" id="favsize" style="margin:0"></span>
     </div>
 
     <div id="favstatus" class="wx-status wx-hidden" role="status"></div>
+    <div id="icuroutelist" class="wx-hidden"></div>
     <div id="favlist" class="wx-favs"></div>
   </div>
 </section>
@@ -183,6 +188,7 @@
         <button class="wx-chip" data-filter="rated" aria-pressed="false">Rated</button>
       </div>
       <span class="wx-spacer"></span>
+      <button id="icuimport" class="wx-btn wx-hidden" title="Rides recorded on intervals.icu: matched to the ride planned here, or added with the weather from the archive.">Import from intervals.icu</button>
       <label class="wx-btn" for="histgpx">Add a ride from GPX</label>
       <input type="file" id="histgpx" accept=".gpx,application/gpx+xml,text/xml" class="wx-hidden">
       <button id="histexport" class="wx-btn wx-btn--quiet">Export</button>
@@ -335,6 +341,7 @@
 <script src="history.js"></script>
 <script src="favourites.js"></script>
 <script src="feedback.js"></script>
+<script src="intervals.js"></script>
 <script src="gear.js"></script>
 <script src="scorecard.js"></script>
 <script src="model.js"></script>
@@ -348,6 +355,7 @@
 <script src="scorecardui.js"></script>
 <script src="sync.js"></script>
 <script src="backupui.js"></script>
+<script src="intervalsui.js"></script>
 <script src="pwa.js"></script>
 </body>
 </html>
