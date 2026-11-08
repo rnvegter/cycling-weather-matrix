@@ -376,10 +376,20 @@ retried on the next change, and where there is no server at all — files opened
 static deployment — none of it runs and the app behaves exactly as it did before.
 
 The two stores merge differently because they are used differently. **History merges ride by
-ride**, on the same rules as the import: rides accumulate independently on whichever device you
-open, so both sides hold real entries the other has never seen. **Gear is last-write-wins**,
-guarded by a timestamp — you edit it deliberately, in one sitting, and merging per garment
-would mean stamping every item to protect against something that does not happen.
+ride**, in the browser and on the server, on the same rules as the import: rides accumulate
+independently on whichever device you open, so both sides hold real entries the other has never
+seen. A rated copy beats an unrated one; between two ratings the more recent stands; a copy with
+a recorded ride attached beats one without; and two unrated copies take the newer write. The
+server merging too is what lets a tab left open for a day push its history without dropping the
+ride another device added since. **Gear is last-write-wins**, guarded by a timestamp — you edit
+it deliberately, in one sitting, and merging per garment would mean stamping every item to
+protect against something that does not happen. A missing stamp counts as older than any.
+
+A merge of lists cannot see a deletion, so **a deleted ride leaves a tombstone** — its id and
+when — that travels with the history and is applied on every device; planning the same ride
+again lifts it, and a ride rated after the deletion is kept. **Restoring a backup replaces** the
+history outright, tombstones included, and carries a stamp so the server replaces as well
+instead of merging the rides you just undid back in.
 
 The file is written temp-then-rename so a crash mid-write cannot leave truncated JSON where
 your gear list was, and the previous version is kept alongside as `state.prev.json`. Backing up

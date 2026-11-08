@@ -16,6 +16,69 @@
 const HISTORY_KEY = "cwem-history-v1";
 const LEGACY_FEEDBACK_KEY = "cwem-feedback-v1";
 
+/* ---------------------------------------------------------------
+   Deletions that travel.
+
+   History merges ride by ride, here and on the server, so that two devices
+   can both add rides. A merge of lists cannot see a deletion: a ride removed
+   here is simply a ride the other side still has, and it would come straight
+   back. So a deletion is kept as a tombstone — the ride's id and when it was
+   deleted — and carried with the history. A merge drops any ride whose id
+   has a tombstone, unless the ride was rated after the deletion, which means
+   someone chose to keep it. Planning the same ride again lifts the tombstone.
+   Bounded, since ids are small and the list only grows.
+----------------------------------------------------------------*/
+const HISTORY_TOMBS_KEY = "cwem-history-deleted";
+const HISTORY_REPLACED_KEY = "cwem-history-replaced";
+const TOMBS_MAX = 500;
+
+function loadTombstones(){
+  try{ return normaliseTombstones(JSON.parse(localStorage.getItem(HISTORY_TOMBS_KEY) || "{}")); }
+  catch(e){ return {}; }
+}
+function saveTombstones(t){
+  const entries = Object.entries(t).sort((a, b) => a[1].localeCompare(b[1])).slice(-TOMBS_MAX);
+  try{ localStorage.setItem(HISTORY_TOMBS_KEY, JSON.stringify(Object.fromEntries(entries))); }catch(e){}
+}
+/* id → ISO time, field by field, because it arrives from sync and backups. */
+function normaliseTombstones(t){
+  const out = {};
+  if (!t || typeof t !== "object" || Array.isArray(t)) return out;
+  for (const [id, at] of Object.entries(t)){
+    if (typeof id === "string" && id && typeof at === "string" && at) out[id] = at;
+  }
+  return out;
+}
+function tombstone(ids){
+  const t = loadTombstones();
+  const now = new Date().toISOString();
+  ids.forEach(id => { t[id] = now; });
+  saveTombstones(t);
+}
+/* Does the tombstone still apply to this ride? Not if it was rated after. */
+const buried = (ride, tombs) => {
+  const at = tombs[ride.id];
+  return !!at && !(ride.ratedAt && ride.ratedAt > at);
+};
+
+/* Which of two copies of the same ride stands. Shared with the server, which
+   carries the same rule (rideWins in server.js, cross-checked by a test):
+     - a rated copy beats an unrated one;
+     - between two ratings the more recent stands; equal, the incoming one;
+     - with the same rating, a copy carrying a recorded ride (actual) beats
+       one without, so an attached file reaches every device;
+     - two unrated copies: the incoming one, so a re-run's new numbers land. */
+function rideWins(inc, existing){
+  const incRated = inc.delta != null, hasRated = existing.delta != null;
+  if (incRated !== hasRated) return incRated;
+  if (incRated){
+    const a = String(inc.ratedAt || ""), b = String(existing.ratedAt || "");
+    if (a !== b) return a > b;
+  }
+  if (!!inc.actual !== !!existing.actual) return !!inc.actual;
+  return true;
+}
+
 const rideId = (startISO, place) => `${startISO}|${place || ""}`;
 
 function loadHistory(){
@@ -78,6 +141,8 @@ function recordRide(entry){
   } else {
     list.push(Object.assign({id, savedAt: new Date().toISOString()}, entry));
   }
+  const tombs = loadTombstones();
+  if (tombs[id]){ delete tombs[id]; saveTombstones(tombs); }
   saveHistory(list);
   return list;
 }
@@ -152,12 +217,15 @@ function unrateRide(id){
 
 function deleteRide(id){
   const list = loadHistory().filter(e => e.id !== id);
+  tombstone([id]);
   saveHistory(list);
   return list;
 }
 
 function clearHistory(){
+  tombstone(loadHistory().map(e => e.id));
   try{ localStorage.removeItem(HISTORY_KEY); }catch(e){}
+  saveHistory([]);              // through the hook, so the clearing syncs
   return [];
 }
 
@@ -249,23 +317,43 @@ function importHistory(text){
   const incoming = parsed.map(normaliseRide).filter(Boolean);
   if (!incoming.length) throw new Error("No rides in that file that this recognises.");
 
-  const list = loadHistory();
+  return mergeRides(incoming, {});
+}
+
+/* The merge itself: incoming rides (already normalised) and tombstones from
+   elsewhere, against what is stored here. Used by import and by sync. */
+function mergeRides(incoming, theirTombs){
+  const tombs = loadTombstones();
+  // Their deletions become ours, newest time per id.
+  for (const [id, at] of Object.entries(normaliseTombstones(theirTombs))){
+    if (!tombs[id] || at > tombs[id]) tombs[id] = at;
+  }
+  const list = loadHistory().filter(e => !buried(e, tombs));
   const byId = new Map(list.map(e => [e.id, e]));
   let added = 0, updated = 0, unchanged = 0;
 
   incoming.forEach(inc => {
+    if (buried(inc, tombs)){ unchanged++; return; }
     const existing = byId.get(inc.id);
     if (!existing){ list.push(inc); byId.set(inc.id, inc); added++; return; }
-
-    const incRated = inc.delta != null, hasRated = existing.delta != null;
-    const incWins = incRated && !hasRated
-      || (incRated && hasRated && String(inc.ratedAt || "") > String(existing.ratedAt || ""));
-    if (incWins){
+    if (rideWins(inc, existing)){
       Object.assign(existing, inc);
       updated++;
     } else unchanged++;
   });
 
+  saveTombstones(tombs);
   saveHistory(list);
   return {added, updated, unchanged, total: list.length};
+}
+
+/* A restore replaces the history outright, and the server must take it as
+   such rather than merge the old rides back in. The stamp says when. */
+function replaceHistory(list){
+  try{ localStorage.removeItem(HISTORY_TOMBS_KEY); }catch(e){}
+  try{ localStorage.setItem(HISTORY_REPLACED_KEY, new Date().toISOString()); }catch(e){}
+  saveHistory(list);
+}
+function historyReplacedAt(){
+  try{ return localStorage.getItem(HISTORY_REPLACED_KEY) || ""; }catch(e){ return ""; }
 }

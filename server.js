@@ -432,6 +432,64 @@ function keepNewerLists(stored, doc){
   return doc;
 }
 
+/* --- History, ride by ride -------------------------------------
+   A browser pulls once, when it loads, and pushes its whole history after
+   every change. Written whole, a tab left open since before another device
+   added a ride pushed a history without it, and the server copy (and any
+   backup taken in between) lost the ride until that device next synced. So
+   the server merges rides the way the browser does, with the same rule
+   (rideWins in history.js; a test checks the two agree), applies deletions
+   carried as tombstones, and only replaces the whole list when the write
+   says it is a restore (historyReplacedAt newer than the stored one). */
+const HISTORY_MAX = 300, TOMBS_MAX = 500;
+
+function rideWins(inc, existing){
+  const incRated = inc.delta != null, hasRated = existing.delta != null;
+  if (incRated !== hasRated) return incRated;
+  if (incRated){
+    const a = String(inc.ratedAt || ""), b = String(existing.ratedAt || "");
+    if (a !== b) return a > b;
+  }
+  if (!!inc.actual !== !!existing.actual) return !!inc.actual;
+  return true;
+}
+
+const cleanTombs = t => {
+  const out = {};
+  if (t && typeof t === "object" && !Array.isArray(t))
+    for (const [id, at] of Object.entries(t)) if (id && typeof at === "string" && at) out[id] = at;
+  return out;
+};
+const rideList = v => Array.isArray(v) ? v.filter(r => r && typeof r === "object" && typeof r.id === "string" && r.id) : [];
+const buried = (ride, tombs) => !!tombs[ride.id] && !(ride.ratedAt && ride.ratedAt > tombs[ride.id]);
+
+function mergeHistory(stored, doc){
+  const theirs = rideList(doc.history), mine = stored ? rideList(stored.history) : [];
+  const replaced = String(doc.historyReplacedAt || ""), had = String((stored && stored.historyReplacedAt) || "");
+  if (!stored || (replaced && replaced > had)){
+    doc.history = theirs;
+    doc.deletedRides = cleanTombs(doc.deletedRides);
+    doc.historyReplacedAt = replaced || had;
+    return doc;
+  }
+  const tombs = cleanTombs(stored.deletedRides);
+  for (const [id, at] of Object.entries(cleanTombs(doc.deletedRides))) if (!tombs[id] || at > tombs[id]) tombs[id] = at;
+
+  const byId = new Map();
+  mine.forEach(r => { if (!buried(r, tombs)) byId.set(r.id, r); });
+  theirs.forEach(r => {
+    if (buried(r, tombs)) return;
+    const ex = byId.get(r.id);
+    if (!ex || rideWins(r, ex)) byId.set(r.id, ex ? Object.assign({}, ex, r) : r);
+  });
+  // Newest rides last, as the browser keeps them, and the same cap.
+  const merged = [...byId.values()].sort((a, b) => String(a.startISO || "").localeCompare(String(b.startISO || "")));
+  doc.history = merged.slice(-HISTORY_MAX);
+  doc.deletedRides = Object.fromEntries(Object.entries(tombs).sort((a, b) => a[1].localeCompare(b[1])).slice(-TOMBS_MAX));
+  doc.historyReplacedAt = had;
+  return doc;
+}
+
 /* Is this write coming from the app itself rather than from some other page
    the browser happens to have open?
 
@@ -736,7 +794,9 @@ const server = http.createServer(async (req, res) => {
         const doc = JSON.parse(body);
         if (!doc || typeof doc !== "object" || Array.isArray(doc))
           throw new Error("expected an object");
-        keepNewerLists(readState(), doc);
+        const stored = readState();
+        keepNewerLists(stored, doc);
+        mergeHistory(stored, doc);
         doc.savedAt = new Date().toISOString();
         writeState(doc);
         res.writeHead(200);
@@ -951,7 +1011,7 @@ if (require.main === module){
 }
 
 module.exports = {server, isServable, isBlockedAddress, checkedURL, checkedTarget, pinnedLookup, requestOnce, get, clientIP,
-                  rateLimited, RATE, BACKUP_RATE, toText, rank, sameOrigin, keepNewerLists,
+                  rateLimited, RATE, BACKUP_RATE, toText, rank, sameOrigin, keepNewerLists, mergeHistory, rideWins,
                   BACKUP_DIR, BACKUP_NAME, backupPath, listBackups, pruneBackups, writeBackup,
                   readSchedule, writeSchedule, backupDue, runScheduledBackup, lastScheduleFailure,
                   KEEP_DEFAULT, KEEP_MAX, EVERY_HOURS_MIN, EVERY_HOURS_MAX};

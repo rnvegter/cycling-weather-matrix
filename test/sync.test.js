@@ -49,7 +49,7 @@ before(() => {
   const realFetch = globalThis.fetch, realInterval = globalThis.setInterval;
   globalThis.fetch = () => Promise.reject(new Error("no server in this test"));
   globalThis.setInterval = () => 0;
-  ["gpx.js", "history.js", "favourites.js", "gear.js", "sync.js"].forEach(f =>
+  ["gpx.js", "history.js", "favourites.js", "feedback.js", "gear.js", "sync.js"].forEach(f =>
     vm.runInThisContext(fs.readFileSync(path.join(__dirname, "..", f), "utf8"), {filename: f}));
   globalThis.setInterval = realInterval;
   // The pull at load time has failed by now or will; either way it changes nothing.
@@ -85,6 +85,50 @@ describe("gear merge in the browser", () => {
     localStorage.setItem(GEAR_STAMP_KEY, "2026-10-02T08:00:00.000Z");
     mergeIncoming({gear: riderList(), gearUpdatedAt: "2026-10-01T08:00:00.000Z"});
     assert.equal(loadGear()[0].model, "Newer");
+  });
+});
+
+describe("history merge in the browser", () => {
+  const r = (id, extra) => Object.assign({startISO: `2026-10-0${id}T08:00`, place: "Utrecht"}, extra || {});
+
+  test("a ride deleted here does not come back from the server", () => {
+    saveHistory([r(1), r(2)].map(normaliseRide));
+    const gone = loadHistory()[0].id;
+    deleteRide(gone);
+    mergeIncoming({history: [r(1), r(2)]});
+    assert.deepEqual(loadHistory().map(e => e.id).includes(gone), false);
+    assert.equal(loadHistory().length, 1);
+  });
+
+  test("a ride deleted on another device is deleted here, and stays deleted", () => {
+    saveHistory([r(1), r(2)].map(normaliseRide));
+    const gone = loadHistory()[1].id;
+    mergeIncoming({history: [r(1)], deletedRides: {[gone]: "2026-10-05T10:00:00.000Z"}});
+    assert.equal(loadHistory().length, 1);
+    assert.ok(localDocument().deletedRides[gone], "the deletion is carried on to the next push");
+  });
+
+  test("planning the same ride again after deleting it brings it back", () => {
+    saveHistory([r(1)].map(normaliseRide));
+    const id = loadHistory()[0].id;
+    deleteRide(id);
+    recordRide(r(1, {feel: 5}));
+    assert.equal(loadHistory().length, 1);
+    assert.equal(localDocument().deletedRides[id], undefined);
+  });
+
+  test("clearing the history deletes every ride everywhere, not only here", () => {
+    saveHistory([r(1), r(2)].map(normaliseRide));
+    clearHistory();
+    assert.equal(Object.keys(localDocument().deletedRides).length, 2);
+    mergeIncoming({history: [r(1), r(2)]});
+    assert.equal(loadHistory().length, 0);
+  });
+
+  test("a recorded ride attached elsewhere reaches this browser", () => {
+    saveHistory([r(1)].map(normaliseRide));
+    mergeIncoming({history: [r(1, {actual: {speed: 31, distance: 60}, actualFrom: "x.gpx"})]});
+    assert.equal(loadHistory()[0].actual.speed, 31);
   });
 });
 
@@ -126,6 +170,60 @@ describe("writes to /api/state", () => {
     await put({gear: list("old"), gearUpdatedAt: T1});
     await put({gear: list("new"), gearUpdatedAt: T2});
     assert.equal((await read()).gear[0].model, "new");
+  });
+
+  const ride = (n, extra) => Object.assign({id: `2026-10-0${n}T08:00|Utrecht`, startISO: `2026-10-0${n}T08:00`, place: "Utrecht"}, extra || {});
+
+  test("a stale tab's history does not drop rides another device added", async () => {
+    await put({history: [ride(1), ride(2), ride(3)]});
+    await put({history: [ride(1)]});                       // open since before 2 and 3 existed
+    const ids = (await read()).history.map(e => e.id);
+    assert.deepEqual(ids.sort(), [ride(1).id, ride(2).id, ride(3).id].sort());
+  });
+
+  test("a rating beats no rating, and a newer rating beats an older one", async () => {
+    await put({history: [ride(1, {verdict: "cold", delta: -2, ratedAt: T2})]});
+    await put({history: [ride(1)]});
+    assert.equal((await read()).history[0].verdict, "cold", "unrated does not undo a rating");
+    await put({history: [ride(1, {verdict: "warm", delta: 2, ratedAt: T1})]});
+    assert.equal((await read()).history[0].verdict, "cold", "an older rating does not replace a newer one");
+    await put({history: [ride(1, {verdict: "right", delta: 0, ratedAt: "2026-10-03T08:00:00.000Z"})]});
+    assert.equal((await read()).history[0].verdict, "right");
+  });
+
+  test("a deletion is kept and applied, and is carried to other devices", async () => {
+    await put({history: [ride(1), ride(2)]});
+    await put({history: [ride(1)], deletedRides: {[ride(2).id]: T2}});
+    let doc = await read();
+    assert.deepEqual(doc.history.map(e => e.id), [ride(1).id]);
+    assert.equal(doc.deletedRides[ride(2).id], T2);
+    await put({history: [ride(1), ride(2)]});              // a device that still has it
+    doc = await read();
+    assert.deepEqual(doc.history.map(e => e.id), [ride(1).id], "the deletion stands");
+  });
+
+  test("a restore replaces the history outright, deletions included", async () => {
+    await put({history: [ride(1), ride(2)], deletedRides: {[ride(3).id]: T1}});
+    await put({history: [ride(3)], deletedRides: {}, historyReplacedAt: T2});
+    const doc = await read();
+    assert.deepEqual(doc.history.map(e => e.id), [ride(3).id]);
+    assert.deepEqual(doc.deletedRides, {});
+    await put({history: [ride(1)], historyReplacedAt: T1});   // an older restore, from a stale tab
+    assert.deepEqual((await read()).history.map(e => e.id).sort(), [ride(1).id, ride(3).id].sort(), "merged, not replaced");
+  });
+
+  test("the server's merge rule is the browser's", () => {
+    const cases = [
+      [{}, {}], [{verdict: "right", delta: 0, ratedAt: T1}, {}], [{}, {verdict: "right", delta: 0, ratedAt: T1}],
+      [{verdict: "right", delta: 0, ratedAt: T2}, {verdict: "right", delta: 0, ratedAt: T1}],
+      [{verdict: "right", delta: 0, ratedAt: T1}, {verdict: "right", delta: 0, ratedAt: T2}],
+      [{verdict: "right", delta: 0, ratedAt: T1}, {verdict: "right", delta: 0, ratedAt: T1}],
+      [{actual: {speed: 30}}, {}], [{}, {actual: {speed: 30}}], [{actual: {speed: 30}}, {actual: {speed: 28}}]
+    ];
+    for (const [inc, ex] of cases){
+      assert.equal(srv.rideWins(ride(1, inc), ride(1, ex)), rideWins(normaliseRide(ride(1, inc)), normaliseRide(ride(1, ex))),
+        `incoming ${JSON.stringify(inc)} vs existing ${JSON.stringify(ex)}`);
+    }
   });
 
   test("favourites follow the same rule, and an empty newer list still counts", async () => {

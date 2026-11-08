@@ -19,6 +19,11 @@
                uses: a rated ride beats an unrated one, and between two ratings
                the more recent stands.
 
+               A deletion travels as a tombstone (history.js), because a
+               merge of lists cannot see one; and a restore from a backup
+               carries a stamp that tells the server to replace rather than
+               merge, since putting the old rides back is the point of it.
+
      gear      is last-write-wins, guarded by a timestamp. You edit it
                deliberately, in one sitting, rarely in two places at once.
                Merging it per garment would mean stamping every item to protect
@@ -71,9 +76,10 @@ function paintSyncStatus(){
 function mergeIncoming(doc){
   syncBusy = true;
   try{
-    // History: ride by ride, reusing the import's rules.
-    if (Array.isArray(doc.history) && doc.history.length){
-      importHistory(JSON.stringify(doc.history));
+    // History: ride by ride, with the import's rules and their deletions.
+    if (Array.isArray(doc.history) || doc.deletedRides){
+      const incoming = (Array.isArray(doc.history) ? doc.history : []).map(normaliseRide).filter(Boolean);
+      mergeRides(incoming, doc.deletedRides || {});
     }
 
     /* Gear: newest document wins outright. A missing stamp is older than any
@@ -120,6 +126,8 @@ function localDocument(){
     gear: loadGear(),
     gearUpdatedAt: gearStamp(),
     history: loadHistory(),
+    deletedRides: loadTombstones(),
+    historyReplacedAt: historyReplacedAt(),
     favourites: hasFavourites ? loadFavourites() : undefined,
     favouritesUpdatedAt: favStamp(),
     updatedAt: new Date().toISOString()
