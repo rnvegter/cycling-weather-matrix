@@ -833,26 +833,25 @@ async function analyseRoute(route, opts){
 const fmtDay = s => new Date(s + "T12:00").toLocaleDateString(undefined, {weekday:"long", day:"numeric", month:"long"});
 const hhmm = d => `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
 
-function render(f, w, opts, place, analysis){
-  const out = state.mode === "wardrobe" ? pickOutfit(f, w, opts, gear) : genericOutfit(f, w, opts);
-  // The route card says the sweat problem better when it has legs to point at.
-  const watch = watchFor(f, w, analysis && analysis.wetThrough
-    ? Object.assign({}, opts, {sweatNoted: true}) : opts);
-  const band = bandFor(f.feel);
-  const hb = out.hb;
-  const ramp = rampFor(f.feel);
+/* ---------------------------------------------------------------
+   The reading, card by card.
 
-  // Head to feet, because that is the order you get dressed in.
-  const byZone = items => items.slice().sort((a, b) => {
-    const ia = ZONE_ORDER.indexOf(a.slot), ib = ZONE_ORDER.indexOf(b.slot);
-    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
-  });
-  /* A reason given for this ride (_why) is short and specific, so it stays in
-     full. A garment's standing note is often a paragraph; shown whole it made
-     the Wear card a screen tall and pushed Carry and the warnings below the
-     fold, so it is one line until tapped. Both are escaped: the notes come
-     from the gear list, which you edit and which syncs. */
-  const kitRows = items => byZone(items).map(it => `
+   render() used to be one 400-line template. Each card is now built by its
+   own function from what it needs, and render() only works out the outfit and
+   puts the cards in order. The markup is unchanged.
+----------------------------------------------------------------*/
+
+// Head to feet, because that is the order you get dressed in.
+const byZone = items => items.slice().sort((a, b) => {
+  const ia = ZONE_ORDER.indexOf(a.slot), ib = ZONE_ORDER.indexOf(b.slot);
+  return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+});
+/* A reason given for this ride (_why) is short and specific, so it stays in
+   full. A garment's standing note is often a paragraph; shown whole it made
+   the Wear card a screen tall and pushed Carry and the warnings below the
+   fold, so it is one line until tapped. Both are escaped: the notes come
+   from the gear list, which you edit and which syncs. */
+const kitRows = items => byZone(items).map(it => `
     <div class="wx-kit__row">
       <div class="wx-kit__zone">${it._label || ZONE_LABEL[it.slot] || ""}</div>
       <div class="wx-kit__items">${escapeText(it.name)}${it._why
@@ -863,18 +862,59 @@ function render(f, w, opts, place, analysis){
           : ""}</div>
     </div>`).join("");
 
+function readoutCard(f, w, opts, place, ramp){
+  return `
+  <section class="wx-readout ${ramp}">
+    <p class="wx-eyebrow">${placeLabel(place)} &middot; ${fmtDay(w.times[0].slice(0,10))}
+       &middot; ${hhmm(w.startDT)}–${hhmm(w.endDT)} &middot; ${r1(opts.dist)} km</p>
+    <div class="wx-readout__row">
+      <div>
+        <span class="wx-readout__value">${f.feel}</span>
+        <span class="wx-readout__unit">&deg;C felt</span>
+      </div>
+      <div class="wx-readout__air">
+        ${r1(w.tStart)}&deg;C air, ${r1(w.tEnd)}&deg; by the end<br>
+        wind ${compass(w.dir)} ${Math.round(w.wind)} km/h${w.gust >= 40 ? `, gusts ${Math.round(w.gust)}` : ""}<br>
+        rain ${Math.round(w.prob)}%${w.precipTotal >= 0.1 ? `, ${r1(w.precipTotal)} mm` : ""}
+      </div>
+    </div>
+    <div class="wx-strip"><span class="wx-strip__mark" style="left:${rampPos(f.feel)}%"></span></div>
+    ${scaleMarkup()}
+  </section>`;
+}
+
+function wearCard(out, ramp){
+  return `
+  <section class="wx-card ${ramp}">
+    <h2 class="wx-heading">Wear</h2>
+    <div class="wx-kit">${kitRows(out.wear)}</div>
+  </section>`;
+}
+
+function carryCard(out, ramp){
+  return out.pocket.length ? `
+  <section class="wx-card wx-card--flat ${ramp}">
+    <h2 class="wx-heading">Carry</h2>
+    <div class="wx-kit">${out.pocket.map(([it, why]) => `
+      <div class="wx-kit__row">
+        <div class="wx-kit__zone">Pocket</div>
+        <p class="wx-kit__items">${escapeText(it.name)}${why ? ` <em>${why}</em>` : ""}</p>
+      </div>`).join("")}</div>
+  </section>` : "";
+}
+
+function chipsList(f){
   // Air -> ride-feel, as chips. Sign is carried by colour so the arithmetic
   // scans without being read.
-  const chips = f.rows.filter(r => !r.base).map(r => `
+  return f.rows.filter(r => !r.base).map(r => `
     <li class="wx-chip${r.v > 0 ? " wx-chip--plus" : ""}">
       <b>${r.v > 0 ? "+" : "−"}${Math.abs(r1(r.v))}</b> ${r.label.toLowerCase()}
     </li>`).join("");
 
-  /* The order follows the question being asked at 06:40: how cold, what to
-     wear, what to carry, what to watch for — and only then the detail behind
-     it. The hours strip and the map used to sit between the reading and the
-     kit, and the warnings came after the route card, several screens down. */
-  const hoursCard = `
+}
+
+function hoursCard(w, ramp){
+  return `
   <section class="wx-card wx-card--flat ${ramp}">
     <div class="wx-card__head">
       <h2 class="wx-heading">The next hours</h2>
@@ -895,10 +935,12 @@ function render(f, w, opts, place, analysis){
         ? `, and it turns wet after you would be home, around ${fmtTime(w.outlook.find(h => !h.riding && h.prob >= 50).time)}`
         : ""}. Arrows point the way the wind is blowing.</p>
   </section>`;
+}
 
+function routeFlag(analysis){
   // A route whose kit changes along the way changes the answer itself, so it
   // is said beside the kit rather than three cards further down.
-  const routeFlag = !analysis ? "" : analysis.error
+  return !analysis ? "" : analysis.error
     ? `<p class="wx-alert"><b>Route check failed.</b> ${analysis.error}
         The advice above still stands for the start point.</p>`
     : analysis.changes
@@ -907,240 +949,207 @@ function render(f, w, opts, place, analysis){
           ${Math.round(analysis.coldest.fromKm)} km, against ${analysis.warmest.f.feel}&deg; at the
           warmest. What to carry, and where to put it on, is under Along the route below.</p>`
       : "";
+}
 
-  const warnings = out.notes.map(n => `<p class="wx-alert">${n}</p>`).join("")
+function warningsList(out, watch){
+  return out.notes.map(n => `<p class="wx-alert">${n}</p>`).join("")
     + watch.map(x => `<p class="wx-alert"><b>Watch.</b> ${x}</p>`).join("");
+}
 
-  $("#out").innerHTML = `
-  <section class="wx-readout ${ramp}">
-    <p class="wx-eyebrow">${placeLabel(place)} &middot; ${fmtDay(w.times[0].slice(0,10))}
-       &middot; ${hhmm(w.startDT)}–${hhmm(w.endDT)} &middot; ${r1(opts.dist)} km</p>
-    <div class="wx-readout__row">
-      <div>
-        <span class="wx-readout__value">${f.feel}</span>
-        <span class="wx-readout__unit">&deg;C felt</span>
+function windCard(w, place, ramp){
+  const bft = beaufort(w.wind), gustBft = beaufort(w.gust);
+  // Ride out into the wind so the way home has it behind: the return leg is
+  // ridden tired, and a headwind there is what actually makes people cold.
+  const outbound = w.dirLate;
+  const shifts = angleGap(w.dir, w.dirLate) > 40;
+  const matters = bft.force >= 3;
+  return `
+<section class="wx-card ${ramp}">
+  <h2 class="wx-heading">${matters ? "Wind, and which way to go" : "Wind"}</h2>
+  ${(() => {
+    // The bearing only means something if you can see where it points. With a
+    // route loaded that is the route itself; without one, the start point.
+    const box = document.querySelector(".wx-shell");
+    const width = Math.max(240, Math.min(560, (box ? box.clientWidth : 600) - 44));
+    const m = renderMap({
+      width, height: Math.round(width * (route ? 0.62 : 0.5)),
+      points: route ? route.points : null,
+      lat: place.latitude, lon: place.longitude,
+      windFrom: w.dir, outbound: matters ? outbound : null
+    });
+    return m + `<p class="wx-maplegend">
+      <span><i class="k-wind"></i> wind, blowing this way</span>
+      ${matters ? `<span><i class="k-go"></i> set off this way</span>` : ""}
+      ${route ? `<span><i class="k-route"></i> your route</span>` : ""}
+    </p>`;
+  })()}
+
+  <div>
+      <div class="wx-bft">
+        <span class="wx-bft__n">${bft.force}</span>
+        <span class="wx-bft__u">Bft</span>
+        <span class="wx-bft__name">${bft.name}</span>
       </div>
-      <div class="wx-readout__air">
-        ${r1(w.tStart)}&deg;C air, ${r1(w.tEnd)}&deg; by the end<br>
-        wind ${compass(w.dir)} ${Math.round(w.wind)} km/h${w.gust >= 40 ? `, gusts ${Math.round(w.gust)}` : ""}<br>
-        rain ${Math.round(w.prob)}%${w.precipTotal >= 0.1 ? `, ${r1(w.precipTotal)} mm` : ""}
-      </div>
-    </div>
-    <div class="wx-strip"><span class="wx-strip__mark" style="left:${rampPos(f.feel)}%"></span></div>
-    ${scaleMarkup()}
-  </section>
+      <p class="wx-note" style="margin-top:var(--sp-2)">
+        From the <b>${compass(w.dir)}</b>, ${Math.round(w.wind)} km/h${
+          w.gust >= w.wind + 12 ? `, gusting ${Math.round(w.gust)} which is force ${gustBft.force}` : ""}.
+        ${bft.note}
+      </p>
+      ${(() => {
+        const sp = w.spread;
+        if (!sp) return "";
+        const tight = sp.dirSpread <= 25;
+        const wetPct = Math.round(100 * sp.wetMembers / sp.rainMembers);
+        return `<p class="wx-agree ${tight ? "is-tight" : "is-loose"}">
+          <b>${sp.members} ECMWF members</b> ${tight
+            ? `land within ${Math.round(sp.dirSpread)}&deg; of each other on direction — the bearing is worth planning around.`
+            : `spread over ${Math.round(sp.dirSpread)}&deg; on direction, so treat the bearing as a steer and look again nearer the time.`}
+          ${sp.wetMembers > 0
+            ? ` ${sp.wetMembers} of ${sp.rainMembers} have rain at this hour (${wetPct}%).`
+            : " None of them have rain at this hour."}
+          ${sp.tempSpread >= 2.5
+            ? ` Air temperature spans ${r1(sp.tempLow)}&ndash;${r1(sp.tempHigh)}&deg;C across the middle of the spread, so the kit call is less settled than one number looks.`
+            : ""}</p>`;
+      })()}
+      ${matters ? `
+      <p class="wx-startdir"><b>Set off towards the ${compass(outbound)}.</b>
+        That puts the wind in your face going out and behind you coming back,
+        which is the leg you ride tired.</p>
+      ${shifts ? `<p class="wx-note">It veers from ${compass(w.dir)} to ${compass(w.dirLate)}
+        across the ride, so this bearing follows the later wind, which is what
+        you will actually be riding home in.</p>` : ""}`
+      : `<p class="wx-note">Force ${bft.force} is not worth planning a route around.
+         Go whichever way you like.</p>`}
+  </div>
+</section>`;
+}
 
-  <section class="wx-card ${ramp}">
-    <h2 class="wx-heading">Wear</h2>
-    <div class="wx-kit">${kitRows(out.wear)}</div>
-  </section>
+function routeCard(analysis, ramp){
+  // A failed check is already said beside the kit, in routeFlag.
+  if (!analysis || analysis.error) return "";
 
-  ${out.pocket.length ? `
-  <section class="wx-card wx-card--flat ${ramp}">
-    <h2 class="wx-heading">Carry</h2>
-    <div class="wx-kit">${out.pocket.map(([it, why]) => `
-      <div class="wx-kit__row">
-        <div class="wx-kit__zone">Pocket</div>
-        <p class="wx-kit__items">${escapeText(it.name)}${why ? ` <em>${why}</em>` : ""}</p>
+  const {legs, coldest, warmest, extra, shed, swaps, changes, spread, wetThrough} = analysis;
+  const consistent = !changes;
+  const km = n => `${Math.round(n)} km`;
+
+  return `
+<section class="wx-card ${consistent ? ramp : rampFor(coldest.f.feel)}">
+  <div class="wx-card__head">
+    <h2 class="wx-heading">Along the route</h2>
+    <span class="wx-eyebrow" style="margin:0">${legs.length} legs &middot; ${km(route.stats.distance)}${
+      route.stats.hasElevation ? ` &middot; ${Math.round(route.stats.ascent)} m up` : ""}</span>
+  </div>
+
+  <div class="wx-scroll">
+    <div class="wx-legs">${legs.map(l => `
+      <div class="wx-leg ${rampFor(l.f.feel)}">
+        <div class="wx-leg__km">${km(l.fromKm)}</div>
+        ${skyIcon(l.w.code, l.w.day, 22)}
+        <div class="wx-leg__feel">${l.f.feel}&deg;</div>
+        <div class="wx-leg__air">${r1(l.w.tStart)}&deg; air</div>
+        <div class="wx-leg__wind" title="${Math.round(l.w.ambient)} km/h wind, ${Math.round(Math.abs(l.w.headwind))} km/h of it ${windLabel(l.w.headwind)}">
+          ${l.heading != null ? windArrow(l.w.dir) : ""}
+          <span class="wx-num">${l.w.headwind > 0 ? "+" : ""}${Math.round(l.w.headwind)}</span>
+        </div>
+        ${l.ele != null ? `<div class="wx-leg__ele">${Math.round(l.ele)} m</div>` : ""}
+        <div class="wx-leg__time">${hhmm(l.startTime)}</div>
       </div>`).join("")}</div>
-  </section>` : ""}
+  </div>
 
-  ${fuelCard(fuelPlan(w, f, opts), ramp, opts)}
+  ${wetThrough ? `<p class="wx-alert"><b>Wet through before the top.</b>
+    The climb from ${km(wetThrough.climb.fromKm)} is ${wetThrough.climb.f.feel}&deg; in
+    ${wetThrough.rh}% humidity — hard, slow, and with next to no airflow to dry you — and the
+    descent at ${km(wetThrough.descent.fromKm)} is ${Math.round(wetThrough.drop)}&deg; colder
+    than that. The descent's own number was worked out for a dry base layer, so carry something
+    windproof to shut over a wet one rather than a thicker layer to put under it.</p>` : ""}
 
-  ${routeFlag}
-  ${warnings}
-  ${hoursCard}
+  ${consistent ? `
+    <p class="wx-startdir"><b>The same kit works the whole way.</b>
+      Ride-feel moves ${spread <= 1 ? "barely at all" : `about ${Math.round(spread)}&deg;`}
+      between the legs, and nothing in that range changes what you'd put on or take off.</p>
+    ${swaps.length ? `<p class="wx-note">Borderline either way: ${swaps.join("; ")}. Same
+      warmth, so it isn't worth carrying both.</p>` : ""}`
+  : `
+    <p class="wx-startdir"><b>The kit doesn't hold for the whole ride.</b>
+      Coldest is ${coldest.f.feel}&deg; around ${km(coldest.fromKm)}${
+        coldest.ele != null && route.stats.hasElevation ? ` at ${Math.round(coldest.ele)} m` : ""},
+      warmest ${warmest.f.feel}&deg; around ${km(warmest.fromKm)}.</p>
 
-  ${(() => {
-    const bft = beaufort(w.wind), gustBft = beaufort(w.gust);
-    // Ride out into the wind so the way home has it behind: the return leg is
-    // ridden tired, and a headwind there is what actually makes people cold.
-    const outbound = w.dirLate;
-    const shifts = angleGap(w.dir, w.dirLate) > 40;
-    const matters = bft.force >= 3;
-    return `
-  <section class="wx-card ${ramp}">
-    <h2 class="wx-heading">${matters ? "Wind, and which way to go" : "Wind"}</h2>
-    ${(() => {
-      // The bearing only means something if you can see where it points. With a
-      // route loaded that is the route itself; without one, the start point.
-      const box = document.querySelector(".wx-shell");
-      const width = Math.max(240, Math.min(560, (box ? box.clientWidth : 600) - 44));
-      const m = renderMap({
-        width, height: Math.round(width * (route ? 0.62 : 0.5)),
-        points: route ? route.points : null,
-        lat: place.latitude, lon: place.longitude,
-        windFrom: w.dir, outbound: matters ? outbound : null
-      });
-      return m + `<p class="wx-maplegend">
-        <span><i class="k-wind"></i> wind, blowing this way</span>
-        ${matters ? `<span><i class="k-go"></i> set off this way</span>` : ""}
-        ${route ? `<span><i class="k-route"></i> your route</span>` : ""}
-      </p>`;
-    })()}
-
-    <div>
-        <div class="wx-bft">
-          <span class="wx-bft__n">${bft.force}</span>
-          <span class="wx-bft__u">Bft</span>
-          <span class="wx-bft__name">${bft.name}</span>
-        </div>
-        <p class="wx-note" style="margin-top:var(--sp-2)">
-          From the <b>${compass(w.dir)}</b>, ${Math.round(w.wind)} km/h${
-            w.gust >= w.wind + 12 ? `, gusting ${Math.round(w.gust)} which is force ${gustBft.force}` : ""}.
-          ${bft.note}
-        </p>
-        ${(() => {
-          const sp = w.spread;
-          if (!sp) return "";
-          const tight = sp.dirSpread <= 25;
-          const wetPct = Math.round(100 * sp.wetMembers / sp.rainMembers);
-          return `<p class="wx-agree ${tight ? "is-tight" : "is-loose"}">
-            <b>${sp.members} ECMWF members</b> ${tight
-              ? `land within ${Math.round(sp.dirSpread)}&deg; of each other on direction — the bearing is worth planning around.`
-              : `spread over ${Math.round(sp.dirSpread)}&deg; on direction, so treat the bearing as a steer and look again nearer the time.`}
-            ${sp.wetMembers > 0
-              ? ` ${sp.wetMembers} of ${sp.rainMembers} have rain at this hour (${wetPct}%).`
-              : " None of them have rain at this hour."}
-            ${sp.tempSpread >= 2.5
-              ? ` Air temperature spans ${r1(sp.tempLow)}&ndash;${r1(sp.tempHigh)}&deg;C across the middle of the spread, so the kit call is less settled than one number looks.`
-              : ""}</p>`;
-        })()}
-        ${matters ? `
-        <p class="wx-startdir"><b>Set off towards the ${compass(outbound)}.</b>
-          That puts the wind in your face going out and behind you coming back,
-          which is the leg you ride tired.</p>
-        ${shifts ? `<p class="wx-note">It veers from ${compass(w.dir)} to ${compass(w.dirLate)}
-          across the ride, so this bearing follows the later wind, which is what
-          you will actually be riding home in.</p>` : ""}`
-        : `<p class="wx-note">Force ${bft.force} is not worth planning a route around.
-           Go whichever way you like.</p>`}
-    </div>
-  </section>`;
-  })()}
-
-  ${(() => {
-    // A failed check is already said beside the kit, in routeFlag.
-    if (!analysis || analysis.error) return "";
-
-    const {legs, coldest, warmest, extra, shed, swaps, changes, spread, wetThrough} = analysis;
-    const consistent = !changes;
-    const km = n => `${Math.round(n)} km`;
-
-    return `
-  <section class="wx-card ${consistent ? ramp : rampFor(coldest.f.feel)}">
-    <div class="wx-card__head">
-      <h2 class="wx-heading">Along the route</h2>
-      <span class="wx-eyebrow" style="margin:0">${legs.length} legs &middot; ${km(route.stats.distance)}${
-        route.stats.hasElevation ? ` &middot; ${Math.round(route.stats.ascent)} m up` : ""}</span>
-    </div>
-
-    <div class="wx-scroll">
-      <div class="wx-legs">${legs.map(l => `
-        <div class="wx-leg ${rampFor(l.f.feel)}">
-          <div class="wx-leg__km">${km(l.fromKm)}</div>
-          ${skyIcon(l.w.code, l.w.day, 22)}
-          <div class="wx-leg__feel">${l.f.feel}&deg;</div>
-          <div class="wx-leg__air">${r1(l.w.tStart)}&deg; air</div>
-          <div class="wx-leg__wind" title="${Math.round(l.w.ambient)} km/h wind, ${Math.round(Math.abs(l.w.headwind))} km/h of it ${windLabel(l.w.headwind)}">
-            ${l.heading != null ? windArrow(l.w.dir) : ""}
-            <span class="wx-num">${l.w.headwind > 0 ? "+" : ""}${Math.round(l.w.headwind)}</span>
-          </div>
-          ${l.ele != null ? `<div class="wx-leg__ele">${Math.round(l.ele)} m</div>` : ""}
-          <div class="wx-leg__time">${hhmm(l.startTime)}</div>
-        </div>`).join("")}</div>
-    </div>
-
-    ${wetThrough ? `<p class="wx-alert"><b>Wet through before the top.</b>
-      The climb from ${km(wetThrough.climb.fromKm)} is ${wetThrough.climb.f.feel}&deg; in
-      ${wetThrough.rh}% humidity — hard, slow, and with next to no airflow to dry you — and the
-      descent at ${km(wetThrough.descent.fromKm)} is ${Math.round(wetThrough.drop)}&deg; colder
-      than that. The descent's own number was worked out for a dry base layer, so carry something
-      windproof to shut over a wet one rather than a thicker layer to put under it.</p>` : ""}
-
-    ${consistent ? `
-      <p class="wx-startdir"><b>The same kit works the whole way.</b>
-        Ride-feel moves ${spread <= 1 ? "barely at all" : `about ${Math.round(spread)}&deg;`}
-        between the legs, and nothing in that range changes what you'd put on or take off.</p>
-      ${swaps.length ? `<p class="wx-note">Borderline either way: ${swaps.join("; ")}. Same
-        warmth, so it isn't worth carrying both.</p>` : ""}`
-    : `
-      <p class="wx-startdir"><b>The kit doesn't hold for the whole ride.</b>
-        Coldest is ${coldest.f.feel}&deg; around ${km(coldest.fromKm)}${
-          coldest.ele != null && route.stats.hasElevation ? ` at ${Math.round(coldest.ele)} m` : ""},
-        warmest ${warmest.f.feel}&deg; around ${km(warmest.fromKm)}.</p>
-
-      ${analysis.plan ? (() => {
-        const {wear: pWear, carry, conflicts, shedAt, holds, worn, required} = analysis.plan;
-        return `
-        <h3 class="wx-heading" style="margin-top:var(--sp-4)">To make it hold</h3>
-        <div class="wx-kit">
-          ${pWear.length ? `
+    ${analysis.plan ? (() => {
+      const {wear: pWear, carry, conflicts, shedAt, holds, worn, required} = analysis.plan;
+      return `
+      <h3 class="wx-heading" style="margin-top:var(--sp-4)">To make it hold</h3>
+      <div class="wx-kit">
+        ${pWear.length ? `
+        <div class="wx-kit__row">
+          <div class="wx-kit__zone">Wear</div>
+          <p class="wx-kit__items">${pWear.map(i => i.name).join(", ")}
+            <em>Chosen for the warmest leg, because a jersey can't come off at the roadside.</em></p>
+        </div>` : ""}
+        ${carry.map(c => `
           <div class="wx-kit__row">
-            <div class="wx-kit__zone">Wear</div>
-            <p class="wx-kit__items">${pWear.map(i => i.name).join(", ")}
-              <em>Chosen for the warmest leg, because a jersey can't come off at the roadside.</em></p>
-          </div>` : ""}
-          ${carry.map(c => `
-            <div class="wx-kit__row">
-              <div class="wx-kit__zone">${c.fromStart ? "On now" : "Carry"}</div>
-              <p class="wx-kit__items">${c.item.name}
-                <em>${c.fromStart
-                  ? "Wanted from the off."
-                  : `On around ${c.at}, about ${c.time}, where it reads ${c.leg.f.feel}&deg;.`}${
-                  c.item.pack ? " Packs into a pocket." : ""}</em></p>
-            </div>`).join("")}
-          ${shedAt.map(sd => `
-            <div class="wx-kit__row">
-              <div class="wx-kit__zone">Shed</div>
-              <p class="wx-kit__items">${sd.item.name}
-                <em>Off around ${sd.at}, about ${sd.time} — into a pocket, not left behind.</em></p>
-            </div>`).join("")}
-          ${conflicts.map(c => `
-            <div class="wx-kit__row">
-              <div class="wx-kit__zone">Decide</div>
-              <p class="wx-kit__items">${c.cold.name} against ${c.warm ? c.warm.name : "nothing"}
-                <em>${c.fix}</em></p>
-            </div>`).join("")}
-        </div>
+            <div class="wx-kit__zone">${c.fromStart ? "On now" : "Carry"}</div>
+            <p class="wx-kit__items">${c.item.name}
+              <em>${c.fromStart
+                ? "Wanted from the off."
+                : `On around ${c.at}, about ${c.time}, where it reads ${c.leg.f.feel}&deg;.`}${
+                c.item.pack ? " Packs into a pocket." : ""}</em></p>
+          </div>`).join("")}
+        ${shedAt.map(sd => `
+          <div class="wx-kit__row">
+            <div class="wx-kit__zone">Shed</div>
+            <p class="wx-kit__items">${sd.item.name}
+              <em>Off around ${sd.at}, about ${sd.time} — into a pocket, not left behind.</em></p>
+          </div>`).join("")}
+        ${conflicts.map(c => `
+          <div class="wx-kit__row">
+            <div class="wx-kit__zone">Decide</div>
+            <p class="wx-kit__items">${c.cold.name} against ${c.warm ? c.warm.name : "nothing"}
+              <em>${c.fix}</em></p>
+          </div>`).join("")}
+      </div>
 
-        ${holds
-          ? `<p class="wx-note">Everything the cold end needs goes in a pocket, so start in what
-             the warm legs want and add as the route cools. Worn and carried together come to
-             ${worn} clo against ${required} required at the coldest point.</p>`
-          : `<p class="wx-alert"><b>Carrying isn't enough on its own.</b> Even with everything
-             above on, the coldest leg wants ${required} clo and this gives ${worn}. ${
-               conflicts.length
-                 ? "The decision above is the one that closes it."
-                 : "And nothing else in your gear closes it — this route is colder than what you have with you. Shorten it, start later when it has warmed, or go back for more kit."
-             }</p>`}`;
-      })() : `
-        ${extra.length ? `<p class="wx-note"><b>The cold end wants</b> ${extra.join(", ")} —
-          carry what you can rather than starting in it.</p>` : ""}
-        ${shed.length ? `<p class="wx-note"><b>The warm end doesn't want</b> ${shed.join(", ")}.</p>` : ""}`}`}
+      ${holds
+        ? `<p class="wx-note">Everything the cold end needs goes in a pocket, so start in what
+           the warm legs want and add as the route cools. Worn and carried together come to
+           ${worn} clo against ${required} required at the coldest point.</p>`
+        : `<p class="wx-alert"><b>Carrying isn't enough on its own.</b> Even with everything
+           above on, the coldest leg wants ${required} clo and this gives ${worn}. ${
+             conflicts.length
+               ? "The decision above is the one that closes it."
+               : "And nothing else in your gear closes it — this route is colder than what you have with you. Shorten it, start later when it has warmed, or go back for more kit."
+           }</p>`}`;
+    })() : `
+      ${extra.length ? `<p class="wx-note"><b>The cold end wants</b> ${extra.join(", ")} —
+        carry what you can rather than starting in it.</p>` : ""}
+      ${shed.length ? `<p class="wx-note"><b>The warm end doesn't want</b> ${shed.join(", ")}.</p>` : ""}`}`}
 
-    ${(() => {
-      const hard = legs.filter(l => l.w.headwind >= 15);
-      if (!hard.length) return "";
-      return `<p class="wx-note">Into the wind from ${hard.map(l => km(l.fromKm)).join(", ")} —
-        ${Math.round(Math.max(...hard.map(l => l.w.headwind)))} km/h of headwind at the worst of it.</p>`;
-    })()}
-    ${(() => {
-      const wet = legs.filter(l => l.w.prob >= 50);
-      if (!wet.length) return "";
-      return `<p class="wx-note">Rain most likely around ${wet.map(l => km(l.fromKm)).join(", ")}.</p>`;
-    })()}
-  </section>`;
+  ${(() => {
+    const hard = legs.filter(l => l.w.headwind >= 15);
+    if (!hard.length) return "";
+    return `<p class="wx-note">Into the wind from ${hard.map(l => km(l.fromKm)).join(", ")} —
+      ${Math.round(Math.max(...hard.map(l => l.w.headwind)))} km/h of headwind at the worst of it.</p>`;
   })()}
+  ${(() => {
+    const wet = legs.filter(l => l.w.prob >= 50);
+    if (!wet.length) return "";
+    return `<p class="wx-note">Rain most likely around ${wet.map(l => km(l.fromKm)).join(", ")}.</p>`;
+  })()}
+</section>`;
+}
 
-  <h2 class="wx-heading" style="margin-top:var(--sp-6)">Air &rarr; ride-feel</h2>
-  <p class="wx-eyebrow">${r1(f.air)}&deg;C air, ${f.feel}&deg; felt${
-    f.extFeel !== f.feel ? ` &middot; hands and feet ${f.extFeel}&deg;` : ""}</p>
-  <ul class="wx-chips">${chips}</ul>
-  <p class="wx-note">Hands and feet sit still in the airflow, and running hot does not apply
-     to fingers — so they are read on ${f.extFeel}&deg;, not ${f.feel}&deg;.</p>
+function feelSection(f){
+return `
+<h2 class="wx-heading" style="margin-top:var(--sp-6)">Air &rarr; ride-feel</h2>
+<p class="wx-eyebrow">${r1(f.air)}&deg;C air, ${f.feel}&deg; felt${
+  f.extFeel !== f.feel ? ` &middot; hands and feet ${f.extFeel}&deg;` : ""}</p>
+<ul class="wx-chips">${chipsList(f)}</ul>
+<p class="wx-note">Hands and feet sit still in the airflow, and running hot does not apply
+   to fingers — so they are read on ${f.extFeel}&deg;, not ${f.feel}&deg;.</p>`;
+}
 
-  ${hb ? `
+function heatBalanceCard(hb, f, opts, ramp){
+  return hb ? `
   <details class="wx-more">
     <summary>Heat balance &middot; ${r2(hb.worn)} of ${r2(hb.required)} clo, ${hb.verdict}</summary>
     <div class="wx-scroll"><table class="wx-table ${ramp}">
@@ -1157,8 +1166,11 @@ function render(f, w, opts, place, analysis){
     ${hb.detail ? `<p class="wx-note">${hb.detail}</p>` : ""}
     <p class="wx-note">A windproof outer layer keeps the stack beneath it; a permeable one lets
        the airflow strip it. That is why 75&nbsp;g of gilet can beat a much thicker fleece.</p>
-  </details>` : ""}
+  </details>` : "";
+}
 
+function scaleCard(band){
+  return `
   <details class="wx-more">
     <summary>The whole scale</summary>
     <div class="wx-scroll"><table class="wx-table">
@@ -1170,9 +1182,38 @@ function render(f, w, opts, place, analysis){
     </table></div>
   </details>
 
-`;
-  $("#out").scrollIntoView({behavior:"smooth", block:"start"});
 
+
+`;
+}
+
+function render(f, w, opts, place, analysis){
+  const out = state.mode === "wardrobe" ? pickOutfit(f, w, opts, gear) : genericOutfit(f, w, opts);
+  // The route card says the sweat problem better when it has legs to point at.
+  const watch = watchFor(f, w, analysis && analysis.wetThrough
+    ? Object.assign({}, opts, {sweatNoted: true}) : opts);
+  const band = bandFor(f.feel);
+  const ramp = rampFor(f.feel);
+
+  /* The order follows the question being asked at 06:40: how cold, what to
+     wear, what to carry, what to watch for — and only then the detail behind
+     it. The hours strip and the map used to sit between the reading and the
+     kit, and the warnings came after the route card, several screens down. */
+  $("#out").innerHTML = [
+    readoutCard(f, w, opts, place, ramp),
+    wearCard(out, ramp),
+    carryCard(out, ramp),
+    fuelCard(fuelPlan(w, f, opts), ramp, opts),
+    routeFlag(analysis),
+    warningsList(out, watch),
+    hoursCard(w, ramp),
+    windCard(w, place, ramp),
+    routeCard(analysis, ramp),
+    feelSection(f),
+    heatBalanceCard(out.hb, f, opts, ramp),
+    scaleCard(band)
+  ].join("\n");
+  $("#out").scrollIntoView({behavior:"smooth", block:"start"});
 }
 
 // One line of a garment's note until you ask for the rest. Delegated, because
