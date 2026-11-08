@@ -626,6 +626,33 @@ sudo systemctl reload caddy
 
 ### Option B — Docker
 
+**The short way: `deploy/update-docker.sh`.** From the checkout on the Docker host:
+
+```bash
+./deploy/update-docker.sh --dry-run    # shows the commits it would bring in, changes nothing
+./deploy/update-docker.sh              # pull, rebuild, replace the container, prove it landed
+./deploy/update-docker.sh --rollback   # put the previous version back
+```
+
+It pulls `main`, keeps the image now running as `:previous`, builds the new one while the old
+container keeps serving, replaces the container, and then compares every file the browser loads
+as served with the checkout, byte for byte. If the new container does not answer within a
+minute, or serves something else, it puts the previous version back on its own and says so.
+It refuses to start when the checkout has local changes, and when the running container mounts
+something (a backup folder, say) that the new settings would leave out.
+
+It recreates the container as `cwem` on port 8765 with the `cwem-state` volume, adding
+`--env-file /root/cwem.env` when that file exists (the intervals.icu key). Anything else goes
+in `/etc/cwem-update.conf`, which it reads when present:
+
+```bash
+CWEM_PORT="127.0.0.1:8765:8765"
+CWEM_EXTRA_ARGS="-v /srv/cwem-backups:/backups:Z -e BACKUP_DIR=/backups"
+```
+
+The other names it reads are `CWEM_NAME`, `CWEM_IMAGE`, `CWEM_VOLUME`, `CWEM_ENV_FILE`,
+`CWEM_BRANCH` and `CWEM_ENGINE` (`podman` works too). By hand, the steps are:
+
 ```bash
 cd cycling-weather-matrix
 git pull
