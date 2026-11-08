@@ -393,6 +393,13 @@ instead of merging the rides you just undid back in. Another device takes the re
 next pull rather than merging into it, and one that pushes before it has seen the restore may
 add rides it saved since, but cannot bring back the ones the restore removed.
 
+**The document carries a version** (`schema`, 1 today; no number means 1). A page that meets
+data written by a newer version of the app reads none of it and writes nothing over it, and says
+"reload the page"; the server refuses a write in an older shape over a newer one, and a newer
+shape than it understands, with a 409 that says which to update. Restoring a backup from a newer
+version is refused for the same reason. The number goes up when a field changes meaning, not
+when one is added.
+
 The file is written temp-then-rename so a crash mid-write cannot leave truncated JSON where
 your gear list was, and the previous version is kept alongside as `state.prev.json`. Backing up
 is a file copy. Note that the endpoint has no authentication of its own: on a public

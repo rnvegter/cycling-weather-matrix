@@ -253,3 +253,29 @@ describe("writes to /api/state", () => {
     assert.deepEqual((await read()).favourites, [], "deleting the last favourite propagates");
   });
 });
+
+/* --- The document's shape ------------------------------------------ */
+
+describe("schema version", () => {
+  test("browser and server agree on the current version", () => {
+    assert.equal(STATE_SCHEMA, srv.STATE_SCHEMA);
+  });
+
+  test("the browser says which version it writes", () => {
+    assert.equal(localDocument().schema, STATE_SCHEMA);
+  });
+
+  test("a document from a newer version is not read, and nothing is pushed over it", () => {
+    saveHistory([]);
+    mergeIncoming({schema: STATE_SCHEMA + 1, history: [{startISO: "2026-10-01T08:00", place: "X"}]});
+    assert.equal(loadHistory().length, 0);
+    assert.match(lastError, /newer version/);
+  });
+
+  test("the server refuses a newer shape, and an older one over a newer store", () => {
+    assert.match(srv.schemaRefusal(null, {schema: srv.STATE_SCHEMA + 1}), /Update the server/);
+    assert.match(srv.schemaRefusal({schema: srv.STATE_SCHEMA + 1}, {}), /Reload/);
+    assert.equal(srv.schemaRefusal({}, {}), null, "no number is version 1 on both sides");
+    assert.equal(srv.schemaRefusal(null, {schema: srv.STATE_SCHEMA}), null);
+  });
+});

@@ -445,6 +445,22 @@ function keepNewerLists(stored, doc){
    restore, and may only add rides saved after it. */
 const HISTORY_MAX = 300, TOMBS_MAX = 500;
 
+/* The synced document's shape, as in sync.js (a test keeps them equal). A
+   write is refused, not stored, when its shape is newer than this server
+   understands (update the server) or older than what is stored (a page
+   from before an update, which would write the old shape over the new).
+   No number means 1. */
+const STATE_SCHEMA = 1;
+const docSchema = doc => (Number.isInteger(doc && doc.schema) && doc.schema >= 1 ? doc.schema : 1);
+function schemaRefusal(stored, doc){
+  const theirs = docSchema(doc), have = stored ? docSchema(stored) : 1;
+  if (theirs > STATE_SCHEMA)
+    return "That data comes from a newer version of the app than this server runs. Update the server.";
+  if (theirs < have)
+    return "This page is from an older version of the app than the data on the server. Reload it.";
+  return null;
+}
+
 function rideWins(inc, existing){
   const incRated = inc.delta != null, hasRated = existing.delta != null;
   if (incRated !== hasRated) return incRated;
@@ -802,6 +818,12 @@ const server = http.createServer(async (req, res) => {
         if (!doc || typeof doc !== "object" || Array.isArray(doc))
           throw new Error("expected an object");
         const stored = readState();
+        const refusal = schemaRefusal(stored, doc);
+        if (refusal){
+          res.writeHead(409);
+          return res.end(JSON.stringify({error: refusal}));
+        }
+        doc.schema = docSchema(doc);
         keepNewerLists(stored, doc);
         mergeHistory(stored, doc);
         doc.savedAt = new Date().toISOString();
@@ -903,6 +925,8 @@ const server = http.createServer(async (req, res) => {
           const doc = JSON.parse(fs.readFileSync(full, "utf8"));
           if (!doc || !doc.state || typeof doc.state !== "object")
             throw new Error("that file is not a backup of this app");
+          if (docSchema(doc.state) > STATE_SCHEMA)
+            throw new Error("that backup was written by a newer version of the app than this server runs");
           /* The safety copy comes first, and a failure to take it stops the
              restore. Overwriting the current state with no way back is the one
              outcome this feature exists to prevent. */
@@ -1018,7 +1042,7 @@ if (require.main === module){
 }
 
 module.exports = {server, isServable, isBlockedAddress, checkedURL, checkedTarget, pinnedLookup, requestOnce, get, clientIP,
-                  rateLimited, RATE, BACKUP_RATE, toText, rank, sameOrigin, keepNewerLists, mergeHistory, rideWins,
+                  rateLimited, RATE, BACKUP_RATE, toText, rank, sameOrigin, keepNewerLists, mergeHistory, rideWins, STATE_SCHEMA, schemaRefusal,
                   BACKUP_DIR, BACKUP_NAME, backupPath, listBackups, pruneBackups, writeBackup,
                   readSchedule, writeSchedule, backupDue, runScheduledBackup, lastScheduleFailure,
                   KEEP_DEFAULT, KEEP_MAX, EVERY_HOURS_MIN, EVERY_HOURS_MAX};

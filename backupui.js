@@ -79,6 +79,8 @@ function validEnvelope(doc){
   if (!st || typeof st !== "object") return "That file has no state in it.";
   if (!Array.isArray(st.gear) && !Array.isArray(st.history))
     return "That file holds neither gear nor rides.";
+  if (typeof STATE_SCHEMA === "number" && Number.isInteger(st.schema) && st.schema > STATE_SCHEMA)
+    return "That backup was written by a newer version of the app. Update this one first.";
   return null;
 }
 

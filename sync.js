@@ -30,6 +30,16 @@
                against something that does not really happen.
 ----------------------------------------------------------------*/
 
+/* The shape of the synced document. Raise it when a field changes meaning,
+   not when one is added: normalise functions already absorb additions. A
+   document with no number is version 1, which is everything written before
+   the number existed. The server holds the same constant (server.js), and a
+   test keeps the two equal. When it is raised, the migration from the old
+   shape goes in mergeIncoming, before anything is read. */
+const STATE_SCHEMA = 1;
+const docSchema = doc => (Number.isInteger(doc && doc.schema) && doc.schema >= 1 ? doc.schema : 1);
+let schemaBlocked = false;    // the server holds a newer shape: read nothing, write nothing
+
 const SYNC_ENDPOINT = new URL("api/state", location.href.replace(/[^/]*$/, "")).toString();
 const GEAR_STAMP_KEY = "cwem-gear-updated";
 const PUSH_DEBOUNCE = 1200;
@@ -57,6 +67,7 @@ const setFavStamp = v => { if (hasFavourites) try{ localStorage.setItem(FAV_STAM
 function syncStatusText(){
   if (syncAvailable === false) return "Not syncing — no server, so this browser keeps its own copy.";
   if (syncAvailable === null) return "Checking for a sync server…";
+  if (schemaBlocked) return `Not syncing: ${lastError}. Changes stay in this browser until then.`;
   if (lastError) return `Sync failed: ${lastError}. It will try again on the next change.`;
   if (pendingPush) return "Saving…";
   if (!lastSyncedAt) return "Synced.";
@@ -74,6 +85,13 @@ function paintSyncStatus(){
 /* --- Merge ------------------------------------------------------- */
 
 function mergeIncoming(doc){
+  // Written by a newer version of the app. Reading it with this code would
+  // misread it, and pushing would write the old shape over the new one.
+  if (docSchema(doc) > STATE_SCHEMA){
+    schemaBlocked = true;
+    lastError = "the server holds data from a newer version of this app; reload the page to update it";
+    return;
+  }
   syncBusy = true;
   try{
     // History: ride by ride, with the import's rules and their deletions.
@@ -126,6 +144,7 @@ function mergeIncoming(doc){
 
 function localDocument(){
   return {
+    schema: STATE_SCHEMA,
     gear: loadGear(),
     gearUpdatedAt: gearStamp(),
     history: loadHistory(),
@@ -147,6 +166,7 @@ async function syncPull(){
     syncAvailable = true;
     lastError = null;
     if (!doc.empty) mergeIncoming(doc);
+    if (schemaBlocked){ paintSyncStatus(); return; }
     // Whatever this browser holds that the server has not seen goes up now,
     // which also covers the very first run against an empty server.
     await syncPush(true);
@@ -160,7 +180,7 @@ async function syncPull(){
 }
 
 async function syncPush(immediate){
-  if (syncAvailable === false) return;
+  if (syncAvailable === false || schemaBlocked) return;
   if (!immediate){
     pendingPush = true;
     paintSyncStatus();
@@ -174,6 +194,13 @@ async function syncPush(immediate){
       headers: {"content-type": "application/json"},
       body: JSON.stringify(localDocument())
     });
+    if (r.status === 409){
+      // The server refused on the document's version; its reason says which way.
+      let why = "";
+      try{ why = (await r.json()).error || ""; }catch(e){}
+      schemaBlocked = true;
+      throw new Error(why || "the server holds a different version of this app's data");
+    }
     if (!r.ok) throw new Error(`server said ${r.status}`);
     lastSyncedAt = Date.now();
     pendingPush = false;
