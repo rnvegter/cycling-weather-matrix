@@ -10,6 +10,50 @@ What this guide adds to INSTALL.md is the Proxmox part: creating the container, 
 container feature the systemd unit needs, keeping backups on the host, and how to reach the app
 from your network.
 
+## The quick way: one script
+
+`deploy/proxmox-lxc.sh` does steps 1 to 5 below in one go. Run it on the Proxmox host, as
+root, from a checkout of this repository:
+
+```bash
+git clone https://github.com/rnvegter/cycling-weather-matrix.git
+cd cycling-weather-matrix
+./deploy/proxmox-lxc.sh --dry-run          # shows every command, changes nothing
+./deploy/proxmox-lxc.sh                    # LAN, DHCP: http://<container-ip>:8765
+```
+
+The common variations:
+
+```bash
+# A fixed address, Caddy in front with HTTPS for a public domain
+./deploy/proxmox-lxc.sh --ip 192.168.1.50/24 --gw 192.168.1.1 --domain kit.example.com
+
+# Caddy on a LAN-only name (no certificate), backups in a host folder
+./deploy/proxmox-lxc.sh --domain http://kit.lan --backup-dir /tank/cwem-backups
+```
+
+`--help` lists the rest: container ID (default: the next free one), hostname, template,
+storage, disk, memory and bridge. Without `--domain` the app listens on the LAN, route 4b
+below; with it, Caddy runs in the same container, route 4a.
+
+What it does, in order: picks the newest `debian-13-standard` template (downloading it if the
+host has none), creates an unprivileged container with nesting on, **copies the checkout it
+sits in** to `/opt/cycling-weather-matrix` (root-owned, `.git` included, `state.json` and
+`backups/` left out), installs Node and the shipped systemd unit, sets up the access route and
+the backup mount, and finally checks that the served `model.js` matches your checkout's.
+
+It copies rather than clones because the repository is private and a new container has no
+credentials. Updating later with `git pull` in the container needs a
+[deploy key](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/managing-deploy-keys)
+there, as in step 3. Because `.git` is copied whole, a token you put in the clone URL on the
+host travels with it; clone over SSH, or with a deploy key, to keep it out.
+
+It refuses to start if the container ID is taken, and checks its options before changing
+anything. If a step fails halfway, the container stays as it is for you to inspect; remove it
+with `pct stop <id> && pct destroy <id>` before running the script again.
+
+The rest of this guide is the same steps by hand, and the reasoning behind each.
+
 ## How this was checked
 
 Everything inside the container was run in Debian 12 and Debian 13 amd64 LXC containers with
@@ -17,6 +61,13 @@ the unit's sandbox active: the Node packages, the stock systemd unit, sync, the 
 allow-list, and backups both into the state directory and into a separate mount. The `pct` and
 `pveam` commands that run on the Proxmox host itself were not run. They are the standard ones,
 but use the template name your host actually prints.
+
+The script has not been run on a real Proxmox host either. It was checked with ShellCheck and
+run end to end against stand-ins for `pct`, `pveam` and `pvesh` that record every call: the
+commands it issues, the files it copies and leaves out, the shifted owner of the backup folder,
+the Caddyfile it writes, and its refusals of bad options. The install steps it runs inside the
+container are the ones above. Try `--dry-run` first, and on a first real run expect to read
+the output.
 
 ## 1. Get a Debian template
 
