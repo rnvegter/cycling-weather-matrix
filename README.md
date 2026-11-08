@@ -440,6 +440,27 @@ one you cannot argue with.
 Once there are enough wet rides it keeps a separate correction for them. Plenty of riders run
 hot in the dry and cold in the wet, and one number cannot hold both.
 
+## Letting the ranges follow the rides
+
+The ranges on the Gear tab are your calibration, and the history holds the evidence to
+revisit them: every rated ride carries the ride-feel it was planned at and the garments it was
+planned with. **From your rides**, at the top of the Gear tab, turns that into a proposal when
+there is a case: "3 rated rides were too warm near the top of its range (11°). Move its warm
+end down to 9°?", with the rides listed under it. Apply moves the edge, and is an ordinary edit
+that syncs; Not now keeps that proposal away until the rides behind it change.
+
+A verdict is about the whole outfit, so it is not pinned on one garment lightly. Only rides
+planned within 3° of a garment's own edge count for that garment, because that is the only
+place its range decided anything; too warm in the middle of a jacket's range says nothing about
+the jacket, and goes to the rider correction below instead. It takes three rides pointing the
+same way, at least twice as many as say otherwise; the edge moves past the worst of them by a
+degree, at most three degrees at a time, and a range never closes below two degrees. Hands, feet,
+socks, neck and head are judged on the extremity number, as they are chosen. A ride with a
+recorded speed counts with the speed correction applied, as the rider correction does.
+
+Two garments worn together near both their edges can each get a proposal from the same rides,
+and the app does not pretend to know which one was too much. That is the rider's call.
+
 ## Backups
 
 `state.prev.json` is one step of insurance: the version before the last write. That is the
@@ -617,6 +638,7 @@ INSTALL.md if you want to self-host them for a genuinely offline install.
 | `favourites.js` | Favourite routes: storage, thinning, duplicates |
 | `favouritesui.js` | The favourites screen, Ride now, and Save as favourite |
 | `feedback.js` | Turning ratings into a temperature correction |
+| `calibrate.js` | Turning ratings into proposals for a garment's range |
 | `scorecard.js` | Whether the model and that correction are any good |
 | `scorecardui.js` | The model screen |
 | `backupui.js` | The backup screen: versions, restore, schedule |

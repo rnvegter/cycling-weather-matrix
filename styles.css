@@ -783,6 +783,12 @@ input[type="checkbox"] { accent-color: var(--text); width: auto; min-height: 0; 
 }
 .wx-status--err { border-left-color: var(--signal); color: var(--signal); }
 
+/* A suggestion from the rides, on the gear screen: one per garment edge.
+   (.wx-suggest is taken: it is the place search's result list.) */
+.wx-advice { border-top: 1px solid var(--line); padding: var(--sp-3) 0; }
+.wx-advice:first-of-type { border-top: 0; }
+.wx-advice__text { margin: 0 0 var(--sp-1); }
+
 /* --- Disclosure --- */
 
 .wx-more { margin-top: var(--sp-4); border-top: 1px solid var(--line); padding-top: var(--sp-3); }
