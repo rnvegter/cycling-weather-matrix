@@ -13,6 +13,7 @@
 ----------------------------------------------------------------*/
 
 const http = require("http");
+const https = require("https");
 const fs = require("fs");
 const path = require("path");
 const dns = require("dns").promises;
@@ -203,8 +204,15 @@ function isBlockedAddress(ip){
 }
 
 /* Resolve a URL and refuse it if it points anywhere internal. Returns the
-   parsed URL so the caller fetches exactly what was checked. */
-async function checkedURL(raw){
+   parsed URL and the addresses that passed, so the caller connects to exactly
+   what was checked.
+
+   That last part is the point. A check that resolves the name and then hands
+   the URL to something that resolves it AGAIN is a check on a different
+   question: a name whose owner answers "a public address" to the first lookup
+   and "127.0.0.1" to the second, with a zero TTL, passes the check and lands
+   inside (DNS rebinding). So the connection below never looks the name up. */
+async function checkedTarget(raw){
   let u;
   try{ u = new URL(raw); }catch(e){ return null; }
   if (u.protocol !== "http:" && u.protocol !== "https:") return null;
@@ -213,42 +221,91 @@ async function checkedURL(raw){
   if (u.port && u.port !== "80" && u.port !== "443") return null;
   const host = u.hostname.replace(/^\[|\]$/g, "");
   // A literal address skips DNS but still gets checked.
-  if (net.isIP(host)) return isBlockedAddress(host) ? null : u;
+  if (net.isIP(host)){
+    return isBlockedAddress(host) ? null : {url: u, addrs: [{address: host, family: net.isIP(host)}]};
+  }
   let addrs;
   try{ addrs = await dns.lookup(host, {all: true}); }
   catch(e){ return null; }
   if (!addrs.length || addrs.some(a => isBlockedAddress(a.address))) return null;
-  return u;
+  return {url: u, addrs: addrs.map(a => ({address: a.address, family: a.family}))};
+}
+
+async function checkedURL(raw){
+  const t = await checkedTarget(raw);
+  return t ? t.url : null;
+}
+
+/* A lookup function for http(s).request that answers only with addresses
+   checkedTarget already passed. Node may ask for every address (autoSelectFamily)
+   or for one; both shapes are answered, and neither ever reaches DNS. */
+function pinnedLookup(addrs){
+  return (hostname, opts, cb) => {
+    if (typeof opts === "function"){ cb = opts; opts = {}; }
+    const want = typeof opts === "number" ? opts : (opts && opts.family) || 0;
+    const list = want ? addrs.filter(a => a.family === want) : addrs;
+    if (!list.length){
+      const e = new Error(`no checked address for ${hostname}`); e.code = "ENOTFOUND";
+      return process.nextTick(() => cb(e));
+    }
+    if (opts && opts.all) return process.nextTick(() => cb(null, list));
+    process.nextTick(() => cb(null, list[0].address, list[0].family));
+  };
 }
 
 const MAX_REDIRECTS = 4;
+const MAX_PAGE_BYTES = 3 * 1024 * 1024;   // a product page, not a download
+
+/* One request, to a checked target, no redirects followed. Uses http(s).request
+   rather than fetch because fetch offers no way to say which address to
+   connect to. No accept-encoding is sent, so the body arrives as plain text. */
+function requestOnce(target, signal){
+  const mod = target.url.protocol === "https:" ? https : http;
+  return new Promise((resolve, reject) => {
+    const req = mod.request(target.url, {
+      method: "GET", signal,
+      lookup: pinnedLookup(target.addrs),
+      headers: {"user-agent": UA, "accept-language": "en-GB,en;q=0.9"}
+    }, res => {
+      const status = res.statusCode, headers = res.headers;
+      if (status >= 300 && status < 400){ res.resume(); return resolve({status, headers, body: ""}); }
+      const type = headers["content-type"] || "";
+      if (status < 200 || status >= 300 || !/text\/html|text\/plain/.test(type)){
+        res.resume(); return resolve({status, headers, body: null});
+      }
+      let size = 0; const chunks = [];
+      res.on("data", c => {
+        size += c.length;
+        if (size > MAX_PAGE_BYTES){ req.destroy(new Error("page too large")); return; }
+        chunks.push(c);
+      });
+      res.on("end", () => resolve({status, headers, body: Buffer.concat(chunks).toString("utf8")}));
+      res.on("error", reject);
+    });
+    req.on("error", reject);
+    req.end();
+  });
+}
 
 async function get(url, timeoutMs = 8000){
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try{
-    let target = url;
+    let raw = url;
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++){
-      const safe = await checkedURL(target);
-      if (!safe) return null;
-      const res = await fetch(safe.toString(), {
-        signal: ctrl.signal,
-        // Followed by hand so each hop is checked, not just the first.
-        redirect: "manual",
-        headers: {"user-agent": UA, "accept-language": "en-GB,en;q=0.9"}
-      });
+      const target = await checkedTarget(raw);
+      if (!target) return null;
+      // Followed by hand so each hop is checked, not just the first.
+      const res = await requestOnce(target, ctrl.signal);
       if (res.status >= 300 && res.status < 400){
-        const loc = res.headers.get("location");
+        const loc = res.headers.location;
         if (!loc) return null;
-        target = new URL(loc, safe).toString();     // relative redirects resolve
+        raw = new URL(loc, target.url).toString();   // relative redirects resolve
         continue;
       }
-      if (!res.ok) return null;
-      const type = res.headers.get("content-type") || "";
-      if (!/text\/html|text\/plain/.test(type)) return null;
-      return await res.text();
+      return res.body;                                // null unless a 2xx text page
     }
-    return null;                                    // too many redirects
+    return null;                                      // too many redirects
   }catch(e){
     return null;
   }finally{ clearTimeout(t); }
@@ -869,7 +926,7 @@ if (require.main === module){
   try{ runScheduledBackup(); }catch(e){}
 }
 
-module.exports = {server, isServable, isBlockedAddress, checkedURL, get, clientIP,
+module.exports = {server, isServable, isBlockedAddress, checkedURL, checkedTarget, pinnedLookup, requestOnce, get, clientIP,
                   rateLimited, RATE, BACKUP_RATE, toText, rank, sameOrigin,
                   BACKUP_DIR, BACKUP_NAME, backupPath, listBackups, pruneBackups, writeBackup,
                   readSchedule, writeSchedule, backupDue, runScheduledBackup, lastScheduleFailure,

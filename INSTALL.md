@@ -791,10 +791,10 @@ refused if it lands on loopback, private, link-local, carrier-NAT, multicast or 
 space — `169.254.169.254`, the cloud metadata address, among them. Redirects are followed by
 hand so each hop is checked, not just the first: a public page that answers `302` to
 `localhost` gets no further than the check. Non-standard ports are refused too, since that is
-how you reach an internal service on a public-looking host. What remains is a DNS rebinding
-window — a name that passes the check and then resolves elsewhere for the fetch itself —
-which is narrow, needs an attacker-controlled domain ranking for a garment name, and is worth
-knowing about rather than claiming is closed.
+how you reach an internal service on a public-looking host. And **the connection goes to the
+address that was checked**: the name is resolved once, and the request is pinned to those
+addresses rather than looked up again. That closes DNS rebinding — a name that answers a public
+address to the check and `127.0.0.1` to the fetch a moment later.
 
 **The rate limit counts the right end of `X-Forwarded-For`.** That header is a list the client
 starts and each proxy appends to, so its first entry is whatever the caller typed. The limit
