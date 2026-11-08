@@ -256,6 +256,31 @@ async function main(){
     await ctx.close();
   });
 
+  await check("favourites show when the page is opened or reloaded on the Favourites tab", async () => {
+    const {p, ctx} = await page({screen: "favourites"});
+    await p.evaluate(() => {
+      const pts = Array.from({length: 40}, (_, i) => ({lat: 52 + i * 0.002, lon: 5 + Math.sin(i / 5) * 0.01, ele: 5, t: null}));
+      addFavourite(favouriteFromParsed({name: "Kept route", points: pts, recorded: false}));
+    });
+    await settle();                                     // synced, so the reload brings nothing new
+    await p.reload(); await p.waitForTimeout(800);
+    const shown = await p.$$eval("#favlist .wx-fav", els => els.length);
+    expect(shown === 1, `after a reload on the tab the list shows ${shown} of 1 stored favourites`);
+    await ctx.close();
+  });
+
+  await check("Model and Backup draw themselves when the page is opened on them", async () => {
+    // The parts each screen draws for itself, not its fixed heading and intro.
+    for (const [tab, sel, want] of [["model", "#scorecount", /\d+ of \d+ rides? rated/i],
+                                    ["backup", "#screen-backup", /This browser holds/i]]){
+      const {p, ctx} = await page({screen: tab});
+      await p.waitForTimeout(800);
+      const text = await p.$eval(sel, el => el.innerText);
+      expect(want.test(text), `#${tab} opened directly shows only "${text.replace(/\s+/g, " ").slice(0, 60)}"`);
+      await ctx.close();
+    }
+  });
+
   await check("the page fits a phone: no sideways scroll at 390 px", async () => {
     const {p, ctx} = await page({width: 390});
     await read(p, {time: "07:00", dist: null, hours: 5, back: "16:00"});

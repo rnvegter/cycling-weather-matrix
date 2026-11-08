@@ -711,3 +711,9 @@ document.getElementById("gearreset").onclick = () => {
 
 renderGear();
 showScreen(location.hash.slice(1));
+/* And again once every script has loaded. This file runs before
+   favouritesui.js, scorecardui.js and backupui.js, so arriving on one of those
+   screens above found its draw function missing and left it empty: a reload on
+   Favourites looked exactly as if every favourite had been lost. The call
+   above still sets which screen shows, so nothing jumps while the rest loads. */
+document.addEventListener("DOMContentLoaded", () => showScreen(location.hash.slice(1)));
