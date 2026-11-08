@@ -102,8 +102,12 @@ function renderHistory(){
 
       <div class="wx-ride__foot">
         ${v
-          ? `<span class="wx-verdict-set">Rated <b>${v.label.toLowerCase()}</b></span>
-             <button class="wx-linkbtn" data-unrate="${escHtml(e.id)}">Change</button>`
+          ? `<span class="wx-verdict-set">Rated <b>${v.label.toLowerCase()}</b>${
+               ["hands", "feet"].filter(z => e.zones && e.zones[z]).map(z =>
+                 ` · ${z} <b>${verdictById(e.zones[z]).label.toLowerCase()}</b>`).join("")}</span>
+             <button class="wx-linkbtn" data-unrate="${escHtml(e.id)}">Change</button>
+             <button class="wx-linkbtn" data-zones="${escHtml(e.id)}" aria-expanded="${zonesOpen.has(e.id)}">${
+               e.zones && (e.zones.hands || e.zones.feet) ? "Hands and feet" : "Hands or feet different?"}</button>`
           : ridden
             ? `<div class="wx-choice wx-choice--tight">
                  ${VERDICTS.map(x => `<button class="wx-chip" data-rate="${escHtml(e.id)}"
@@ -118,13 +122,40 @@ function renderHistory(){
                accept=".gpx,application/gpx+xml,text/xml" data-attach="${escHtml(e.id)}">`) : ""}
         <button class="wx-linkbtn wx-linkbtn--warn" data-del="${escHtml(e.id)}">Delete</button>
       </div>
+      ${v && zonesOpen.has(e.id) ? ["hands", "feet"].map(z => `
+      <div class="wx-zone">
+        <span class="wx-zone__name">${z[0].toUpperCase() + z.slice(1)}</span>
+        <div class="wx-choice wx-choice--tight">
+          ${VERDICTS.map(x => `<button class="wx-chip" data-zone="${z}" data-ride="${escHtml(e.id)}"
+             data-verdict="${x.id}" aria-pressed="${e.zones && e.zones[z] === x.id}">${x.label}</button>`).join("")}
+        </div>
+      </div>`).join("") : ""}
     </article>`;
   }).join("");
 }
 
 /* --- Events ----------------------------------------------------- */
 
+/* Rides whose hands-and-feet rows are open. The rows are optional and most
+   rides never need them, so they fold away until asked for. */
+const zonesOpen = new Set();
+
 document.getElementById("histlist").addEventListener("click", e => {
+  const zoneBtn = e.target.closest("[data-zones]");
+  if (zoneBtn){
+    const id = zoneBtn.dataset.zones;
+    if (zonesOpen.has(id)) zonesOpen.delete(id); else zonesOpen.add(id);
+    renderHistory();
+    return;
+  }
+  const zone = e.target.closest("[data-zone]");
+  if (zone){
+    const e0 = loadHistory().find(x => x.id === zone.dataset.ride);
+    const same = e0 && e0.zones && e0.zones[zone.dataset.zone] === zone.dataset.verdict;
+    rateZone(zone.dataset.ride, zone.dataset.zone, same ? null : zone.dataset.verdict);   // click again to clear
+    renderHistory();
+    return;
+  }
   const rate = e.target.closest("[data-rate]");
   if (rate){
     rateRide(rate.dataset.rate, rate.dataset.verdict);

@@ -36,10 +36,30 @@ const MARGIN = 1;           // °C the new edge sits past the worst ride
    pickOutfit. Legs use a shaded core number; close enough to read as core. */
 const EXTREMITY_SLOTS = new Set(["hands", "socks", "feet", "neck", "head"]);
 
-/* The temperature a ride was planned at, for this garment's slot. */
+/* Which zone's verdict judges this garment: the hands for gloves, the feet
+   for shoes and socks, the core for the rest (neck and head have no verdict
+   of their own and are read with the core's). */
+const zoneOf = item => item.slot === "hands" ? "hands" : (item.slot === "feet" || item.slot === "socks") ? "feet" : null;
+
+/* The temperature a ride was planned at, for this garment's slot: the
+   zone's own corrected number where the ride recorded one. */
 function plannedFeel(ride, item){
+  const zone = zoneOf(item);
+  if (zone === "hands" && ride.handsFeel != null) return ride.handsFeel;
+  if (zone === "feet" && ride.feetFeel != null) return ride.feetFeel;
   if (EXTREMITY_SLOTS.has(item.slot) && ride.extFeel != null) return ride.extFeel;
   return ride.feel;
+}
+
+/* The verdict that counts for this garment: the zone's where the rider gave
+   one, else the body's. */
+function verdictFor(ride, item){
+  const zone = zoneOf(item);
+  if (zone){
+    const d = zoneDelta(ride, zone);
+    if (d != null) return d;
+  }
+  return effectiveDelta(ride);
 }
 
 /* Every suggestion the history supports, one per garment edge at most.
@@ -60,7 +80,7 @@ function gearSuggestions(gear, history, dismissed){
         return edge === "tmax" ? t >= item.tmax - EDGE_ZONE : t <= item.tmin + EDGE_ZONE;
       });
       const sign = edge === "tmax" ? 1 : -1;        // too warm at the top, too cold at the bottom
-      const support = zone.filter(r => sign * effectiveDelta(r) >= 1);
+      const support = zone.filter(r => sign * verdictFor(r, item) >= 1);
       const against = zone.length - support.length;  // about right, or the other way
       if (support.length < MIN_SUPPORT || support.length < 2 * against) continue;
 

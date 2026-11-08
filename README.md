@@ -460,6 +460,15 @@ one you cannot argue with.
 Once there are enough wet rides it keeps a separate correction for them. Plenty of riders run
 hot in the dry and cold in the wet, and one number cannot hold both.
 
+**Hands and feet, rated apart.** One verdict for the whole body hides the commonest real
+outcome: core fine, fingers frozen. Under a rated ride, *Hands or feet different?* opens two
+more rows on the same scale. Each zone learns its own correction under the same guards (three
+answers, the last twenty, capped at ±4 °C), and it is added to that zone's number only — so a
+rider whose hands always run cold gets warmer gloves and the same jersey. The core correction
+never sees these answers, and a hands answer never moves the feet. The effect matrix shows each
+correction with the number of rides behind it. A glove's range on the Gear tab follows the
+hands verdict where there is one, rather than the body's.
+
 ## Letting the ranges follow the rides
 
 The ranges on the Gear tab are your calibration, and the history holds the evidence to

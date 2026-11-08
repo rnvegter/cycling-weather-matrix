@@ -208,6 +208,33 @@ function rateRide(id, verdict){
   return list;
 }
 
+/* Hands and feet, rated apart from the core. The verdict scale is the same;
+   what differs is what it teaches: each zone keeps its own correction
+   (learnedExtremities in feedback.js), and a glove's range follows the hands
+   verdict rather than the body's. ratedAt moves so the newer copy wins a
+   merge, which is how the answer reaches other devices. */
+const ZONES = ["hands", "feet"];
+function rateZone(id, zone, verdict){
+  if (!ZONES.includes(zone)) return loadHistory();
+  const list = loadHistory();
+  const e = list.find(x => x.id === id);
+  if (!e) return list;
+  const v = verdict ? verdictById(verdict) : null;
+  e.zones = Object.assign({}, e.zones);
+  if (v) e.zones[zone] = v.id; else delete e.zones[zone];
+  e.ratedAt = new Date().toISOString();
+  saveHistory(list);
+  return list;
+}
+/* What a zone's verdict says, with the speed guess's share taken out, as
+   effectiveDelta does for the core. null when that zone was not answered. */
+function zoneDelta(entry, zone){
+  const v = entry && entry.zones && entry.zones[zone] ? verdictById(entry.zones[zone]) : null;
+  if (!v) return null;
+  const eff = speedFeelEffect(entry);
+  return eff ? +(v.delta - eff).toFixed(2) : v.delta;
+}
+
 function unrateRide(id){
   const list = loadHistory();
   const e = list.find(x => x.id === id);
@@ -271,6 +298,9 @@ function normaliseRide(e){
     startISO, place,
     dist: num(e.dist), hours: num(e.hours), speed: num(e.speed),
     feel: num(e.feel), extFeel: num(e.extFeel), air: num(e.air),
+    // The numbers the gloves and the shoes were actually chosen on, once a
+    // learned zone correction is in play; absent on older rides.
+    handsFeel: num(e.handsFeel), feetFeel: num(e.feetFeel),
     wet: !!e.wet, raining: !!e.raining,
     rider: typeof e.rider === "string" ? e.rider : null,
     mode: typeof e.mode === "string" ? e.mode : null,
@@ -279,6 +309,13 @@ function normaliseRide(e){
     verdict: v,
     delta: v ? verdictById(v).delta : null,
     ratedAt: typeof e.ratedAt === "string" ? e.ratedAt : null,
+    zones: (() => {
+      const out = {};
+      const z = e.zones;
+      if (z && typeof z === "object" && !Array.isArray(z))
+        ["hands", "feet"].forEach(k => { if (z[k] && verdictById(z[k])) out[k] = z[k]; });
+      return out;
+    })(),
     legacy: !!e.legacy,
     /* The recorded ride, when one has been attached. This is rebuilt field by
        field rather than passed through, because it arrives from a file or from

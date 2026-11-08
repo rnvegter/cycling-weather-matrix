@@ -1412,6 +1412,10 @@ tr.is-off .wx-badge { opacity: .55; }
   margin-top: var(--sp-3); padding-top: var(--sp-3);
   border-top: 1px solid var(--line);
 }
+/* Hands and feet rated apart, under the ride's footer. */
+.wx-zone { display: flex; align-items: center; gap: var(--sp-3); margin-top: var(--sp-2); flex-wrap: wrap; }
+.wx-zone__name { font-family: var(--data); font-size: var(--step--2); letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim); min-width: 3.5em; }
+
 /* ---------- Favourites ------------------------------------------
    The same card as a ride, minus the temperature edge: that stripe is the
    ride-feel colour, and a favourite has no temperature until it is ridden on

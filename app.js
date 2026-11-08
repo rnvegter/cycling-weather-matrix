@@ -1125,14 +1125,21 @@ function routeCard(analysis, ramp){
 </section>`;
 }
 
-function feelSection(f){
+function feelSection(f, opts){
+  const lx = (opts && opts.learnedExt) || {}, ln = (opts && opts.learnedExtN) || {};
+  const zone = (name, v, feel) => v
+    ? `${name} ${feel}&deg; (${v > 0 ? "+" : "−"}${Math.abs(Math.round(v * 10) / 10)}&deg; learned from ${ln[name.toLowerCase()]} rides)`
+    : null;
+  const learnedLines = [zone("Hands", lx.hands, f.handsFeel), zone("Feet", lx.feet, f.feetFeel)].filter(Boolean);
 return `
 <h2 class="wx-heading" style="margin-top:var(--sp-6)">Air &rarr; ride-feel</h2>
 <p class="wx-eyebrow">${r1(f.air)}&deg;C air, ${f.feel}&deg; felt${
-  f.extFeel !== f.feel ? ` &middot; hands and feet ${f.extFeel}&deg;` : ""}</p>
+  f.extFeel !== f.feel ? ` &middot; hands and feet ${f.extFeel}&deg;` : ""}${
+  learnedLines.length ? ` &middot; ${learnedLines.join(" &middot; ")}` : ""}</p>
 <ul class="wx-chips">${chipsList(f)}</ul>
 <p class="wx-note">Hands and feet sit still in the airflow, and running hot does not apply
-   to fingers — so they are read on ${f.extFeel}&deg;, not ${f.feel}&deg;.</p>`;
+   to fingers — so they are read on ${f.extFeel}&deg;, not ${f.feel}&deg;.${
+   learnedLines.length ? " Your own hands and feet verdicts move their numbers on top of that, each on its own." : ""}</p>`;
 }
 
 function heatBalanceCard(hb, f, opts, ramp){
@@ -1197,7 +1204,7 @@ function render(f, w, opts, place, analysis){
     hoursCard(w, ramp),
     windCard(w, place, ramp, analysis),
     routeCard(analysis, ramp),
-    feelSection(f),
+    feelSection(f, opts),
     heatBalanceCard(out.hb, f, opts, ramp),
     scaleCard(band)
   ].join("\n");
@@ -1258,6 +1265,10 @@ $("#go").onclick = async () => {
     const off = learnedOffset(loadHistory(), {wet: dry.wet});
     opts.learned = off.value;
     opts.learnedLabel = learnedLabel(off);
+    // Hands and feet, from their own verdicts where given.
+    const lx = learnedExtremities(loadHistory());
+    opts.learnedExt = {hands: lx.hands.value, feet: lx.feet.value};
+    opts.learnedExtN = {hands: lx.hands.n, feet: lx.feet.n};
     // The rest of the day, for a better start. A nice-to-have like the
     // ensemble: if it fails, the card goes and the answer stays.
     try{ w.scan = bestStarts(fc, date, hours, opts, time); }catch(e){ w.scan = null; }
@@ -1272,6 +1283,7 @@ $("#go").onclick = async () => {
       place: placeLabel(state.place),
       dist: r1(dist), hours: r1(hours), speed: r1(n.speed),
       feel: feelNow.feel, extFeel: feelNow.extFeel, air: r1(feelNow.air),
+      handsFeel: feelNow.handsFeel, feetFeel: feelNow.feetFeel,
       wet: feelNow.wet, raining: feelNow.raining,
       wind: r1(w.wind), gust: Math.round(w.gust),
       rider: state.rider, mode: state.mode,

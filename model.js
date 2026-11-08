@@ -276,8 +276,15 @@ function rideFeel(w, opts){
   // humidity changes is how easily surplus heat gets OUT, which is a different
   // question — and one the balance answers separately, via evap.
   const envTemp = air + ambient + rain + sun + dark + terrain;
+  /* Hands and feet run on the air-based number, without the rider
+     calibration — plus whatever their own verdicts have taught, zone by zone
+     (learnedExtremities). The shared extFeel stays as it was; the picks for
+     gloves and shoes use the corrected number for their zone. */
+  const ext = feel - cal;
+  const lx = opts.learnedExt || {};
   return {
-    rows, feel: Math.round(feel), extFeel: Math.round(feel - cal), envTemp,
+    rows, feel: Math.round(feel), extFeel: Math.round(ext), envTemp,
+    handsFeel: Math.round(ext + (lx.hands || 0)), feetFeel: Math.round(ext + (lx.feet || 0)),
     raining, light, wet: raining && !light, air,
     humid, rh: hum ? hum.rh : null, evap: evaporativeBlock(w, air)
   };
@@ -486,10 +493,12 @@ function pickOutfit(f, w, opts, gear){
   }
 
   /* --- Extremities run on the air-based number ------------------- */
-  ["hands","socks","feet","neck","head"].forEach(slot => push(bestOrEdge(slot, ex)));
+  const hx = f.handsFeel != null ? f.handsFeel : ex, fx = f.feetFeel != null ? f.feetFeel : ex;
+  const zoneTemp = slot => slot === "hands" ? hx : (slot === "feet" || slot === "socks") ? fx : ex;
+  ["hands","socks","feet","neck","head"].forEach(slot => push(bestOrEdge(slot, zoneTemp(slot))));
   // Feet get covered in the wet whatever the temperature.
   if (f.wet && !wear.some(i => i.slot === "feet")){
-    const feet = best(inSlot("feet"), ex);
+    const feet = best(inSlot("feet"), fx);
     if (feet) push(feet, "Wet feet are the complaint that outlasts the ride.");
   }
   /* Rain-only items, wherever they live. A brimmed cap and waterproof

@@ -48,7 +48,7 @@ Instructions for working on the Cycling Weather Effect Matrix. They come from ho
 - **The rider's own calibration beats a maker's rating.** Stored `tmin`/`tmax` are ride-feel ranges for when this rider reaches for a garment; a maker's air-temperature range goes in the note.
 - **No cliffs in the model.** Thresholds ramp rather than step. Ride-feel must stay monotonic in air temperature, and a test guards it.
 - **Speed touches ride-feel only through `selfWindTerm`,** which keeps the speed correction in `history.js` exact. Do not add a second route for speed.
-- **Extremities use the air-based number,** not the run-hot calibration.
+- **Extremities use the air-based number,** not the run-hot calibration — plus their own learned correction per zone (`learnedExtremities`), never the core's.
 - **Treat the gear lookup service as a starting point.** Confirm a surprising scraped value before applying it.
 - **Changing the seed in `gear.js` reaches an existing install only through `GEAR_SEED_CHANGES`.** Add an entry with the new version for every seed edit (`add`, or `update` with the old value in `from`), or say plainly that it reaches only new installs and Reset.
 - **Mind the sign convention:** a verdict of "too warm" is +2 and means the model read *cold*.
