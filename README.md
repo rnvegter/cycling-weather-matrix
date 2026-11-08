@@ -211,6 +211,22 @@ fuel card until you change the hours or the pace yourself. The query is dropped 
 address after it is read, so a reload does not apply it again. Malformed values are ignored
 rather than guessed at.
 
+## Best time to go
+
+The same forecast is read for every whole-hour start from 05:00 to the last one that gets you
+home by 22:00, each through the same ride-feel model as the start you chose. Each start gets a
+cost: rain while you ride (and how likely it is), ride-feel below 12° or above 24°, wind above
+15 km/h and gusts above 45, and the share of the ride in the dark. Every term ramps. When a
+start costs clearly less than yours — about two degrees, or a light shower's worth — the card
+says which, and what it gains: "dry instead of wet, 5° warmer on the bike". Otherwise it says
+nothing else in the day rides clearly better.
+
+The weights are a judgement, not a fit: a millimetre of rain costs about as much as five
+degrees colder. They only order the starts; the kit is still worked out for the start you
+chose, so read the weather again for the other one. Only the start point is read — a loaded
+route's legs are checked for your chosen start, not for every start in the scan. Starts that
+have already gone today are left out.
+
 ## The hours ahead, and which way to set off
 
 The forecast runs from the start hour to a few hours past the planned finish, so a shower
@@ -577,10 +593,11 @@ INSTALL.md if you want to self-host them for a genuinely offline install.
 | `index.html` | Six screens — ride, favourites, history, model, gear, backup |
 | `model.js` | Ride-feel, heat balance, outfit selection |
 | `fuel.js` | Fuel and drink for the ride, and reading a ride handed over by Fietscoach |
+| `ridewindow.js` | The hours you ride, out of the forecast, and the best start across the day |
 | `gear.js` | Seeded inventory and storage |
 | `insulation.js` | Inference engine, runs in both browser and Node |
 | `server.js` | Static files, `/api/lookup`, the synced state, and the backups |
-| `app.js` | Forecast, form wiring, rendering |
+| `app.js` | Forecast, form wiring, and one builder per card of the reading |
 | `gearui.js` | Gear screen: add, edit, delete, lookup |
 | `sync.js` | Local-first sync of gear, history and favourites |
 | `gpx.js` | Route parsing, thinning, leg sampling, headwind and lapse rate |

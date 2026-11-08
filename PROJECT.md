@@ -292,7 +292,7 @@ These held across the whole project and are worth carrying into any future sessi
 ### 12. Security
 
 - **Static allow-list (`isServable`):** only browser file types; dotfiles, `deploy/`, `node_modules`, `backups`, `server.js`, `package.json` and `Dockerfile` refused. The server once served `/.git/config` with a 200 — fixed.
-- **SSRF closed in the lookup service:** every destination resolved and refused if loopback, private, link-local (incl. `169.254.169.254`), carrier NAT, multicast or reserved, in v4, v6 and v4-mapped v6; redirects followed by hand and re-checked each hop; only ports 80/443. Proven with a live internal server and a redirector, plus a control. **Still open:** DNS rebinding.
+- **SSRF closed in the lookup service:** every destination resolved and refused if loopback, private, link-local (incl. `169.254.169.254`), carrier NAT, multicast or reserved, in v4, v6 and v4-mapped v6; redirects followed by hand and re-checked each hop; only ports 80/443. Proven with a live internal server and a redirector, plus a control. DNS rebinding closed in November 2026: connections are pinned to the addresses that passed the check.
 - **Rate-limit bypass closed:** the client IP is read `TRUST_PROXY_HOPS` entries from the *end* of `X-Forwarded-For`, and the header is ignored unless the connection came from loopback.
 - **Writes require same origin:** a PUT/POST with a foreign `Origin` is refused.
 - **The API has no authentication of its own, by design** — expose it only behind proxy auth (Cloudflare Access, basic auth) or not at all.
@@ -329,7 +329,8 @@ These held across the whole project and are worth carrying into any future sessi
 | `gear.js` | Seeded inventory, slots, storage |
 | `insulation.js` | Garment inference engine (browser and Node) |
 | `server.js` | Static files, `/api/lookup`, `/api/state`, backups, scheduler |
-| `app.js` | Forecast, archive, form wiring, route loading, rendering |
+| `app.js` | Forecast, archive, form wiring, route loading, one builder per card |
+| `ridewindow.js` | `rideWindow`, and the best start across the day |
 | `gpx.js` | Parsing, thinning, climbing, leg sampling, headwind, lapse rate |
 | `history.js` / `historyui.js` | Ride records and the History screen |
 | `feedback.js` | Ratings into a temperature correction |
@@ -345,15 +346,14 @@ These held across the whole project and are worth carrying into any future sessi
 
 ### 16. Known limitations and open items
 
-- **Offered, not built:** give the gear seed a version so stored lists upgrade themselves, and make sync treat a missing `gearUpdatedAt` as older-than-anything (today an empty stamp means the server's gear is never adopted and an old browser can overwrite it).
-- **Deferred:** split `app.js`'s ~310-line `render()` into per-section builders (a maintainability finding from an external review).
-- **DNS rebinding** in the lookup service remains a narrow open window.
+- **Done in November 2026:** gear seed versions (`GEAR_SEED_CHANGES`); a missing `gearUpdatedAt` counts as older than any, in the browser and on the server, which also keeps a stale tab from overwriting newer gear or favourites; `render()` split into one builder per card; DNS rebinding closed; a best-start scan across the day.
+- **History on the server is still written whole:** a tab left open since before another device added a ride pushes a history without it. The other device still holds the ride and puts it back on its next sync, but the server copy (and a backup taken in between) lacks it until then.
 - **Rootless Podman** backup mounts (`:Z,U`) follow Podman's documentation but were not tested.
 - **Wet base layer** is a warning, not a model term.
 - **Small bumps under poor GPS** read short (the smoothing trade-off).
 - **Knee warmers advised only at 11–13 °C** because the shorts claim 14 °C — the rider's call whether to raise the shorts' `tmin`.
 - **GPX-added ride places** use the track name, not a real place name.
-- **Enhancements suggested but never requested:** best-window scan across the day, multi-day trip packing in the app.
+- **Enhancements suggested but never requested:** multi-day trip packing in the app (declined as not important).
 
 ### 17. Commit timeline
 

@@ -383,94 +383,7 @@ async function rideFromActivity(text, fileName){
   return {stats, feel, place, terrain: opts.terrain};
 }
 
-function rideWindow(fc, dateStr, timeStr, hours){
-  const times = fc.hourly.time;
-  const i = times.indexOf(`${dateStr}T${timeStr.slice(0,2)}:00`);
-  if (i < 0) throw new Error("That start time is outside the 16-day forecast window.");
-  const last = Math.min(times.length - 1, i + Math.max(0, Math.ceil(hours) - 1));
-  const idx = []; for (let k = i; k <= last; k++) idx.push(k);
-  const g = key => idx.map(k => fc.hourly[key][k]).filter(v => v != null);
-
-  const temps=g("temperature_2m"), winds=g("wind_speed_10m"), gusts=g("wind_gusts_10m"),
-        precip=g("precipitation"), probs=g("precipitation_probability"),
-        cloud=g("cloud_cover"), day=g("is_day"), dirs=g("wind_direction_10m"),
-        codes=g("weather_code"), freeze=g("freezing_level_height"),
-        rhs=g("relative_humidity_2m"), dews=g("dew_point_2m");
-
-  // Directions are angles, so they average on the unit circle — a naive mean of
-  // 350° and 10° gives 180°, which is the exact opposite of the truth.
-  const meanDir = list => {
-    let sx=0, sy=0;
-    list.forEach(d => { const rad=d*Math.PI/180; sx+=Math.cos(rad); sy+=Math.sin(rad); });
-    return ((Math.atan2(sy,sx)*180/Math.PI)+360)%360;
-  };
-  const dirMean = meanDir(dirs);
-  // The return leg is ridden in the later wind, and that is the leg that hurts.
-  const dirLate = meanDir(dirs.slice(Math.floor(dirs.length/2)));
-
-  const dayIdx = fc.daily.time.indexOf(dateStr);
-  const sunrise = dayIdx>=0 ? fc.daily.sunrise[dayIdx] : null;
-  const sunset  = dayIdx>=0 ? fc.daily.sunset[dayIdx]  : null;
-
-  const startDT = new Date(`${dateStr}T${timeStr}`);
-  const endDT = new Date(startDT.getTime() + hours*3600*1000);
-  // Darkness from actual sunrise/sunset, so a 06:30 start after a 06:21
-  // sunrise doesn't read as a night ride.
-  let darkFrac = day.filter(d => d === 0).length / day.length;
-  if (sunrise && sunset){
-    const lit = Math.max(0, Math.min(endDT, new Date(sunset)) - Math.max(startDT, new Date(sunrise)));
-    darkFrac = clamp(1 - lit/(endDT - startDT), 0, 1);
-  }
-
-  return {
-    startDT, endDT, times: idx.map(k => times[k]),
-    tStart:temps[0], tEnd:temps[temps.length-1], tMin:Math.min(...temps), tMax:Math.max(...temps),
-    wind: winds.reduce((a,b)=>a+b,0)/winds.length, gust: Math.max(...gusts), dir: dirMean,
-    precipTotal: precip.reduce((a,b)=>a+b,0), precipPeak: Math.max(...precip),
-    prob: Math.max(...probs), cloud: cloud.reduce((a,b)=>a+b,0)/cloud.length,
-    dark: darkFrac, wetHours: precip.filter(p => p >= 0.1).length, hoursCount: idx.length,
-    sunrise, sunset, dirLate,
-    /* Averaged over the riding hours rather than read off the start, because
-       unlike temperature this is a property of the day rather than the moment
-       you set off — and it barely moves inside a morning. Absent from a feed
-       that didn't carry it, which the model reads as "say nothing". */
-    rh: rhs.length ? rhs.reduce((a,b)=>a+b,0)/rhs.length : null,
-    dew: dews.length ? dews.reduce((a,b)=>a+b,0)/dews.length : null,
-    // Altitude of 0°C. Lower than the ground you are riding on means freezing.
-    freezingLevel: freeze.length ? Math.min(...freeze) : null,
-    // Quarter-hourly rain start, when the 15-minute feed reaches this far out.
-    rainStart15: (() => {
-      const m = fc.minutely_15;
-      if (!m || !m.time) return null;
-      const from = startDT.getTime(), to = endDT.getTime();
-      for (let k = 0; k < m.time.length; k++){
-        const t = new Date(m.time[k]).getTime();
-        if (t < from || t > to) continue;
-        if ((m.precipitation[k] || 0) >= 0.1) return m.time[k];
-      }
-      return null;
-    })(),
-    hourly: idx.map((k,n) => ({
-      time:times[k], t:temps[n], wind:winds[n], precip:precip[n], prob:probs[n],
-      dir:dirs[n], gust:gusts[n], code:codes[n], day:day[n], cloud:cloud[n]
-    })),
-    // What is coming: the ride hours plus a few beyond, so a shower arriving
-    // just after the planned finish is visible rather than a surprise.
-    outlook: (() => {
-      const out = [];
-      for (let k = i; k <= Math.min(times.length - 1, last + 3); k++){
-        const h = fc.hourly;
-        out.push({
-          time: times[k], t: h.temperature_2m[k], wind: h.wind_speed_10m[k],
-          gust: h.wind_gusts_10m[k], dir: h.wind_direction_10m[k],
-          precip: h.precipitation[k], prob: h.precipitation_probability[k],
-          code: h.weather_code[k], day: h.is_day[k], riding: k <= last
-        });
-      }
-      return out;
-    })()
-  };
-}
+// rideWindow, which turns the forecast into the hours you ride, is in ridewindow.js.
 
 /* ---------------------------------------------------------------
    Pollen.
@@ -913,6 +826,43 @@ function chipsList(f){
 
 }
 
+/* Which start rides best. Said beside the warnings when another hour is
+   clearly better, because it changes the plan before it changes the kit; when
+   the chosen start is as good as the day gets, it says that in one line. */
+function bestStartCard(scan, ramp){
+  if (!scan || !scan.chosen) return "";
+  const {starts, best, chosen, better} = scan;
+  const gains = better ? startGains(best, chosen) : [];
+  const verdict = better
+    ? `<p class="wx-startdir"><b>Starting at ${best.time} rides better.</b> ${
+        gains.length ? `Compared with ${chosen.time}: ${gains.join(", ")}.` : ""}${
+        gains.some(g => / on the bike$/.test(g)) ? ""
+          : ` It reads ${best.f.feel}&deg; on the bike against ${chosen.f.feel}&deg;.`}
+        The kit above is still for ${chosen.time}; read the weather again for the other start.</p>`
+    : `<p class="wx-note">Nothing else in the day rides clearly better than ${chosen.time}.</p>`;
+  return `
+  <section class="wx-card wx-card--flat ${ramp}">
+    <div class="wx-card__head">
+      <h2 class="wx-heading">Best time to go</h2>
+      <span class="wx-eyebrow" style="margin:0">Each start, at the start point</span>
+    </div>
+    ${verdict}
+    <div class="wx-scroll">
+      <div class="wx-hours">${starts.map(s => {
+        const isBest = s === best, isMine = s.time.slice(0, 2) === chosen.time.slice(0, 2);
+        return `
+        <div class="wx-hour${isBest || isMine ? " is-riding" : ""} ${rampFor(s.f.feel)}">
+          <div class="wx-hour__time">${s.time}</div>
+          <div class="wx-hour__temp">${s.f.feel}&deg;</div>
+          <div class="wx-hour__rain${s.w.precipTotal >= 0.3 ? " is-wet" : ""}">${
+            s.w.precipTotal >= 0.1 ? `${r1(s.w.precipTotal)} mm` : "dry"}</div>
+          <div class="wx-hour__tag">${isBest ? "best" : isMine ? "yours" : "&nbsp;"}</div>
+        </div>`;
+      }).join("")}</div>
+    </div>
+  </section>`;
+}
+
 function hoursCard(w, ramp){
   return `
   <section class="wx-card wx-card--flat ${ramp}">
@@ -1206,6 +1156,7 @@ function render(f, w, opts, place, analysis){
     fuelCard(fuelPlan(w, f, opts), ramp, opts),
     routeFlag(analysis),
     warningsList(out, watch),
+    bestStartCard(w.scan, ramp),
     hoursCard(w, ramp),
     windCard(w, place, ramp),
     routeCard(analysis, ramp),
@@ -1270,6 +1221,9 @@ $("#go").onclick = async () => {
     const off = learnedOffset(loadHistory(), {wet: dry.wet});
     opts.learned = off.value;
     opts.learnedLabel = learnedLabel(off);
+    // The rest of the day, for a better start. A nice-to-have like the
+    // ensemble: if it fails, the card goes and the answer stays.
+    try{ w.scan = bestStarts(fc, date, hours, opts, time); }catch(e){ w.scan = null; }
     status("");
     // Kept so it can be rated afterwards, which is the only time the question
     // can honestly be answered.

@@ -1054,6 +1054,7 @@ tr.is-off .wx-badge { opacity: .55; }
 }
 .wx-hour__rain { font-family: var(--data); font-size: var(--step--3); color: var(--text-dim); }
 .wx-hour__rain.is-wet { color: var(--minus); font-weight: 600; }
+.wx-hour__tag { font-family: var(--data); font-size: var(--step--3); letter-spacing: .04em; color: var(--text-dim); text-transform: uppercase; }
 
 .wx-ico { display: block; }
 .wx-windarrow { color: var(--text-dim); flex: 0 0 auto; }
