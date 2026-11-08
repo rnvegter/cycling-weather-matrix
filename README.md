@@ -259,6 +259,17 @@ Where the members agree the atmosphere is behaving predictably; where they scatt
 That turns "it might rain" into "9 of 51 members have rain", and it covers the globe — checked
 from Reykjavik to Sydney. If it fails, the line disappears and nothing else changes.
 
+**Where the forecast ends.** The 16-day forecast runs dry before its last day is over: the rain
+probability stops first, about a day and a half before the end, and the rest some twenty hours
+before it. An hour with no probability is read from the forecast rain itself (wet if 0.1 mm or
+more is forecast), as for past rides. A ride that reaches past the last full hour is refused
+with the time the data runs out, rather than read as missing numbers.
+
+**When Open-Meteo says no.** The free service limits requests per connection. When that limit
+is reached the app says so, quoting Open-Meteo's reason, instead of reporting a lost
+connection. From a home connection it is rarely reached; shared cloud addresses reach it more
+often.
+
 The map is what makes the bearing usable: "set off towards the WSW" means nothing until you
 can see which way that is from where you're standing. It draws the route, or the start point,
 north-up with the wind and the outbound bearing over the top. Tiles come from OpenStreetMap —

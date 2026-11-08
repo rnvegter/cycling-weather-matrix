@@ -141,3 +141,29 @@ function windArrow(fromDeg, size){
       fill="none" stroke="currentColor" stroke-width="1.6"
       stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 }
+
+/* ---------------------------------------------------------------
+   When Open-Meteo says no.
+
+   A refusal is an answer, not a lost connection, and the most common one is
+   429: the free tier's request limit for this address is used up. Saying
+   "couldn't reach" there sends you looking at your network. So the message
+   says what happened and quotes Open-Meteo's own reason, cut short, because it
+   comes from outside. The caller shows it as text, never as markup.
+----------------------------------------------------------------*/
+function openMeteoMessage(status, body, what){
+  const raw = body && typeof body === "object" && typeof body.reason === "string" ? body.reason : "";
+  const reason = raw.replace(/\s+/g, " ").trim().slice(0, 200);
+  if (status === 429){
+    return `${what} is refusing requests for now: Open-Meteo's free request limit for this connection is used up`
+      + `${reason ? ` ("${reason}")` : ""}. Nothing is wrong with the app or your network; try again later.`;
+  }
+  return `${what} did not answer (Open-Meteo said ${status}${reason ? `: ${reason}` : ""}).`;
+}
+
+/* Reads the body of a refused response and turns it into an Error. */
+async function openMeteoError(r, what){
+  let body = null;
+  try{ body = await r.json(); }catch(e){}
+  return new Error(openMeteoMessage(r.status, body, what));
+}

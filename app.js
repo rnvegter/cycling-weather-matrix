@@ -135,7 +135,7 @@ $("#speed").addEventListener("input", updateSpeedHint);
 ----------------------------------------------------------------*/
 async function geocode(q){
   const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=en&format=json`);
-  if (!r.ok) throw new Error("Location lookup failed");
+  if (!r.ok) throw await openMeteoError(r, "The place search");
   return (await r.json()).results || [];
 }
 const placeLabel = p => [p.name, p.admin1, p.country].filter(Boolean).join(", ");
@@ -159,7 +159,7 @@ async function doSearch(){
       b.onclick = () => { state.place = p; showPlace(p); box.classList.add("wx-hidden"); save(); };
       box.appendChild(b);
     });
-  }catch(e){ box.innerHTML = `<button disabled>${e.message}</button>`; }
+  }catch(e){ box.innerHTML = `<button disabled>${escapeText(e.message)}</button>`; }
 }
 $("#search").onclick = doSearch;
 $("#loc").addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); doSearch(); }});
@@ -261,7 +261,7 @@ async function forecast(lat, lon){
     + "&minutely_15=precipitation"
     + "&daily=sunrise,sunset&timezone=auto&forecast_days=16&past_days=2";
   const r = await fetch(url);
-  if (!r.ok) throw new Error("Forecast request failed");
+  if (!r.ok) throw await openMeteoError(r, "The forecast");
   return r.json();
 }
 
@@ -283,7 +283,7 @@ async function archiveWeather(lat, lon, dateStr){
     + "relative_humidity_2m,dew_point_2m"
     + "&daily=sunrise,sunset&timezone=auto";
   const r = await fetch(url);
-  if (!r.ok) throw new Error("Couldn't reach the weather archive.");
+  if (!r.ok) throw await openMeteoError(r, "The weather archive");
   const fc = await r.json();
   if (fc.error) throw new Error(fc.reason || "The weather archive refused that date.");
   if (!fc.hourly || !fc.hourly.time || !fc.hourly.time.length)
@@ -501,7 +501,7 @@ async function forecastMany(legs){
     + "relative_humidity_2m,dew_point_2m"
     + "&daily=sunrise,sunset&timezone=auto&forecast_days=16&past_days=2";
   const r = await fetch(url);
-  if (!r.ok) throw new Error("Route forecast request failed");
+  if (!r.ok) throw await openMeteoError(r, "The route forecast");
   const j = await r.json();
   return Array.isArray(j) ? j : [j];      // one location comes back unwrapped
 }
@@ -518,6 +518,9 @@ function legWeather(fc, leg, opts){
   const j = Math.min(h.time.length - 1, i + Math.max(0, Math.ceil(leg.hours) - 1));
 
   const airRaw = h.temperature_2m[i];
+  // Past the end of the forecast; the route card says so rather than read nulls.
+  if (airRaw == null || h.wind_speed_10m[i] == null)
+    throw new Error("The forecast runs out before this part of the route.");
   const air = lapseAdjust(airRaw, leg.ele, fc.elevation);
   const airEnd = lapseAdjust(h.temperature_2m[j], leg.ele, fc.elevation);
   const wind = h.wind_speed_10m[i], dir = h.wind_direction_10m[i];

@@ -120,3 +120,83 @@ describe("bestStarts", () => {
     }
   });
 });
+
+/* --- The end of the forecast ---------------------------------------
+   Open-Meteo's 16-day forecast runs dry before its last day ends: measured on
+   8 November 2026, precipitation_probability went null from 22 Nov 16:00 and
+   every other field from 23 Nov 04:00. The app read that as -Infinity% rain
+   and NaN °C felt, with a "colder than anything you own" alarm on top. */
+
+describe("where the forecast runs out", () => {
+  // Probability gone from 16:00, everything gone from 20:00.
+  const tail = () => {
+    const fc = forecast(hr => hr >= 12 && hr < 16 ? {precip: 0.6, prob: 70} : {});
+    const h = fc.hourly;
+    for (let hr = 16; hr < 24; hr++) h.precipitation_probability[hr] = null;
+    for (let hr = 20; hr < 24; hr++)
+      for (const k of Object.keys(h)) if (k !== "time" && k !== "precipitation_probability") h[k][hr] = null;
+    h.precipitation[17] = 0.4;            // a wet hour while the probability is already gone
+    return fc;
+  };
+
+  test("a ride past the last hour with data is refused, saying where the data stops", () => {
+    assert.throws(() => rideWindow(tail(), DAY, "19:00", 2),
+      e => /runs out/.test(e.message) && /19:00/.test(e.message));
+    assert.throws(() => rideWindow(tail(), DAY, "21:00", 2), /runs out/);
+  });
+
+  test("a ride inside the data never reads as -Infinity or NaN", () => {
+    const w = rideWindow(tail(), DAY, "16:00", 3);
+    const f = rideFeel(w, opts);
+    for (const [k, v] of Object.entries({prob: w.prob, tStart: w.tStart, wind: w.wind, cloud: w.cloud,
+                                         feel: f.feel, extFeel: f.extFeel}))
+      assert.ok(Number.isFinite(v), `${k} is ${v}`);
+  });
+
+  test("with the probability gone, an hour with rain in the forecast still counts as wet", () => {
+    assert.equal(rideWindow(tail(), DAY, "17:00", 1).prob, 100);
+    assert.equal(rideWindow(tail(), DAY, "18:00", 1).prob, 0);
+  });
+
+  test("the hours-ahead strip stops where the data does, with no blank hours", () => {
+    const w = rideWindow(tail(), DAY, "17:00", 2);
+    assert.ok(w.outlook.length > 0);
+    assert.ok(w.outlook.every(h => Number.isFinite(h.t) && Number.isFinite(h.prob)),
+      JSON.stringify(w.outlook.map(h => [h.time, h.t, h.prob])));
+    assert.equal(w.outlook[w.outlook.length - 1].time, `${DAY}T19:00`);
+  });
+
+  test("the best-start scan skips starts it cannot read", () => {
+    const scan = bestStarts(tail(), DAY, 2, opts, "17:00", EARLY);
+    assert.equal(scan.starts[scan.starts.length - 1].time, "18:00");
+    assert.ok(scan.starts.every(s => Number.isFinite(s.cost.total)));
+  });
+});
+
+/* --- Open-Meteo saying no ----------------------------------------- */
+
+describe("Open-Meteo's refusals, in words", () => {
+  test("a 429 says it is the request limit, and quotes Open-Meteo's reason", () => {
+    const m = openMeteoMessage(429, {error: true, reason: "Daily API request limit exceeded. Please try again tomorrow."},
+                               "The weather archive");
+    assert.match(m, /limit/i);
+    assert.match(m, /Daily API request limit exceeded/);
+    assert.doesNotMatch(m, /couldn't reach/i, "the archive was reached; it said no");
+  });
+
+  test("another refusal names the service, the status and the reason", () => {
+    const m = openMeteoMessage(400, {error: true, reason: "Parameter 'start_date' is out of allowed range"}, "The forecast");
+    assert.match(m, /^The forecast/);
+    assert.match(m, /400/);
+    assert.match(m, /out of allowed range/);
+  });
+
+  test("a body that is not Open-Meteo's JSON still gives a sentence", () => {
+    assert.match(openMeteoMessage(502, null, "The forecast"), /The forecast.*502/);
+    assert.match(openMeteoMessage(429, "<html>", "The forecast"), /limit/i);
+  });
+
+  test("a reason is cut short rather than pasted whole", () => {
+    assert.ok(openMeteoMessage(500, {reason: "x".repeat(5000)}, "The forecast").length < 400);
+  });
+});

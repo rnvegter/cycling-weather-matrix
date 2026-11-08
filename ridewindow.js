@@ -13,16 +13,51 @@
    rampTable from fuel.js, which load before this file.
 ----------------------------------------------------------------*/
 
+/* What the model cannot read an hour without. Humidity, dew point and the
+   freezing level are optional: the model says nothing about them when absent. */
+const HOURLY_REQUIRED = ["temperature_2m", "precipitation", "cloud_cover", "wind_speed_10m",
+  "wind_direction_10m", "wind_gusts_10m", "is_day", "weather_code"];
+
+/* The rain probability for one hour, or — where the forecast no longer
+   carries one — whether rain is forecast at all: 100 for an hour with
+   0.1 mm or more, 0 otherwise. The archive is filled the same way. */
+function probAt(h, k){
+  const p = h.precipitation_probability ? h.precipitation_probability[k] : null;
+  if (p != null) return p;
+  return (h.precipitation[k] || 0) >= 0.1 ? 100 : 0;
+}
+
+/* "Sun 22 Nov 19:00", from Open-Meteo's local "2026-11-22T19:00". */
+function fmtDataHour(t){
+  const d = new Date(t);
+  return `${d.toLocaleDateString("en-GB", {weekday: "short", day: "numeric", month: "short"})} ${t.slice(11, 16)}`;
+}
+
 function rideWindow(fc, dateStr, timeStr, hours){
   const times = fc.hourly.time;
   const i = times.indexOf(`${dateStr}T${timeStr.slice(0,2)}:00`);
   if (i < 0) throw new Error("That start time is outside the 16-day forecast window.");
   const last = Math.min(times.length - 1, i + Math.max(0, Math.ceil(hours) - 1));
   const idx = []; for (let k = i; k <= last; k++) idx.push(k);
+
+  /* The forecast runs dry before its last day ends — measured in November
+     2026, the rain probability went null about 36 hours before the end and
+     everything else about 20. Read through, that became "-Infinity%" rain and
+     "NaN °C felt". So every hour ridden must carry the fields the model cannot
+     do without, or the ride is refused, saying where the data stops. */
+  const missing = k => HOURLY_REQUIRED.some(key => fc.hourly[key][k] == null);
+  if (idx.some(missing)){
+    let lastOk = -1;
+    for (let k = times.length - 1; k >= 0; k--) if (!missing(k)){ lastOk = k; break; }
+    const at = lastOk >= 0 ? fmtDataHour(times[lastOk]) : null;
+    throw new Error(at && lastOk < i + idx.length
+      ? `The weather data runs out at ${at}, before this ride is over. Pick an earlier start or a shorter ride.`
+      : "There is no weather data for some of these hours. Pick another start.");
+  }
   const g = key => idx.map(k => fc.hourly[key][k]).filter(v => v != null);
 
   const temps=g("temperature_2m"), winds=g("wind_speed_10m"), gusts=g("wind_gusts_10m"),
-        precip=g("precipitation"), probs=g("precipitation_probability"),
+        precip=g("precipitation"), probs=idx.map(k => probAt(fc.hourly, k)),
         cloud=g("cloud_cover"), day=g("is_day"), dirs=g("wind_direction_10m"),
         codes=g("weather_code"), freeze=g("freezing_level_height"),
         rhs=g("relative_humidity_2m"), dews=g("dew_point_2m");
@@ -90,10 +125,11 @@ function rideWindow(fc, dateStr, timeStr, hours){
       const out = [];
       for (let k = i; k <= Math.min(times.length - 1, last + 3); k++){
         const h = fc.hourly;
+        if (HOURLY_REQUIRED.some(key => h[key][k] == null)) break;   // where the data stops
         out.push({
           time: times[k], t: h.temperature_2m[k], wind: h.wind_speed_10m[k],
           gust: h.wind_gusts_10m[k], dir: h.wind_direction_10m[k],
-          precip: h.precipitation[k], prob: h.precipitation_probability[k],
+          precip: h.precipitation[k], prob: probAt(h, k),
           code: h.weather_code[k], day: h.is_day[k], riding: k <= last
         });
       }
