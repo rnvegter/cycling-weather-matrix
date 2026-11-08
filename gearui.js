@@ -34,6 +34,12 @@ function showScreen(name){
   /* The backup list is on the server, and a scheduled run can have added to it
      since this tab was last looked at, so arriving asks rather than assumes. */
   if (name === "backup" && typeof refreshBackups === "function") refreshBackups();
+  // A seed upgrade happens at load, usually on another tab; it is said here,
+  // once, where the list it changed is.
+  if (name === "gear" && typeof takeGearUpgradeNote === "function"){
+    const note = takeGearUpgradeNote();
+    if (note) status2(`Gear list updated: ${note} Your own edits were left as they were.`);
+  }
   document.querySelectorAll(".wx-tab[data-screen]").forEach(t =>
     t.setAttribute("aria-pressed", t.dataset.screen === name ? "true" : "false"));
   document.body.dataset.screen = name;

@@ -547,14 +547,14 @@ can reach the app can read and overwrite your gear and rides, so put auth in fro
 
 Two caveats to that:
 
-- **An update that changes the shipped gear list will not reach you.** This is the one that
-  surprises people, because nothing appears to be wrong. `loadGear()` returns your saved copy
-  and only falls back to the seed in `gear.js` when there is nothing saved — so from the first
-  time you open the app, the seed is never read again. If a release corrects a garment's
-  numbers, renames it, or adds one, a perfectly clean deploy still shows you the old entry.
-  **Reset** on the gear screen is what loads the new seed; it also discards any edits you made
-  in the UI, so Export first. There is no automatic migration — the gear list is treated as
-  yours, not as something an update is entitled to rewrite.
+- **An update reaches your saved gear list only through a seed change.** `loadGear()` returns
+  your saved copy, not the seed in `gear.js`. A release that corrects the seed says so in
+  `GEAR_SEED_CHANGES`, and your list takes that on its next load: added garments arrive once,
+  and a corrected number changes only while it still holds the old seed value — a number you
+  edited, a garment you renamed or removed, stays as you left it. The Gear tab says what
+  changed. A release that edits the seed without such an entry reaches only new installs, and
+  corrections from before seed versions began (version 1) are not replayed. **Reset** on the
+  gear screen still loads the whole current seed and discards your edits, so Export first.
 - **`localStorage` is per browser and per origin.** Moving the app to a different domain, or
   opening it in a different browser, is a fresh empty-handed start.
 
@@ -774,8 +774,9 @@ supplied proxy configs send `Cache-Control: no-cache` on everything precisely so
 happen; if you wrote your own and cached scripts aggressively, that is where to look.
 
 **If the code is current but a garment still shows its old numbers, that is not a deploy
-problem** — your saved gear list is winning over the updated seed. See
-[Your gear list and rides](#your-gear-list-and-rides) above; the fix is Export, then Reset.
+problem** — either you edited that number yourself, so the upgrade left it alone, or the change
+predates seed versions. See [Your gear list and rides](#your-gear-list-and-rides) above; the fix
+is Export, then Reset, or edit the garment.
 
 ---
 

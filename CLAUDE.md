@@ -50,7 +50,7 @@ Instructions for working on the Cycling Weather Effect Matrix. They come from ho
 - **Speed touches ride-feel only through `selfWindTerm`,** which keeps the speed correction in `history.js` exact. Do not add a second route for speed.
 - **Extremities use the air-based number,** not the run-hot calibration.
 - **Treat the gear lookup service as a starting point.** Confirm a surprising scraped value before applying it.
-- **Changing the seed in `gear.js` does not reach an existing install** — a saved gear list wins. Say so whenever a change edits the seed.
+- **Changing the seed in `gear.js` reaches an existing install only through `GEAR_SEED_CHANGES`.** Add an entry with the new version for every seed edit (`add`, or `update` with the old value in `from`), or say plainly that it reaches only new installs and Reset.
 - **Mind the sign convention:** a verdict of "too warm" is +2 and means the model read *cold*.
 
 ## Security constraints

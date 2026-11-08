@@ -108,6 +108,12 @@ it steps aside when the route card has already said it with kilometres attached.
 it works at, clo, windproofness and waterproofness (0–1), and flags for short-sleeve,
 packable and rain-only.
 
+Once saved, the list is yours and the seed is not read again. A correction to the seed reaches
+a saved list only as an entry in `GEAR_SEED_CHANGES`: new garments are added once, and a changed
+number moves only while it still holds the old seed value, so nothing you edited is overwritten.
+The Gear tab says what an upgrade changed. It does not count as an edit for sync, so an edit on
+another device stays newer.
+
 **Ranges select the garment; clo sizes the stack.** The ranges are the rider's own
 calibration rather than any maker's air-temperature claim, so they stay in charge — the
 heat balance is a check on top, allowed to add a gilet only when it is genuinely cold.
