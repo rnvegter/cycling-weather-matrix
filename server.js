@@ -790,7 +790,7 @@ function isServable(rel){
      extension allow-list below already refuses .json, so this is a second
      lock rather than the only one -- but a directory whose whole contents are
      personal data deserves naming rather than relying on a suffix test. */
-  if (parts.some(p => p === "deploy" || p === "node_modules" || p === "backups")) return false;
+  if (parts.some(p => p === "deploy" || p === "node_modules" || p === "backups" || p === "ui-test")) return false;
   const base = parts[parts.length - 1];
   if (NEVER.has(base)) return false;
   return SERVABLE.test(base);

@@ -739,5 +739,16 @@ INSTALL.md if you want to self-host them for a genuinely offline install.
 | `manifest.webmanifest`, `icons/` | Installing to a home screen |
 | `styles.css` | The Weather Effect design system, plus app chrome |
 
+## Testing
+
+`npm test` runs the unit tests: Node's own runner, no dependencies, nothing to install.
+
+`npm run test:ui` drives a real browser through the things only the page can show — a reading
+with no NaN in it, the end of the forecast refused in words, route legs carrying the learned
+correction, the plan through the hours, the way back, garment suggestions, two devices syncing,
+opening offline, and no sideways scroll on a phone. It starts its own server on a spare port
+with a temporary state directory and serves a fixed forecast, so Open-Meteo is never asked. It
+needs Playwright with Chromium; where that is not installed it says so and exits cleanly.
+
 Forecast data from [Open-Meteo](https://open-meteo.com/). Wind correction after
 ISO 11079 / 9920.

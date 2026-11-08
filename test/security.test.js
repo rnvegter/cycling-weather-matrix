@@ -161,7 +161,7 @@ describe("static file allow-list", () => {
      "server.js", "package.json", "package-lock.json", "Dockerfile",
      "deploy/Caddyfile", "deploy/nginx.conf",
      "state.json", "state.prev.json",           // no .json is servable at all
-     "node_modules/x/index.js", "README.md", "INSTALL.md", ""]
+     "node_modules/x/index.js", "README.md", "INSTALL.md", "ui-test/run.js", ""]
       .forEach(p => assert.equal(isServable(rel(p)), false, `${p} must not be servable`));
   });
 

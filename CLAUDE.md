@@ -6,6 +6,7 @@ Instructions for working on the Cycling Weather Effect Matrix. They come from ho
 
 - **Build it, test it, push it.** A change is finished when it is implemented, verified, committed and pushed to `origin` (`rnvegter/cycling-weather-matrix`, private). Say plainly if any of those did not happen.
 - **Run `npm test` before every commit.** All tests must pass. The script is `node --test`; the directory form `node --test test/` fails on Node 26.
+- **Run `npm run test:ui` for a change the page shows**, where Playwright is installed (it skips and exits 0 where it is not). It drives a real browser against a scratch server with a fixed forecast; it is not part of `npm test` and adds no dependency.
 - **Update `README.md` or `INSTALL.md`** when a change alters what the app does or how it is deployed.
 
 ## Asking and scope
@@ -55,7 +56,7 @@ Instructions for working on the Cycling Weather Effect Matrix. They come from ho
 
 ## Security constraints
 
-- **The static allow-list (`isServable`) must keep refusing** dotfiles, `.git`, `deploy/`, `backups/`, `node_modules`, `server.js`, `package.json`, `Dockerfile` and every `.md` and `.json`.
+- **The static allow-list (`isServable`) must keep refusing** dotfiles, `.git`, `deploy/`, `backups/`, `ui-test/`, `node_modules`, `server.js`, `package.json`, `Dockerfile` and every `.md` and `.json`. The web app manifest is `.webmanifest` for that reason.
 - **Outbound fetches go through `checkedURL`:** resolved, private and link-local ranges refused, redirects re-checked hop by hop, ports 80 and 443 only.
 - **The client IP for rate limiting** is read `TRUST_PROXY_HOPS` entries from the end of `X-Forwarded-For`, and only from a loopback peer.
 - **Every writing route checks `sameOrigin`.** The API has no authentication of its own by design; it relies on the reverse proxy.

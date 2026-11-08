@@ -3,6 +3,7 @@
 .git
 .gitignore
 deploy/
+ui-test/
 *.md
 Dockerfile
 .dockerignore
