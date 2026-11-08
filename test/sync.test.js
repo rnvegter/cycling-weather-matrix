@@ -89,7 +89,8 @@ describe("gear merge in the browser", () => {
 });
 
 describe("history merge in the browser", () => {
-  const r = (id, extra) => Object.assign({startISO: `2026-10-0${id}T08:00`, place: "Utrecht"}, extra || {});
+  const r = (id, extra) => Object.assign({startISO: `2026-10-0${id}T08:00`, place: "Utrecht",
+                                          savedAt: `2026-10-0${id}T07:00:00.000Z`}, extra || {});
 
   test("a ride deleted here does not come back from the server", () => {
     saveHistory([r(1), r(2)].map(normaliseRide));
@@ -123,6 +124,13 @@ describe("history merge in the browser", () => {
     assert.equal(Object.keys(localDocument().deletedRides).length, 2);
     mergeIncoming({history: [r(1), r(2)]});
     assert.equal(loadHistory().length, 0);
+  });
+
+  test("a restore made on another device replaces this one's history on the next pull", () => {
+    saveHistory([r(1), r(2)].map(normaliseRide));
+    mergeIncoming({history: [r(1)], deletedRides: {}, historyReplacedAt: "2026-10-09T10:00:00.000Z"});
+    assert.deepEqual(loadHistory().map(e => e.startISO), ["2026-10-01T08:00"]);
+    assert.equal(historyReplacedAt(), "2026-10-09T10:00:00.000Z", "and it adopts the stamp, so it is not done twice");
   });
 
   test("a recorded ride attached elsewhere reaches this browser", () => {
@@ -209,7 +217,18 @@ describe("writes to /api/state", () => {
     assert.deepEqual(doc.history.map(e => e.id), [ride(3).id]);
     assert.deepEqual(doc.deletedRides, {});
     await put({history: [ride(1)], historyReplacedAt: T1});   // an older restore, from a stale tab
-    assert.deepEqual((await read()).history.map(e => e.id).sort(), [ride(1).id, ride(3).id].sort(), "merged, not replaced");
+    assert.deepEqual((await read()).history.map(e => e.id), [ride(3).id],
+      "not replaced, and the stale tab's ride from before the restore does not come back");
+  });
+
+  test("after a restore, a device that has not seen it cannot merge the undone rides back", async () => {
+    const old = (n, savedAt) => ride(n, {savedAt});
+    await put({history: [old(1, T1), old(2, T1)]});
+    await put({history: [old(1, T1)], deletedRides: {}, historyReplacedAt: T2});        // restore on device A
+    // Device B never saw the restore: it still has 2, and has added 3 since.
+    await put({history: [old(1, T1), old(2, T1), old(3, "2026-10-03T08:00:00.000Z")], historyReplacedAt: ""});
+    const ids = (await read()).history.map(e => e.id).sort();
+    assert.deepEqual(ids, [ride(1).id, ride(3).id].sort(), "2 stays undone; 3, added after the restore, lands");
   });
 
   test("the server's merge rule is the browser's", () => {

@@ -440,7 +440,9 @@ function keepNewerLists(stored, doc){
    the server merges rides the way the browser does, with the same rule
    (rideWins in history.js; a test checks the two agree), applies deletions
    carried as tombstones, and only replaces the whole list when the write
-   says it is a restore (historyReplacedAt newer than the stored one). */
+   says it is a restore (historyReplacedAt newer than the stored one). A
+   writer whose stamp is older than the stored one has not seen the last
+   restore, and may only add rides saved after it. */
 const HISTORY_MAX = 300, TOMBS_MAX = 500;
 
 function rideWins(inc, existing){
@@ -477,9 +479,14 @@ function mergeHistory(stored, doc){
 
   const byId = new Map();
   mine.forEach(r => { if (!buried(r, tombs)) byId.set(r.id, r); });
+  /* A writer that has not seen the last restore still holds the rides it
+     undid. It may add rides it saved after that restore, and update rides the
+     server has; it may not bring back the ones the restore removed. */
+  const behind = had && replaced < had;
   theirs.forEach(r => {
     if (buried(r, tombs)) return;
     const ex = byId.get(r.id);
+    if (!ex && behind && !(typeof r.savedAt === "string" && r.savedAt > had)) return;
     if (!ex || rideWins(r, ex)) byId.set(r.id, ex ? Object.assign({}, ex, r) : r);
   });
   // Newest rides last, as the browser keeps them, and the same cap.

@@ -394,3 +394,15 @@ function replaceHistory(list){
 function historyReplacedAt(){
   try{ return localStorage.getItem(HISTORY_REPLACED_KEY) || ""; }catch(e){ return ""; }
 }
+
+/* A restore made on another device, arriving by sync. Merging would put the
+   rides it undid straight back, so its list is taken as it is, with its
+   deletions and its stamp (not a new one: it is the same restore, not
+   another). A ride saved here after that restore is the only thing kept
+   from this side, because the restore cannot have meant to undo it. */
+function adoptRestoredHistory(incoming, tombs, stamp){
+  const after = loadHistory().filter(e => e.savedAt && e.savedAt > stamp && !incoming.some(i => i.id === e.id));
+  try{ localStorage.setItem(HISTORY_TOMBS_KEY, JSON.stringify(normaliseTombstones(tombs))); }catch(e){}
+  try{ localStorage.setItem(HISTORY_REPLACED_KEY, stamp); }catch(e){}
+  saveHistory(incoming.concat(after));
+}

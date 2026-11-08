@@ -389,7 +389,9 @@ A merge of lists cannot see a deletion, so **a deleted ride leaves a tombstone**
 when — that travels with the history and is applied on every device; planning the same ride
 again lifts it, and a ride rated after the deletion is kept. **Restoring a backup replaces** the
 history outright, tombstones included, and carries a stamp so the server replaces as well
-instead of merging the rides you just undid back in.
+instead of merging the rides you just undid back in. Another device takes the restore on its
+next pull rather than merging into it, and one that pushes before it has seen the restore may
+add rides it saved since, but cannot bring back the ones the restore removed.
 
 The file is written temp-then-rename so a crash mid-write cannot leave truncated JSON where
 your gear list was, and the previous version is kept alongside as `state.prev.json`. Backing up

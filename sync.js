@@ -79,7 +79,10 @@ function mergeIncoming(doc){
     // History: ride by ride, with the import's rules and their deletions.
     if (Array.isArray(doc.history) || doc.deletedRides){
       const incoming = (Array.isArray(doc.history) ? doc.history : []).map(normaliseRide).filter(Boolean);
-      mergeRides(incoming, doc.deletedRides || {});
+      const restored = String(doc.historyReplacedAt || "");
+      // A restore made elsewhere replaces rather than merges, once.
+      if (restored && restored > historyReplacedAt()) adoptRestoredHistory(incoming, doc.deletedRides || {}, restored);
+      else mergeRides(incoming, doc.deletedRides || {});
     }
 
     /* Gear: newest document wins outright. A missing stamp is older than any
