@@ -118,7 +118,10 @@ async function read(p, f){
   };
 }
 
+/* Every check starts from an empty server, so rides one check saves cannot
+   meet another's by id through sync and change its outcome. */
 async function check(name, fn){
+  for (const f of ["state.json", "state.prev.json"]) fs.rmSync(path.join(TMP, f), {force: true});
   try{ await fn(); results.push([name, null]); console.log(`ok   ${name}`); }
   catch(e){ results.push([name, e]); console.log(`FAIL ${name}\n     ${e.message}`); }
 }
