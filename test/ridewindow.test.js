@@ -200,3 +200,54 @@ describe("Open-Meteo's refusals, in words", () => {
     assert.ok(openMeteoMessage(500, {reason: "x".repeat(5000)}, "The forecast").length < 400);
   });
 });
+
+/* --- The quarter-hour memory --------------------------------------- */
+
+describe("openMeteoJSON", () => {
+  let calls;
+  const ok = body => async url => { calls.push(url); return {ok: true, status: 200, json: async () => body}; };
+  const refuse = async url => { calls.push(url); return {ok: false, status: 429, json: async () => ({reason: "limit"})}; };
+  const U = n => `https://api.open-meteo.com/test/${n}`;
+
+  test("a second reading within 15 minutes asks nothing", async () => {
+    calls = [];
+    await openMeteoJSON(U(1), "The forecast", ok({a: 1}), 0);
+    const b = await openMeteoJSON(U(1), "The forecast", ok({a: 2}), 14 * 60 * 1000);
+    assert.equal(calls.length, 1);
+    assert.equal(b.a, 1);
+  });
+
+  test("after 15 minutes it asks again", async () => {
+    calls = [];
+    await openMeteoJSON(U(2), "The forecast", ok({a: 1}), 0);
+    const b = await openMeteoJSON(U(2), "The forecast", ok({a: 2}), 15 * 60 * 1000);
+    assert.equal(calls.length, 2);
+    assert.equal(b.a, 2);
+  });
+
+  test("a refusal is not kept: the next reading asks again", async () => {
+    calls = [];
+    await assert.rejects(openMeteoJSON(U(3), "The forecast", refuse, 0), /limit/);
+    const b = await openMeteoJSON(U(3), "The forecast", ok({a: 3}), 1000);
+    assert.equal(calls.length, 2);
+    assert.equal(b.a, 3);
+  });
+
+  test("two readings at once share one request", async () => {
+    calls = [];
+    let release;
+    const slow = async url => { calls.push(url); await new Promise(r => { release = r; });
+                                return {ok: true, status: 200, json: async () => ({a: 4})}; };
+    const p1 = openMeteoJSON(U(4), "The forecast", slow, 0), p2 = openMeteoJSON(U(4), "The forecast", slow, 10);
+    await new Promise(r => setImmediate(r)); release();
+    assert.deepEqual([(await p1).a, (await p2).a], [4, 4]);
+    assert.equal(calls.length, 1);
+  });
+
+  test("each caller gets its own copy", async () => {
+    const a = await openMeteoJSON(U(5), "The forecast", ok({hourly: {x: [1]}}), 0);
+    a.hourly.x.push(99);
+    const b = await openMeteoJSON(U(5), "The forecast", ok({}), 1000);
+    assert.deepEqual(b.hourly.x, [1]);
+  });
+});

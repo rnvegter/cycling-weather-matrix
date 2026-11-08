@@ -134,9 +134,9 @@ $("#speed").addEventListener("input", updateSpeedHint);
    Location
 ----------------------------------------------------------------*/
 async function geocode(q){
-  const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=en&format=json`);
-  if (!r.ok) throw await openMeteoError(r, "The place search");
-  return (await r.json()).results || [];
+  const j = await openMeteoJSON(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=en&format=json`,
+                                "The place search");
+  return j.results || [];
 }
 const placeLabel = p => [p.name, p.admin1, p.country].filter(Boolean).join(", ");
 function showPlace(p){
@@ -260,9 +260,10 @@ async function forecast(lat, lon){
     // which the rain-timing code treats as "fall back to the hour".
     + "&minutely_15=precipitation"
     + "&daily=sunrise,sunset&timezone=auto&forecast_days=16&past_days=2";
-  const r = await fetch(url);
-  if (!r.ok) throw await openMeteoError(r, "The forecast");
-  return r.json();
+  const fc = await openMeteoJSON(url, "The forecast");
+  // Said on the hours card, since a reading within the quarter hour reuses it.
+  fc.fetchedAt = openMeteoFetchedAt(url);
+  return fc;
 }
 
 /* What the weather actually was, for a ride that has already happened.
@@ -282,9 +283,7 @@ async function archiveWeather(lat, lon, dateStr){
     + "wind_direction_10m,wind_gusts_10m,is_day,weather_code,"
     + "relative_humidity_2m,dew_point_2m"
     + "&daily=sunrise,sunset&timezone=auto";
-  const r = await fetch(url);
-  if (!r.ok) throw await openMeteoError(r, "The weather archive");
-  const fc = await r.json();
+  const fc = await openMeteoJSON(url, "The weather archive");
   if (fc.error) throw new Error(fc.reason || "The weather archive refused that date.");
   if (!fc.hourly || !fc.hourly.time || !fc.hourly.time.length)
     throw new Error("The weather archive has nothing for that date yet. It runs about a day behind.");
@@ -403,9 +402,7 @@ async function airQuality(lat, lon, dateStr, hourKey){
     + `?latitude=${lat}&longitude=${lon}`
     + `&hourly=${POLLENS.map(p => p[0]).join(",")},european_aqi`
     + `&start_date=${dateStr}&end_date=${dateStr}&timezone=auto`;
-  const r = await fetch(url);
-  if (!r.ok) throw new Error("air quality unavailable");
-  const h = (await r.json()).hourly;
+  const h = (await openMeteoJSON(url, "Air quality")).hourly;
   const i = h.time.indexOf(hourKey);
   if (i < 0) throw new Error("hour outside the air quality window");
 
@@ -447,9 +444,7 @@ async function ensembleSpread(lat, lon, dateStr, hourKey){
     + "&hourly=temperature_2m,precipitation,wind_speed_10m,wind_direction_10m"
     + "&models=ecmwf_ifs025"
     + `&start_date=${dateStr}&end_date=${dateStr}&timezone=auto`;
-  const r = await fetch(url);
-  if (!r.ok) throw new Error("ensemble unavailable");
-  const h = (await r.json()).hourly;
+  const h = (await openMeteoJSON(url, "The ensemble")).hourly;
   const i = h.time.indexOf(hourKey);
   if (i < 0) throw new Error("hour outside the ensemble window");
 
@@ -500,9 +495,7 @@ async function forecastMany(legs){
     + "wind_speed_10m,wind_direction_10m,wind_gusts_10m,is_day,weather_code,"
     + "relative_humidity_2m,dew_point_2m"
     + "&daily=sunrise,sunset&timezone=auto&forecast_days=16&past_days=2";
-  const r = await fetch(url);
-  if (!r.ok) throw await openMeteoError(r, "The route forecast");
-  const j = await r.json();
+  const j = await openMeteoJSON(url, "The route forecast");
   return Array.isArray(j) ? j : [j];      // one location comes back unwrapped
 }
 
@@ -897,7 +890,8 @@ function hoursCard(w, ramp){
     <p class="wx-note">${skyFor(w.outlook[0].code)[1]} at the start${
       w.outlook.some(h => !h.riding && h.prob >= 50)
         ? `, and it turns wet after you would be home, around ${fmtTime(w.outlook.find(h => !h.riding && h.prob >= 50).time)}`
-        : ""}. Arrows point the way the wind is blowing.</p>
+        : ""}. Arrows point the way the wind is blowing.${
+      w.fetchedAt ? ` Forecast as of ${hhmm(new Date(w.fetchedAt))}.` : ""}</p>
   </section>`;
 }
 
@@ -1236,6 +1230,7 @@ $("#go").onclick = async () => {
   try{
     const fc = await forecast(state.place.latitude, state.place.longitude);
     const w = rideWindow(fc, date, time, hours);
+    w.fetchedAt = fc.fetchedAt;
     // The highest ground the ride reaches — the route's summit if one is
     // loaded, otherwise the model's terrain height at the start point.
     opts.maxElevation = (route && route.stats.hasElevation)

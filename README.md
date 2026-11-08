@@ -269,6 +269,11 @@ Where the members agree the atmosphere is behaving predictably; where they scatt
 That turns "it might rain" into "9 of 51 members have rain", and it covers the globe — checked
 from Reykjavik to Sydney. If it fails, the line disappears and nothing else changes.
 
+**A quarter hour of memory.** Each Open-Meteo answer is kept for 15 minutes in the open page
+and reused, so reading the weather again for the same place — another start, another distance —
+is immediate and does not count against the free service's limit. The hours card says when the
+forecast was fetched; a reload asks afresh. A refused request is never kept.
+
 **Where the forecast ends.** The 16-day forecast runs dry before its last day is over: the rain
 probability stops first, about a day and a half before the end, and the rest some twenty hours
 before it. An hour with no probability is read from the forecast rain itself (wet if 0.1 mm or

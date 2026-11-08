@@ -167,3 +167,53 @@ async function openMeteoError(r, what){
   try{ body = await r.json(); }catch(e){}
   return new Error(openMeteoMessage(r.status, body, what));
 }
+
+/* ---------------------------------------------------------------
+   A short memory for Open-Meteo answers.
+
+   Reading the weather again for the same place — another start time,
+   another distance, the best-start check — asked Open-Meteo for the same
+   16 days every time. The models behind it update hourly at best, so an
+   answer is kept for a quarter of an hour and reused: the second reading is
+   immediate, and the free service's request limit is reached far less often.
+
+   Kept in memory only, per page: a reload asks afresh, which is what
+   someone who reloads expects. Only successful answers are kept, two
+   requests for the same URL at once share one fetch, and each caller gets
+   its own copy so nothing can change the stored answer.
+----------------------------------------------------------------*/
+const OM_CACHE_MS = 15 * 60 * 1000;
+const OM_CACHE_MAX = 40;
+const omCache = new Map();     // url → {at, data} or {at, pending}
+
+/* fetchFn and now are there for the tests; the app passes neither. */
+async function openMeteoJSON(url, what, fetchFn, now){
+  const t = now != null ? now : Date.now();
+  const hit = omCache.get(url);
+  if (hit && t - hit.at < OM_CACHE_MS){
+    const data = hit.pending ? await hit.pending : hit.data;
+    return structuredClone(data);
+  }
+  const pending = (async () => {
+    const r = await (fetchFn || fetch)(url);
+    if (!r.ok) throw await openMeteoError(r, what);
+    return r.json();
+  })();
+  omCache.set(url, {at: t, pending});
+  try{
+    const data = await pending;
+    omCache.set(url, {at: t, data});
+    // Oldest out first; a Map keeps insertion order.
+    while (omCache.size > OM_CACHE_MAX) omCache.delete(omCache.keys().next().value);
+    return structuredClone(data);
+  }catch(e){
+    omCache.delete(url);         // a refusal is not an answer worth keeping
+    throw e;
+  }
+}
+
+/* When the answer for a URL was fetched, or null. For saying how fresh it is. */
+function openMeteoFetchedAt(url){
+  const hit = omCache.get(url);
+  return hit && hit.data ? hit.at : null;
+}
