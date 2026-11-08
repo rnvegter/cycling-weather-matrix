@@ -58,8 +58,31 @@ function normaliseFavourite(f){
     speedFrom: speed == null ? null : (f.speedFrom === "recording" ? "recording" : "typed"),
     fileName: typeof f.fileName === "string" ? f.fileName.slice(0, 120) : null,
     addedAt: favIso(f.addedAt, new Date().toISOString()),
-    lastRiddenAt: favIso(f.lastRiddenAt, null)
+    lastRiddenAt: favIso(f.lastRiddenAt, null),
+    // When this route is usually ridden, "08:00". Lets Ride now fill in the
+    // next one, which is the evening-before case: lay the kit out for it.
+    usualTime: validTime(f.usualTime),
+    // Where it came from on intervals.icu, so the same route is not offered twice.
+    icuRouteId: typeof f.icuRouteId === "string" && /^\d{1,15}$/.test(f.icuRouteId) ? f.icuRouteId : null
   };
+}
+
+const validTime = t => {
+  const m = typeof t === "string" && t.match(/^(\d{2}):(\d{2})$/);
+  return m && +m[1] < 24 && +m[2] < 60 ? t : null;
+};
+
+/* The next ride at a usual time: today if it is still at least half an hour
+   off, otherwise tomorrow. Local dates, as the date input wants them. */
+function nextStart(usualTime, now){
+  const t = validTime(usualTime);
+  if (!t) return null;
+  const d = new Date(now == null ? Date.now() : now);
+  const at = new Date(d.getFullYear(), d.getMonth(), d.getDate(), +t.slice(0, 2), +t.slice(3));
+  const today = at.getTime() - d.getTime() >= 30 * 60 * 1000;
+  if (!today) at.setDate(at.getDate() + 1);
+  const date = `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, "0")}-${String(at.getDate()).padStart(2, "0")}`;
+  return {date, time: t, label: `${today ? "today" : "tomorrow"} ${t}`};
 }
 
 function loadFavourites(){

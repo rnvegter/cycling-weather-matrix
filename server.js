@@ -13,6 +13,7 @@
 ----------------------------------------------------------------*/
 
 const http = require("http");
+const https = require("https");
 const fs = require("fs");
 const path = require("path");
 const dns = require("dns").promises;
@@ -140,7 +141,8 @@ const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
 const MIME = {
   ".html":"text/html; charset=utf-8", ".js":"text/javascript; charset=utf-8",
   ".css":"text/css; charset=utf-8", ".json":"application/json; charset=utf-8",
-  ".svg":"image/svg+xml", ".ico":"image/x-icon"
+  ".svg":"image/svg+xml", ".ico":"image/x-icon", ".png":"image/png",
+  ".webmanifest":"application/manifest+json; charset=utf-8"
 };
 
 /* --- Fetching --------------------------------------------------- */
@@ -203,8 +205,15 @@ function isBlockedAddress(ip){
 }
 
 /* Resolve a URL and refuse it if it points anywhere internal. Returns the
-   parsed URL so the caller fetches exactly what was checked. */
-async function checkedURL(raw){
+   parsed URL and the addresses that passed, so the caller connects to exactly
+   what was checked.
+
+   That last part is the point. A check that resolves the name and then hands
+   the URL to something that resolves it AGAIN is a check on a different
+   question: a name whose owner answers "a public address" to the first lookup
+   and "127.0.0.1" to the second, with a zero TTL, passes the check and lands
+   inside (DNS rebinding). So the connection below never looks the name up. */
+async function checkedTarget(raw){
   let u;
   try{ u = new URL(raw); }catch(e){ return null; }
   if (u.protocol !== "http:" && u.protocol !== "https:") return null;
@@ -213,42 +222,91 @@ async function checkedURL(raw){
   if (u.port && u.port !== "80" && u.port !== "443") return null;
   const host = u.hostname.replace(/^\[|\]$/g, "");
   // A literal address skips DNS but still gets checked.
-  if (net.isIP(host)) return isBlockedAddress(host) ? null : u;
+  if (net.isIP(host)){
+    return isBlockedAddress(host) ? null : {url: u, addrs: [{address: host, family: net.isIP(host)}]};
+  }
   let addrs;
   try{ addrs = await dns.lookup(host, {all: true}); }
   catch(e){ return null; }
   if (!addrs.length || addrs.some(a => isBlockedAddress(a.address))) return null;
-  return u;
+  return {url: u, addrs: addrs.map(a => ({address: a.address, family: a.family}))};
+}
+
+async function checkedURL(raw){
+  const t = await checkedTarget(raw);
+  return t ? t.url : null;
+}
+
+/* A lookup function for http(s).request that answers only with addresses
+   checkedTarget already passed. Node may ask for every address (autoSelectFamily)
+   or for one; both shapes are answered, and neither ever reaches DNS. */
+function pinnedLookup(addrs){
+  return (hostname, opts, cb) => {
+    if (typeof opts === "function"){ cb = opts; opts = {}; }
+    const want = typeof opts === "number" ? opts : (opts && opts.family) || 0;
+    const list = want ? addrs.filter(a => a.family === want) : addrs;
+    if (!list.length){
+      const e = new Error(`no checked address for ${hostname}`); e.code = "ENOTFOUND";
+      return process.nextTick(() => cb(e));
+    }
+    if (opts && opts.all) return process.nextTick(() => cb(null, list));
+    process.nextTick(() => cb(null, list[0].address, list[0].family));
+  };
 }
 
 const MAX_REDIRECTS = 4;
+const MAX_PAGE_BYTES = 3 * 1024 * 1024;   // a product page, not a download
+
+/* One request, to a checked target, no redirects followed. Uses http(s).request
+   rather than fetch because fetch offers no way to say which address to
+   connect to. No accept-encoding is sent, so the body arrives as plain text. */
+function requestOnce(target, signal){
+  const mod = target.url.protocol === "https:" ? https : http;
+  return new Promise((resolve, reject) => {
+    const req = mod.request(target.url, {
+      method: "GET", signal,
+      lookup: pinnedLookup(target.addrs),
+      headers: {"user-agent": UA, "accept-language": "en-GB,en;q=0.9"}
+    }, res => {
+      const status = res.statusCode, headers = res.headers;
+      if (status >= 300 && status < 400){ res.resume(); return resolve({status, headers, body: ""}); }
+      const type = headers["content-type"] || "";
+      if (status < 200 || status >= 300 || !/text\/html|text\/plain/.test(type)){
+        res.resume(); return resolve({status, headers, body: null});
+      }
+      let size = 0; const chunks = [];
+      res.on("data", c => {
+        size += c.length;
+        if (size > MAX_PAGE_BYTES){ req.destroy(new Error("page too large")); return; }
+        chunks.push(c);
+      });
+      res.on("end", () => resolve({status, headers, body: Buffer.concat(chunks).toString("utf8")}));
+      res.on("error", reject);
+    });
+    req.on("error", reject);
+    req.end();
+  });
+}
 
 async function get(url, timeoutMs = 8000){
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try{
-    let target = url;
+    let raw = url;
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++){
-      const safe = await checkedURL(target);
-      if (!safe) return null;
-      const res = await fetch(safe.toString(), {
-        signal: ctrl.signal,
-        // Followed by hand so each hop is checked, not just the first.
-        redirect: "manual",
-        headers: {"user-agent": UA, "accept-language": "en-GB,en;q=0.9"}
-      });
+      const target = await checkedTarget(raw);
+      if (!target) return null;
+      // Followed by hand so each hop is checked, not just the first.
+      const res = await requestOnce(target, ctrl.signal);
       if (res.status >= 300 && res.status < 400){
-        const loc = res.headers.get("location");
+        const loc = res.headers.location;
         if (!loc) return null;
-        target = new URL(loc, safe).toString();     // relative redirects resolve
+        raw = new URL(loc, target.url).toString();   // relative redirects resolve
         continue;
       }
-      if (!res.ok) return null;
-      const type = res.headers.get("content-type") || "";
-      if (!/text\/html|text\/plain/.test(type)) return null;
-      return await res.text();
+      return res.body;                                // null unless a 2xx text page
     }
-    return null;                                    // too many redirects
+    return null;                                      // too many redirects
   }catch(e){
     return null;
   }finally{ clearTimeout(t); }
@@ -350,6 +408,285 @@ function writeState(doc){
   const tmp = STATE_FILE + ".tmp";
   fs.writeFileSync(tmp, text);
   fs.renameSync(tmp, STATE_FILE);
+}
+
+/* A whole-list store (gear, favourites) in an incoming write gives way to the
+   stored one when its stamp is older. A missing stamp is older than any
+   stamp. Without this, a tab left open since yesterday pushes its day-old
+   gear along with today's ride, and the newer list from another device is
+   gone: the browser only pulls once, when it loads.
+
+   Equal stamps let the write through (it is the same list, or the same
+   browser), and so does an unstamped write over an unstamped store, which is
+   how it always behaved. History is not touched here; it merges ride by ride
+   in the browser. */
+function keepNewerLists(stored, doc){
+  const kept = [];               // which lists were held back, for the writer to be told
+  if (!stored) return kept;
+  for (const [key, stamp] of [["gear", "gearUpdatedAt"], ["favourites", "favouritesUpdatedAt"]]){
+    if (!Array.isArray(stored[key])) continue;
+    const have = String(stored[stamp] || ""), incoming = String(doc[stamp] || "");
+    if (have && incoming < have){
+      doc[key] = stored[key];
+      doc[stamp] = stored[stamp];
+      kept.push(key);
+    }
+  }
+  return kept;
+}
+
+/* --- History, ride by ride -------------------------------------
+   A browser pulls once, when it loads, and pushes its whole history after
+   every change. Written whole, a tab left open since before another device
+   added a ride pushed a history without it, and the server copy (and any
+   backup taken in between) lost the ride until that device next synced. So
+   the server merges rides the way the browser does, with the same rule
+   (rideWins in history.js; a test checks the two agree), applies deletions
+   carried as tombstones, and only replaces the whole list when the write
+   says it is a restore (historyReplacedAt newer than the stored one). A
+   writer whose stamp is older than the stored one has not seen the last
+   restore, and may only add rides saved after it. */
+const HISTORY_MAX = 300, TOMBS_MAX = 500;
+
+/* The synced document's shape, as in sync.js (a test keeps them equal). A
+   write is refused, not stored, when its shape is newer than this server
+   understands (update the server) or older than what is stored (a page
+   from before an update, which would write the old shape over the new).
+   No number means 1. */
+const STATE_SCHEMA = 1;
+const docSchema = doc => (Number.isInteger(doc && doc.schema) && doc.schema >= 1 ? doc.schema : 1);
+function schemaRefusal(stored, doc){
+  const theirs = docSchema(doc), have = stored ? docSchema(stored) : 1;
+  if (theirs > STATE_SCHEMA)
+    return "That data comes from a newer version of the app than this server runs. Update the server.";
+  if (theirs < have)
+    return "This page is from an older version of the app than the data on the server. Reload it.";
+  return null;
+}
+
+function rideWins(inc, existing){
+  const incRated = inc.delta != null, hasRated = existing.delta != null;
+  if (incRated !== hasRated) return incRated;
+  if (incRated){
+    const a = String(inc.ratedAt || ""), b = String(existing.ratedAt || "");
+    if (a !== b) return a > b;
+  }
+  if (!!inc.actual !== !!existing.actual) return !!inc.actual;
+  return true;
+}
+
+const cleanTombs = t => {
+  const out = {};
+  if (t && typeof t === "object" && !Array.isArray(t))
+    for (const [id, at] of Object.entries(t)) if (id && typeof at === "string" && at) out[id] = at;
+  return out;
+};
+const rideList = v => Array.isArray(v) ? v.filter(r => r && typeof r === "object" && typeof r.id === "string" && r.id) : [];
+const buried = (ride, tombs) => !!tombs[ride.id] && !(ride.ratedAt && ride.ratedAt > tombs[ride.id]);
+
+/* Returns true when the stored result differs from what the writer sent in
+   a way the writer should see: a ride it lacks, a ride it has that is gone,
+   or a ride where the server's copy won. */
+function mergeHistory(stored, doc){
+  const theirs = rideList(doc.history), mine = stored ? rideList(stored.history) : [];
+  const sent = new Set(theirs.map(r => r.id));
+  let serverWon = false;
+  const replaced = String(doc.historyReplacedAt || ""), had = String((stored && stored.historyReplacedAt) || "");
+  if (!stored || (replaced && replaced > had)){
+    doc.history = theirs;
+    doc.deletedRides = cleanTombs(doc.deletedRides);
+    doc.historyReplacedAt = replaced || had;
+    return false;
+  }
+  const tombs = cleanTombs(stored.deletedRides);
+  for (const [id, at] of Object.entries(cleanTombs(doc.deletedRides))) if (!tombs[id] || at > tombs[id]) tombs[id] = at;
+
+  const byId = new Map();
+  mine.forEach(r => { if (!buried(r, tombs)) byId.set(r.id, r); });
+  /* A writer that has not seen the last restore still holds the rides it
+     undid. It may add rides it saved after that restore, and update rides the
+     server has; it may not bring back the ones the restore removed. */
+  const behind = had && replaced < had;
+  theirs.forEach(r => {
+    if (buried(r, tombs)) return;
+    const ex = byId.get(r.id);
+    if (!ex && behind && !(typeof r.savedAt === "string" && r.savedAt > had)) return;
+    if (!ex || rideWins(r, ex)) byId.set(r.id, ex ? Object.assign({}, ex, r) : r);
+    else serverWon = true;
+  });
+  // Newest rides last, as the browser keeps them, and the same cap.
+  const merged = [...byId.values()].sort((a, b) => String(a.startISO || "").localeCompare(String(b.startISO || "")));
+  doc.history = merged.slice(-HISTORY_MAX);
+  doc.deletedRides = Object.fromEntries(Object.entries(tombs).sort((a, b) => a[1].localeCompare(b[1])).slice(-TOMBS_MAX));
+  doc.historyReplacedAt = had;
+  const result = new Set(doc.history.map(r => r.id));
+  return serverWon || result.size !== sent.size || [...result].some(id => !sent.has(id));
+}
+
+/* --- intervals.icu ----------------------------------------------
+   The rider's own account, read with a personal API key: recorded rides (to
+   learn from without uploading each file), planned workouts (to fill in the
+   Ride tab), routes (to keep as favourites), and a comment written back to a
+   ride once it is rated.
+
+   The key lives in the environment (INTERVALS_API_KEY) and nowhere else: it is
+   never sent to the browser, never written to state, never in a backup. Each
+   route below answers with the few fields the app uses, not intervals.icu's
+   own objects, so nothing it adds later leaks through by accident.
+
+   The host is fixed, but the request still goes through checkedTarget and a
+   pinned connection like every outbound request here, with a browser user
+   agent because intervals.icu sits behind Cloudflare, which challenges
+   library defaults. The transport can be replaced (setIcuTransport) so the
+   tests can answer for intervals.icu, and a test harness can route through a
+   proxy where direct connections are not allowed.
+
+   Athlete id "0" means "the owner of this key". */
+const ICU_BASE = "https://intervals.icu/api/v1";
+const ICU_KEY = () => process.env.INTERVALS_API_KEY || "";
+const ICU_ATHLETE = () => (/^i?\d+$/.test(process.env.INTERVALS_ATHLETE_ID || "") ? process.env.INTERVALS_ATHLETE_ID : "0");
+const ICU_RATE = {max: 60, windowMs: 60_000, hits: new Map()};
+const ICU_MAX_BYTES = 8 * 1024 * 1024;
+
+async function icuPinnedTransport(method, url, headers, body){
+  const target = await checkedTarget(url);
+  if (!target) throw new Error("intervals.icu could not be reached from this server");
+  return new Promise((resolve, reject) => {
+    const req = https.request(target.url, {method, headers, lookup: pinnedLookup(target.addrs), timeout: 20000}, res => {
+      let size = 0; const chunks = [];
+      res.on("data", c => {
+        size += c.length;
+        if (size > ICU_MAX_BYTES){ req.destroy(new Error("intervals.icu answer too large")); return; }
+        chunks.push(c);
+      });
+      res.on("end", () => resolve({status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString("utf8")}));
+      res.on("error", reject);
+    });
+    req.on("timeout", () => req.destroy(new Error("intervals.icu did not answer in time")));
+    req.on("error", reject);
+    if (body) req.write(body);
+    req.end();
+  });
+}
+let icuTransport = icuPinnedTransport;
+function setIcuTransport(fn){ icuTransport = fn || icuPinnedTransport; }
+
+/* One call. Answers the parsed JSON (or text, for a GPX), or throws an Error
+   whose message is fit to show the rider. */
+async function icuCall(method, path, query, body){
+  const key = ICU_KEY();
+  if (!key) throw Object.assign(new Error("intervals.icu is not set up on this server (INTERVALS_API_KEY)."), {status: 503});
+  const u = new URL(ICU_BASE + path);
+  for (const [k, v] of Object.entries(query || {})) if (v != null && v !== "") u.searchParams.set(k, String(v));
+  const headers = {
+    authorization: "Basic " + Buffer.from("API_KEY:" + key).toString("base64"),
+    accept: "application/json, application/gpx+xml;q=0.9, */*;q=0.5",
+    "user-agent": UA
+  };
+  let payload = null;
+  if (body != null){ payload = JSON.stringify(body); headers["content-type"] = "application/json"; headers["content-length"] = Buffer.byteLength(payload); }
+  let r;
+  try{ r = await icuTransport(method, u.toString(), headers, payload); }
+  catch(e){ throw Object.assign(new Error(`intervals.icu could not be reached: ${e.message}`), {status: 502}); }
+  if (r.status === 401 || r.status === 403)
+    throw Object.assign(new Error("intervals.icu refused the API key. Check INTERVALS_API_KEY on the server."), {status: 502});
+  if (r.status === 429){
+    const after = parseInt((r.headers || {})["retry-after"], 10);
+    throw Object.assign(new Error(`intervals.icu's request limit is used up${after ? `; try again in ${Math.ceil(after / 60)} minutes` : ""}.`), {status: 429});
+  }
+  if (r.status === 404) throw Object.assign(new Error("intervals.icu has no such item."), {status: 404});
+  if (r.status < 200 || r.status >= 300)
+    throw Object.assign(new Error(`intervals.icu answered ${r.status}.`), {status: 502});
+  const type = String((r.headers || {})["content-type"] || "");
+  if (/json/.test(type)){
+    try{ return JSON.parse(r.body); }catch(e){ throw Object.assign(new Error("intervals.icu sent something unreadable."), {status: 502}); }
+  }
+  return r.body;
+}
+
+const ICU_DAY = /^\d{4}-\d{2}-\d{2}$/;
+const ICU_ACTIVITY_ID = /^i?\d{1,15}$/;
+// Outdoor rides only: a session on the trainer has no weather to learn from.
+const ICU_RIDE_TYPES = new Set(["Ride", "GravelRide", "MountainBikeRide", "EBikeRide", "EMountainBikeRide"]);
+const num = v => (Number.isFinite(+v) ? +v : null);
+const str = (v, n) => (typeof v === "string" ? v.slice(0, n || 200) : null);
+
+const icuRide = a => ({
+  id: String(a.id), name: str(a.name, 120), start: str(a.start_date_local, 19),
+  distanceKm: a.distance != null ? Math.round(num(a.distance) / 10) / 100 : null,
+  movingH: a.moving_time != null ? Math.round(num(a.moving_time) / 36) / 100 : null,
+  speedKmh: a.average_speed != null ? Math.round(num(a.average_speed) * 36) / 10 : null,
+  hasGps: Array.isArray(a.stream_types) ? a.stream_types.includes("latlng") : null,
+  routeId: a.route_id != null ? String(a.route_id) : null
+});
+const icuPlanned = e => ({
+  id: String(e.id), name: str(e.name, 120), start: str(e.start_date_local, 19),
+  hours: e.moving_time ? Math.round(num(e.moving_time) / 36) / 100 : null,
+  distanceKm: e.distance ? Math.round(num(e.distance) / 10) / 100 : null,
+  load: num(e.icu_training_load)
+});
+
+async function icuRoute(req, url, res){
+  const send = (code, obj) => { res.writeHead(code); res.end(JSON.stringify(obj)); };
+  const q = k => url.searchParams.get(k) || "";
+  const action = url.pathname.replace(/.*\/api\/intervals\/?/, "");
+  if (action === "status") return send(200, {configured: !!ICU_KEY()});
+  if (rateLimited(clientIP(req), ICU_RATE)) return send(429, {error: "Too many intervals.icu requests from this browser; wait a minute."});
+  const athlete = ICU_ATHLETE();
+  const days = () => {
+    const oldest = q("oldest"), newest = q("newest");
+    if (!ICU_DAY.test(oldest) || (newest && !ICU_DAY.test(newest))) throw Object.assign(new Error("Dates as YYYY-MM-DD."), {status: 400});
+    return {oldest, newest};
+  };
+  try{
+    if (req.method === "GET" && action === "rides"){
+      const list = await icuCall("GET", `/athlete/${athlete}/activities`, days());
+      return send(200, (Array.isArray(list) ? list : [])
+        .filter(a => a && a.id != null && ICU_RIDE_TYPES.has(a.type) && !a.trainer).map(icuRide));
+    }
+    if (req.method === "GET" && action === "ride-gpx"){
+      const id = q("id");
+      if (!ICU_ACTIVITY_ID.test(id)) return send(400, {error: "No such ride id."});
+      const gpx = await icuCall("GET", `/activity/${id}/gpx-file`);
+      if (typeof gpx !== "string" || !/<gpx[\s>]/.test(gpx)) return send(502, {error: "intervals.icu sent no GPX for that ride."});
+      res.setHeader("content-type", "application/gpx+xml; charset=utf-8");
+      res.writeHead(200); return res.end(gpx);
+    }
+    if (req.method === "GET" && action === "planned"){
+      const list = await icuCall("GET", `/athlete/${athlete}/events.json`, Object.assign({category: "WORKOUT"}, days()));
+      return send(200, (Array.isArray(list) ? list : [])
+        .filter(e => e && e.id != null && ICU_RIDE_TYPES.has(e.type)).map(icuPlanned));
+    }
+    if (req.method === "GET" && action === "routes"){
+      const list = await icuCall("GET", `/athlete/${athlete}/routes`);
+      return send(200, (Array.isArray(list) ? list : []).filter(r => r && r.route_id != null && !r.replaced_by_route_id).map(r => ({
+        id: String(r.route_id), name: str(r.name, 120) || "Unnamed route",
+        distanceKm: r.distance != null ? Math.round(num(r.distance) / 10) / 100 : null,
+        rides: num(r.activity_count), commute: !!r.commute
+      })));
+    }
+    if (req.method === "GET" && action === "route"){
+      const id = q("id");
+      if (!/^\d{1,15}$/.test(id)) return send(400, {error: "No such route id."});
+      const r = await icuCall("GET", `/athlete/${athlete}/routes/${id}`, {includePath: true});
+      const path = (r && Array.isArray(r.latlngs) ? r.latlngs : [])
+        .filter(p => Array.isArray(p) && Number.isFinite(+p[0]) && Number.isFinite(+p[1])).map(p => [+p[0], +p[1]]);
+      return send(200, {id, name: str(r && r.name, 120) || "Unnamed route", path});
+    }
+    if (req.method === "POST" && action === "comment"){
+      // Writes to the rider's account, so the same lock as every other write.
+      if (!sameOrigin(req)) return send(403, {error: "Cross-origin writes are refused."});
+      const b = JSON.parse(await readBody(req, 8 * 1024) || "{}");
+      if (!ICU_ACTIVITY_ID.test(String(b.id || ""))) return send(400, {error: "No such ride id."});
+      const text = typeof b.text === "string" ? b.text.trim().slice(0, 1000) : "";
+      if (!text) return send(400, {error: "Nothing to write."});
+      await icuCall("POST", `/activity/${b.id}/messages`, null, {content: text});
+      return send(200, {ok: true});
+    }
+    return send(404, {error: "No such intervals.icu action."});
+  }catch(e){
+    return send(e.status || 500, {error: String(e.message || e)});
+  }
 }
 
 /* Is this write coming from the app itself rather than from some other page
@@ -619,7 +956,7 @@ function isServable(rel){
      extension allow-list below already refuses .json, so this is a second
      lock rather than the only one -- but a directory whose whole contents are
      personal data deserves naming rather than relying on a suffix test. */
-  if (parts.some(p => p === "deploy" || p === "node_modules" || p === "backups")) return false;
+  if (parts.some(p => p === "deploy" || p === "node_modules" || p === "backups" || p === "ui-test")) return false;
   const base = parts[parts.length - 1];
   if (NEVER.has(base)) return false;
   return SERVABLE.test(base);
@@ -656,10 +993,20 @@ const server = http.createServer(async (req, res) => {
         const doc = JSON.parse(body);
         if (!doc || typeof doc !== "object" || Array.isArray(doc))
           throw new Error("expected an object");
+        const stored = readState();
+        const refusal = schemaRefusal(stored, doc);
+        if (refusal){
+          res.writeHead(409);
+          return res.end(JSON.stringify({error: refusal}));
+        }
+        doc.schema = docSchema(doc);
+        const kept = keepNewerLists(stored, doc);
+        const historyChanged = mergeHistory(stored, doc);
         doc.savedAt = new Date().toISOString();
         writeState(doc);
         res.writeHead(200);
-        return res.end(JSON.stringify({ok: true, savedAt: doc.savedAt}));
+        // What was not taken as sent, so the page can fetch it and say so.
+        return res.end(JSON.stringify({ok: true, savedAt: doc.savedAt, kept, historyChanged}));
       }catch(e){
         res.writeHead(e.message === "too large" ? 413 : 400);
         return res.end(JSON.stringify({error: String(e.message || e)}));
@@ -755,6 +1102,8 @@ const server = http.createServer(async (req, res) => {
           const doc = JSON.parse(fs.readFileSync(full, "utf8"));
           if (!doc || !doc.state || typeof doc.state !== "object")
             throw new Error("that file is not a backup of this app");
+          if (docSchema(doc.state) > STATE_SCHEMA)
+            throw new Error("that backup was written by a newer version of the app than this server runs");
           /* The safety copy comes first, and a failure to take it stops the
              restore. Overwriting the current state with no way back is the one
              outcome this feature exists to prevent. */
@@ -801,6 +1150,11 @@ const server = http.createServer(async (req, res) => {
 
     res.writeHead(405);
     return res.end(JSON.stringify({error: "GET to list, POST to act."}));
+  }
+
+  if (/\/api\/intervals(\/|$)/.test(url.pathname)){
+    res.setHeader("content-type", "application/json; charset=utf-8");
+    return icuRoute(req, url, res);
   }
 
   if (url.pathname.endsWith("/api/lookup")){
@@ -869,8 +1223,9 @@ if (require.main === module){
   try{ runScheduledBackup(); }catch(e){}
 }
 
-module.exports = {server, isServable, isBlockedAddress, checkedURL, get, clientIP,
-                  rateLimited, RATE, BACKUP_RATE, toText, rank, sameOrigin,
+module.exports = {server, isServable, isBlockedAddress, checkedURL, checkedTarget, pinnedLookup, requestOnce, get, clientIP,
+                  rateLimited, RATE, BACKUP_RATE, toText, rank, sameOrigin, keepNewerLists, mergeHistory, rideWins, STATE_SCHEMA, schemaRefusal,
+                  icuCall, setIcuTransport, ICU_RATE,
                   BACKUP_DIR, BACKUP_NAME, backupPath, listBackups, pruneBackups, writeBackup,
                   readSchedule, writeSchedule, backupDue, runScheduledBackup, lastScheduleFailure,
                   KEEP_DEFAULT, KEEP_MAX, EVERY_HOURS_MIN, EVERY_HOURS_MAX};

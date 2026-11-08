@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "test:ui": "node ui-test/run.js"
   },
   "engines": { "node": ">=18" },
   "license": "MIT",

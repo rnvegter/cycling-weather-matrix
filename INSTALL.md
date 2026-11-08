@@ -53,7 +53,7 @@ outage at 3am. The whole config is about ten lines, and one of them is your doma
 | **Docker or Podman + Caddy** | You want the app isolated, or you deploy several things to the same box. Podman if you would rather not run a root daemon. |
 | **Apache** | Only if it's already there. `mod_proxy` will do it, but neither of the above needs as much configuring. |
 | **Fly.io / Render / Railway** | You'd rather not run a server at all. A Node app with no dependencies deploys to these almost unchanged. |
-| **Proxmox VE** | You run a Proxmox host. One unprivileged LXC container running Option A below; the Proxmox-specific steps are in [INSTALL-PROXMOX.md](INSTALL-PROXMOX.md). |
+| **Proxmox VE** | You run a Proxmox host. One unprivileged LXC container running Option A below; the Proxmox-specific steps, and a script that does them all, are in [INSTALL-PROXMOX.md](INSTALL-PROXMOX.md). |
 
 Configuration files for the first two are in [`deploy/`](deploy/), along with a systemd unit.
 
@@ -248,7 +248,7 @@ and labels every result accordingly.
 
 ```bash
 sudo mkdir -p /var/www/cycling-weather-matrix
-sudo cp -r index.html styles.css *.js /var/www/cycling-weather-matrix/
+sudo cp -r index.html styles.css *.js manifest.webmanifest icons /var/www/cycling-weather-matrix/
 ```
 
 Then a Caddyfile of:
@@ -264,6 +264,30 @@ kit.example.com {
 Do **not** copy `server.js` into a static web root — there is no interpreter behind it, so it
 would be served as readable text rather than executed. Harmless here, since the file is public
 on GitHub anyway, but it's a bad habit.
+
+## Connecting intervals.icu
+
+Optional. In intervals.icu, *Settings → Developer Settings*, generate an API key, then give it
+to the server as `INTERVALS_API_KEY`. Under systemd, a drop-in keeps it out of the checkout and
+out of the shipped unit:
+
+```bash
+sudo systemctl edit cycling-weather-matrix
+# add:
+# [Service]
+# Environment=INTERVALS_API_KEY=your-key-here
+sudo systemctl restart cycling-weather-matrix
+```
+
+With Docker or Podman, pass `-e INTERVALS_API_KEY=...` (or an env file) when you create the
+container. The buttons appear once the server has a key; nothing is shown without one, and a
+static install cannot use it at all.
+
+The key gives full access to your intervals.icu account, so the usual rule applies with more
+force: the app's API has no login of its own, and anyone who can reach it can list your rides
+and post comments on them. Keep it behind your proxy's authentication. If the key ever leaks,
+regenerate it in intervals.icu. `INTERVALS_ATHLETE_ID` is only needed for an account other than
+the key's own.
 
 ## Serving it under a sub-path
 
@@ -547,14 +571,14 @@ can reach the app can read and overwrite your gear and rides, so put auth in fro
 
 Two caveats to that:
 
-- **An update that changes the shipped gear list will not reach you.** This is the one that
-  surprises people, because nothing appears to be wrong. `loadGear()` returns your saved copy
-  and only falls back to the seed in `gear.js` when there is nothing saved — so from the first
-  time you open the app, the seed is never read again. If a release corrects a garment's
-  numbers, renames it, or adds one, a perfectly clean deploy still shows you the old entry.
-  **Reset** on the gear screen is what loads the new seed; it also discards any edits you made
-  in the UI, so Export first. There is no automatic migration — the gear list is treated as
-  yours, not as something an update is entitled to rewrite.
+- **An update reaches your saved gear list only through a seed change.** `loadGear()` returns
+  your saved copy, not the seed in `gear.js`. A release that corrects the seed says so in
+  `GEAR_SEED_CHANGES`, and your list takes that on its next load: added garments arrive once,
+  and a corrected number changes only while it still holds the old seed value — a number you
+  edited, a garment you renamed or removed, stays as you left it. The Gear tab says what
+  changed. A release that edits the seed without such an entry reaches only new installs, and
+  corrections from before seed versions began (version 1) are not replayed. **Reset** on the
+  gear screen still loads the whole current seed and discards your edits, so Export first.
 - **`localStorage` is per browser and per origin.** Moving the app to a different domain, or
   opening it in a different browser, is a fresh empty-handed start.
 
@@ -679,7 +703,8 @@ podman image prune
 ```bash
 cd cycling-weather-matrix
 git pull
-sudo cp index.html styles.css *.js /var/www/cycling-weather-matrix/
+sudo cp index.html styles.css *.js manifest.webmanifest /var/www/cycling-weather-matrix/
+sudo cp -r icons /var/www/cycling-weather-matrix/
 ```
 
 `cp` will not remove a file that the update deleted, so if a `.js` file is ever dropped from
@@ -689,7 +714,8 @@ goes in rather than what stays out:
 ```bash
 sudo rsync -a --delete \
   --exclude server.js \
-  --include '*.js' --include index.html --include styles.css --exclude '*' \
+  --include '*.js' --include index.html --include styles.css \
+  --include manifest.webmanifest --include 'icons/' --include 'icons/*.png' --exclude '*' \
   ./ /var/www/cycling-weather-matrix/
 ```
 
@@ -768,14 +794,19 @@ curl -sI https://kit.example.com | head -1
 curl -s "https://kit.example.com/api/lookup?name=Castelli%20Perfetto%20RoS&slot=shell" | head -c 200
 ```
 
+The service worker (`sw.js`) fetches from the network first and only falls back to its cache
+when there is no connection, so it never serves an old version over a new one. It needs HTTPS
+(or localhost); on plain `http://` it simply is not registered and the app works online only.
+
 Then open the app and run one ride. If the page loads but behaves oddly, the usual cause is a
 browser holding old JavaScript against new HTML — hard-reload once (Cmd/Ctrl + Shift + R). The
 supplied proxy configs send `Cache-Control: no-cache` on everything precisely so this does not
 happen; if you wrote your own and cached scripts aggressively, that is where to look.
 
 **If the code is current but a garment still shows its old numbers, that is not a deploy
-problem** — your saved gear list is winning over the updated seed. See
-[Your gear list and rides](#your-gear-list-and-rides) above; the fix is Export, then Reset.
+problem** — either you edited that number yourself, so the upgrade left it alone, or the change
+predates seed versions. See [Your gear list and rides](#your-gear-list-and-rides) above; the fix
+is Export, then Reset, or edit the garment.
 
 ---
 
@@ -791,10 +822,10 @@ refused if it lands on loopback, private, link-local, carrier-NAT, multicast or 
 space — `169.254.169.254`, the cloud metadata address, among them. Redirects are followed by
 hand so each hop is checked, not just the first: a public page that answers `302` to
 `localhost` gets no further than the check. Non-standard ports are refused too, since that is
-how you reach an internal service on a public-looking host. What remains is a DNS rebinding
-window — a name that passes the check and then resolves elsewhere for the fetch itself —
-which is narrow, needs an attacker-controlled domain ranking for a garment name, and is worth
-knowing about rather than claiming is closed.
+how you reach an internal service on a public-looking host. And **the connection goes to the
+address that was checked**: the name is resolved once, and the request is pinned to those
+addresses rather than looked up again. That closes DNS rebinding — a name that answers a public
+address to the check and `127.0.0.1` to the fetch a moment later.
 
 **The rate limit counts the right end of `X-Forwarded-For`.** That header is a list the client
 starts and each proxy appends to, so its first entry is whatever the caller typed. The limit

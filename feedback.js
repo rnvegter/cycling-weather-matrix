@@ -65,6 +65,27 @@ function learnedOffset(history, opts){
           n: recent.length, ready: true, basis: "all"};
 }
 
+/* ---------------------------------------------------------------
+   Hands and feet, learned apart.
+
+   The core correction cannot see the commonest real outcome — core fine,
+   fingers frozen — because one verdict covers the body. Each zone's own
+   verdicts, where given, make their own correction under the same guards:
+   three answers before anything applies, the last twenty count, capped.
+   It is added to the extremity number for that zone only, so a rider whose
+   hands always run cold gets warmer gloves and the same jersey.
+----------------------------------------------------------------*/
+function learnedExtremities(history){
+  const out = {};
+  ["hands", "feet"].forEach(zone => {
+    const answered = ratedRides(history).map(e => zoneDelta(e, zone)).filter(d => d != null).slice(-WINDOW);
+    out[zone] = answered.length >= MIN_RIDES
+      ? {value: clampCorrection(mean(answered)), n: answered.length, ready: true}
+      : {value: 0, n: answered.length, ready: false};
+  });
+  return out;
+}
+
 /* One line explaining where the number came from, for the effect matrix. */
 function learnedLabel(off){
   if (!off.ready) return null;

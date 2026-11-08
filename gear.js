@@ -144,21 +144,135 @@ const ZONE_ORDER = ["head","eyes","neck","base","mid","shell","vest","arms","han
 /* --- Storage ---------------------------------------------------- */
 const GEAR_KEY = "cwem-gear-v1";
 
+/* --- Seed versions -----------------------------------------------
+   The gear list is the rider's: once saved, the seed above is never read
+   again, so a correction made here used to reach no existing install. These
+   are the corrections, written so they can reach one without overriding the
+   rider.
+
+   Each change names the seed version it brings the list to, and does one of
+   two things:
+
+     add     garments the seed gained. Added only when no garment with the
+             same brand and model is already in the list.
+     update  fields of a seed garment, found by brand and model, each given
+             as the value it had before (`from`) and the value it has now
+             (`to`). A field changes only while it still holds the old seed
+             value — a number the rider edited is theirs, and is left alone,
+             as is a garment that has been renamed or removed.
+
+   Version 1 is the seed as it stood when versions began. A list stored
+   before then counts as version 1: older corrections are not replayed,
+   because nothing records what they changed from.
+
+   When you change GEAR_SEED, add the matching entry here too, or the change
+   still reaches only new installs and Reset.
+
+   An upgrade is not an edit, so it does not move the sync stamp: an edit made
+   on another device since stays newer and wins. Running the same change twice
+   finds nothing left to do, which is what lets two devices both run it. */
+const GEAR_SEED_CHANGES = [
+  // {version: 2, note: "what changed, in a sentence the rider reads",
+  //  add: [ {...a GEAR_SEED item} ],
+  //  update: [ {brand: "Gore", model: "C3 ...", from: {tmin: 11}, to: {tmin: 10}} ]},
+];
+const GEAR_SEED_VERSION_KEY = "cwem-gear-seed-version";
+const GEAR_UPGRADE_NOTE_KEY = "cwem-gear-upgrade-note";
+
+function gearSeedVersion(){
+  return GEAR_SEED_CHANGES.reduce((v, c) => Math.max(v, c.version), 1);
+}
+
+const gearKey = it => `${String(it.brand || "").trim().toLowerCase()}|${String(it.model || "").trim().toLowerCase()}`;
+
+/* Bring a stored list from seed version `from` to the current one. Returns the
+   list and what was done, in words, so the Gear tab can say so. Pure: storage
+   is the caller's business. */
+function upgradeGear(list, from){
+  const out = list.map(it => Object.assign({}, it));
+  const done = [];
+  GEAR_SEED_CHANGES.filter(c => c.version > from)
+    .sort((a, b) => a.version - b.version)
+    .forEach(c => {
+      let touched = 0;
+      (c.add || []).forEach(item => {
+        if (out.some(it => gearKey(it) === gearKey(item))) return;
+        out.push(normaliseItem(item));
+        touched++;
+      });
+      (c.update || []).forEach(u => {
+        const it = out.find(x => gearKey(x) === gearKey(u));
+        if (!it) return;
+        Object.keys(u.to || {}).forEach(field => {
+          if (!u.from || !(field in u.from)) return;
+          if (it[field] !== u.from[field]) return;      // the rider changed it
+          it[field] = u.to[field];
+          touched++;
+        });
+      });
+      if (touched && c.note) done.push(c.note);
+    });
+  return {list: out.map(normaliseItem), done};
+}
+
+function storedSeedVersion(){
+  try{
+    const v = parseInt(localStorage.getItem(GEAR_SEED_VERSION_KEY), 10);
+    return Number.isFinite(v) && v >= 1 ? v : 1;
+  }catch(e){ return 1; }
+}
+function markSeedVersion(){
+  try{ localStorage.setItem(GEAR_SEED_VERSION_KEY, String(gearSeedVersion())); }catch(e){}
+}
+
+/* What the last upgrade did, kept until the Gear tab has shown it. */
+function takeGearUpgradeNote(){
+  try{
+    const note = localStorage.getItem(GEAR_UPGRADE_NOTE_KEY);
+    if (note) localStorage.removeItem(GEAR_UPGRADE_NOTE_KEY);
+    return note || "";
+  }catch(e){ return ""; }
+}
+
 function loadGear(){
   try{
     const raw = localStorage.getItem(GEAR_KEY);
     if (raw){
-      const g = JSON.parse(raw);
-      if (Array.isArray(g) && g.length) return g.map(normaliseItem);
+      let g = JSON.parse(raw);
+      if (Array.isArray(g) && g.length){
+        const from = storedSeedVersion();
+        if (from < gearSeedVersion()){
+          const up = upgradeGear(g, from);
+          g = up.list;
+          // Written directly, not through saveGear, so the sync stamp stays put.
+          localStorage.setItem(GEAR_KEY, JSON.stringify(g));
+          markSeedVersion();
+          if (up.done.length) localStorage.setItem(GEAR_UPGRADE_NOTE_KEY, up.done.join(" "));
+          return g;
+        }
+        return g.map(normaliseItem);
+      }
     }
   }catch(e){}
+  // Nothing stored: the seed itself is current.
+  markSeedVersion();
   return GEAR_SEED.map(normaliseItem);
+}
+/* Whether this browser holds a gear list of its own, as opposed to answering
+   with the seed because nothing is stored. Sync needs the difference: a seed
+   nobody chose must never stand against a real list from the server. */
+function hasStoredGear(){
+  try{
+    const g = JSON.parse(localStorage.getItem(GEAR_KEY) || "null");
+    return Array.isArray(g) && g.length > 0;
+  }catch(e){ return false; }
 }
 function saveGear(gear){
   try{ localStorage.setItem(GEAR_KEY, JSON.stringify(gear)); }catch(e){}
 }
 function resetGear(){
   try{ localStorage.removeItem(GEAR_KEY); }catch(e){}
+  markSeedVersion();
   return GEAR_SEED.map(normaliseItem);
 }
 /* Brands seen in the seed, used only to split a legacy single-field name back

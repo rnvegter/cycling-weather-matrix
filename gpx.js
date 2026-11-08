@@ -432,3 +432,88 @@ function hoursToClock(h){
   const total = Math.round(h * 60);
   return `${Math.floor(total / 60)}h ${String(total % 60).padStart(2, "0")}`;
 }
+
+/* ---------------------------------------------------------------
+   Which way round to ride a loop.
+
+   "Set off into the wind" is the right rule and the wrong unit for a loop:
+   the choice you actually make at the start is clockwise or anticlockwise.
+   Both directions visit the same roads, so the same forecast serves both;
+   what changes is the heading on each leg (turned round) and the clock time
+   it is reached (the legs run in the other order, and climbs become descents).
+
+   In a steady wind the total headwind over a closed loop is the same either
+   way: a loop ridden backwards meets the same wind on the same roads, turned
+   round. What the direction changes is the ORDER — whether the headwind
+   stretch comes while you are fresh or on the way home. So the comparison
+   reads the ends of the ride, not the whole: the mean headwind over the last
+   third (the part ridden tired) decides, and the first third is reported so
+   the card can say what you get in exchange. A wind that veers or builds
+   during the ride adds a real difference on top, which the per-leg forecast
+   carries in.
+----------------------------------------------------------------*/
+
+/* The same legs ridden the other way: order reversed, headings turned,
+   gradients flipped, timed from the same start. Positions are kept, so the
+   caller can pair each reversed leg with the forward leg's forecast by
+   `source`. */
+function reverseLegs(legs, startDT, avgSpeed){
+  const total = legs.length ? legs[legs.length - 1].toKm : 0;
+  const rev = legs.slice().reverse().map((l, k) => ({
+    index: k, source: l.index,
+    fromKm: total - l.toKm, toKm: total - l.fromKm,
+    lat: l.lat, lon: l.lon, ele: l.ele,
+    climb: -l.climb, gradient: -l.gradient,
+    heading: l.heading == null ? null : (l.heading + 180) % 360
+  }));
+  return legTiming(rev, startDT, avgSpeed);
+}
+
+/* Signed area of the track in a local flat projection: negative is clockwise
+   when north is up, the way a map is read. */
+function isClockwise(points){
+  if (!points || points.length < 3) return null;
+  const lat0 = points[0].lat * Math.PI / 180;
+  let area = 0;
+  for (let i = 0; i < points.length; i++){
+    const a = points[i], b = points[(i + 1) % points.length];
+    const ax = a.lon * Math.cos(lat0), bx = b.lon * Math.cos(lat0);
+    area += ax * b.lat - bx * a.lat;
+  }
+  return area < 0;
+}
+
+/* Mean headwind, weighted by time, over the first and the last third of a
+   leg list whose legs carry `headwind` and `hours`. A leg belongs to a third
+   by where its middle falls. */
+function headwindEnds(legs){
+  const total = legs.reduce((a, l) => a + l.hours, 0) || 1;
+  let t = 0, early = [0, 0], late = [0, 0];
+  legs.forEach(l => {
+    const mid = (t + l.hours / 2) / total;
+    const into = mid < 1 / 3 ? early : mid > 2 / 3 ? late : null;
+    if (into){ into[0] += l.headwind * l.hours; into[1] += l.hours; }
+    t += l.hours;
+  });
+  return {early: early[1] ? early[0] / early[1] : 0, late: late[1] ? late[0] / late[1] : 0};
+}
+
+/* The verdict. `forward` and `reverse` are leg lists with headwind and hours;
+   `clockwise` says which way the forward direction turns. Only a clear
+   difference over the last third is worth saying: 5 km/h is where it stops
+   being noise in a forecast wind. */
+const DIRECTION_MARGIN = 5;
+function compareDirections(forward, reverse, clockwise){
+  const f = headwindEnds(forward), r = headwindEnds(reverse);
+  const gain = f.late - r.late;           // positive: reversing takes headwind off the way home
+  const better = Math.abs(gain) >= DIRECTION_MARGIN ? (gain > 0 ? "reverse" : "forward") : null;
+  return {forward: f, reverse: r, clockwise, better, gain: Math.abs(gain)};
+}
+
+/* "clockwise" / "anticlockwise", for the direction named, or null when the
+   loop's turn could not be told. */
+function turnWord(direction, clockwise){
+  if (clockwise == null) return null;
+  const cw = direction === "forward" ? clockwise : !clockwise;
+  return cw ? "clockwise" : "anticlockwise";
+}

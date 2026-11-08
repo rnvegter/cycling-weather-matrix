@@ -108,6 +108,12 @@ it steps aside when the route card has already said it with kilometres attached.
 it works at, clo, windproofness and waterproofness (0–1), and flags for short-sleeve,
 packable and rain-only.
 
+Once saved, the list is yours and the seed is not read again. A correction to the seed reaches
+a saved list only as an entry in `GEAR_SEED_CHANGES`: new garments are added once, and a changed
+number moves only while it still holds the old seed value, so nothing you edited is overwritten.
+The Gear tab says what an upgrade changed. It does not count as an edit for sync, so an edit on
+another device stays newer.
+
 **Ranges select the garment; clo sizes the stack.** The ranges are the rider's own
 calibration rather than any maker's air-temperature claim, so they stay in charge — the
 heat balance is a check on top, allowed to add a gilet only when it is genuinely cold.
@@ -205,6 +211,22 @@ fuel card until you change the hours or the pace yourself. The query is dropped 
 address after it is read, so a reload does not apply it again. Malformed values are ignored
 rather than guessed at.
 
+## Best time to go
+
+The same forecast is read for every whole-hour start from 05:00 to the last one that gets you
+home by 22:00, each through the same ride-feel model as the start you chose. Each start gets a
+cost: rain while you ride (and how likely it is), ride-feel below 12° or above 24°, wind above
+15 km/h and gusts above 45, and the share of the ride in the dark. Every term ramps. When a
+start costs clearly less than yours — about two degrees, or a light shower's worth — the card
+says which, and what it gains: "dry instead of wet, 5° warmer on the bike". Otherwise it says
+nothing else in the day rides clearly better.
+
+The weights are a judgement, not a fit: a millimetre of rain costs about as much as five
+degrees colder. They only order the starts; the kit is still worked out for the start you
+chose, so read the weather again for the other one. Only the start point is read — a loaded
+route's legs are checked for your chosen start, not for every start in the scan. Starts that
+have already gone today are left out.
+
 ## The hours ahead, and which way to set off
 
 The forecast runs from the start hour to a few hours past the planned finish, so a shower
@@ -229,6 +251,16 @@ quietly picking one.
 Below force 3 it says the wind isn't worth planning a route around, instead of inventing
 advice.
 
+**Clockwise or anticlockwise.** With a loop loaded, the bearing gives way to the choice you
+actually make at the start. The legs are run the other way round too — same roads, headings
+turned, climbs become descents, timed from the same start — against the forecast already
+fetched for them. In a steady wind the total headwind on a closed loop is the same either way;
+what the direction decides is *when* you meet it, so the comparison reads the ends of the
+ride: the mean headwind over the last third, ridden tired, decides, and the first third is
+reported as what you get in exchange. A difference under 5 km/h is called what it is: little
+difference today. A wind that veers or builds during the ride tells the two directions apart on
+top of that.
+
 **How sure is it?** Open-Meteo's default already serves the highest-resolution model for a
 location — over the Netherlands that is KNMI HARMONIE at 2.5 km, and it is what everything
 above is built from. What one model cannot say is how much to trust itself, so the ensemble
@@ -236,6 +268,22 @@ answers that: ECMWF runs its model **51 times** from slightly different starting
 Where the members agree the atmosphere is behaving predictably; where they scatter it is not.
 That turns "it might rain" into "9 of 51 members have rain", and it covers the globe — checked
 from Reykjavik to Sydney. If it fails, the line disappears and nothing else changes.
+
+**A quarter hour of memory.** Each Open-Meteo answer is kept for 15 minutes in the open page
+and reused, so reading the weather again for the same place — another start, another distance —
+is immediate and does not count against the free service's limit. The hours card says when the
+forecast was fetched; a reload asks afresh. A refused request is never kept.
+
+**Where the forecast ends.** The 16-day forecast runs dry before its last day is over: the rain
+probability stops first, about a day and a half before the end, and the rest some twenty hours
+before it. An hour with no probability is read from the forecast rain itself (wet if 0.1 mm or
+more is forecast), as for past rides. A ride that reaches past the last full hour is refused
+with the time the data runs out, rather than read as missing numbers.
+
+**When Open-Meteo says no.** The free service limits requests per connection. When that limit
+is reached the app says so, quoting Open-Meteo's reason, instead of reporting a lost
+connection. From a home connection it is rarely reached; shared cloud addresses reach it more
+often.
 
 The map is what makes the bearing usable: "set off towards the WSW" means nothing until you
 can see which way that is from where you're standing. It draws the route, or the start point,
@@ -289,6 +337,77 @@ balance at the coldest leg. If a pocket can't close it, the conflict is named as
 with the trade either way, plus any workaround the wardrobe has — the shorts-and-warmers route
 to where tights reach. If nothing closes it, it says so and suggests shortening the ride.
 
+### Without a route
+
+A long ride asks the same question a col does even with no GPX loaded: a 07:00 start at 3°
+that ends at 13° needs layers on at the start and off later. Rides of three hours or more are
+cut into hourly stretches at the start point, from the forecast already fetched, and run
+through the same check; when the kit changes, **Through the ride** gives the same packing plan
+as a route, with times. A carried layer is wanted on every stretch at least as cold as the
+warmest one the model picked it for, so on a morning that warms up it is on from the start and
+comes off when the day has warmed, and on an afternoon that cools it goes on when needed.
+Where a layer that cannot come off is the trade-off, the plan says on which side of the ride
+it would run warm. With no change across the hours, nothing is added: the headline already
+says the same kit works.
+
+## intervals.icu
+
+With an intervals.icu API key on the server, three buttons appear, and a fourth thing happens
+by itself.
+
+- **History → Import from intervals.icu.** Outdoor rides recorded since the last import (a
+  month back, the first time) come in. A ride within 90 minutes of one planned here becomes
+  that ride's recording — the measured speed replaces the guess, exactly as attaching the file
+  by hand does — and one never planned here is added with the weather from the archive, as
+  "Add a ride from GPX" does. Trainer rides and rides without GPS are left out; a ride from
+  today waits until the archive has the day, and is asked for again next time.
+- **Your rating goes back.** Once a rating has stood for 20 seconds it is written to the ride
+  on intervals.icu as a comment — "Weather Effect: kit a bit cold (hands too cold). Planned at
+  4° ride-feel, 5° air… Wore: …" — so it sits beside the power and heart rate. A comment is
+  added, never the ride's description changed. Change the rating later and the change is sent
+  too.
+- **Ride → Planned in intervals.icu.** The next seven days' planned rides; Use fills in the
+  date, the start time (when one was planned), the hours, and the pace and effort from the
+  training load per hour, which the fuel card reads — the same way the Fietscoach link does.
+- **Favourites → Routes from intervals.icu.** The routes intervals.icu has found in rides you
+  repeat, most ridden first; Add keeps one as a favourite. intervals.icu stores a route's path
+  without height, so climbing is unknown for these.
+
+The key stays on the server: the browser only ever sees the few fields above. Rides synced to
+intervals.icu from Strava cannot be read through its API (Strava's terms), so rides need to
+reach intervals.icu from the head unit or its own app — a Wahoo does that directly. How to set
+the key is in INSTALL.md.
+
+## There and back
+
+A commute, or a ride to somewhere you spend the day, is ridden twice in one kit with a bag in
+between. Fill in **Back at** and the same ride is worked out again for the way home, from the
+forecast already fetched, and **The way back** says what it reads and what that means for the
+bag: what is worn **both ways**, what goes **in the bag** for the return, and what to **stow**
+when the afternoon no longer wants it. A garment worn in the morning that still covers the way
+back's number counts as both ways, even if a fresh pick would differ — two near-identical
+jerseys are not a reason to pack a second. Rain kit and eyewear are chosen by the weather and
+the light, so sunglasses at 08:00 do not cover 18:30 in the dark. The way back gets its own
+entry in History, to be rated on its own. Back at is not remembered between rides, so a
+weekend ride never inherits Tuesday's return.
+
+## On the phone, the evening before
+
+**Install it.** Served over HTTPS (or on localhost), the app can be added to a home screen and
+opens like an app, with its own icon — drawn from the same geometry as the logo.
+
+**It opens with no signal.** A service worker keeps every file of the app as it loads and
+serves them only when the network fails; with a connection it always fetches afresh, so an
+update lands on the next load exactly as before. The last forecast for your two most recent
+places is kept too, for up to 36 hours: with no connection, Read the weather uses it and says
+so in words — "No connection, so this is the forecast kept from Sun 22:10." A refusal from
+Open-Meteo is an answer and is shown as one, not papered over with an old forecast. The API
+(sync, lookups, backups) is never served from the cache.
+
+**A usual start for a favourite.** Give a favourite the time you usually ride it and its
+button reads *Ride tomorrow 08:00* (or *today*, while there is still half an hour to go): it
+fills in route, surface, speed, date and time, and Read the weather does the rest.
+
 ## Favourite rides
 
 The routes you ride again live on the **Favourites** tab. Add them from GPX files there — a
@@ -333,10 +452,34 @@ retried on the next change, and where there is no server at all — files opened
 static deployment — none of it runs and the app behaves exactly as it did before.
 
 The two stores merge differently because they are used differently. **History merges ride by
-ride**, on the same rules as the import: rides accumulate independently on whichever device you
-open, so both sides hold real entries the other has never seen. **Gear is last-write-wins**,
-guarded by a timestamp — you edit it deliberately, in one sitting, and merging per garment
-would mean stamping every item to protect against something that does not happen.
+ride**, in the browser and on the server, on the same rules as the import: rides accumulate
+independently on whichever device you open, so both sides hold real entries the other has never
+seen. A rated copy beats an unrated one; between two ratings the more recent stands; a copy with
+a recorded ride attached beats one without; and two unrated copies take the newer write. The
+server merging too is what lets a tab left open for a day push its history without dropping the
+ride another device added since. **Gear is last-write-wins**, guarded by a timestamp — you edit
+it deliberately, in one sitting, and merging per garment would mean stamping every item to
+protect against something that does not happen. A missing stamp counts as older than any.
+
+When a push comes back changed — the server kept newer gear or favourites, or merged in rides
+this page had not seen — the page fetches the server's copy at once and says so in the sync
+line ("Another device had newer gear and rides; this page shows them now") instead of
+reporting "Synced" over yesterday's list.
+
+A merge of lists cannot see a deletion, so **a deleted ride leaves a tombstone** — its id and
+when — that travels with the history and is applied on every device; planning the same ride
+again lifts it, and a ride rated after the deletion is kept. **Restoring a backup replaces** the
+history outright, tombstones included, and carries a stamp so the server replaces as well
+instead of merging the rides you just undid back in. Another device takes the restore on its
+next pull rather than merging into it, and one that pushes before it has seen the restore may
+add rides it saved since, but cannot bring back the ones the restore removed.
+
+**The document carries a version** (`schema`, 1 today; no number means 1). A page that meets
+data written by a newer version of the app reads none of it and writes nothing over it, and says
+"reload the page"; the server refuses a write in an older shape over a newer one, and a newer
+shape than it understands, with a 409 that says which to update. Restoring a backup from a newer
+version is refused for the same reason. The number goes up when a field changes meaning, not
+when one is added.
 
 The file is written temp-then-rename so a crash mid-write cannot leave truncated JSON where
 your gear list was, and the previous version is kept alongside as `state.prev.json`. Backing up
@@ -406,6 +549,36 @@ one you cannot argue with.
 
 Once there are enough wet rides it keeps a separate correction for them. Plenty of riders run
 hot in the dry and cold in the wet, and one number cannot hold both.
+
+**Hands and feet, rated apart.** One verdict for the whole body hides the commonest real
+outcome: core fine, fingers frozen. Under a rated ride, *Hands or feet different?* opens two
+more rows on the same scale. Each zone learns its own correction under the same guards (three
+answers, the last twenty, capped at ±4 °C), and it is added to that zone's number only — so a
+rider whose hands always run cold gets warmer gloves and the same jersey. The core correction
+never sees these answers, and a hands answer never moves the feet. The effect matrix shows each
+correction with the number of rides behind it. A glove's range on the Gear tab follows the
+hands verdict where there is one, rather than the body's.
+
+## Letting the ranges follow the rides
+
+The ranges on the Gear tab are your calibration, and the history holds the evidence to
+revisit them: every rated ride carries the ride-feel it was planned at and the garments it was
+planned with. **From your rides**, at the top of the Gear tab, turns that into a proposal when
+there is a case: "3 rated rides were too warm near the top of its range (11°). Move its warm
+end down to 9°?", with the rides listed under it. Apply moves the edge, and is an ordinary edit
+that syncs; Not now keeps that proposal away until the rides behind it change.
+
+A verdict is about the whole outfit, so it is not pinned on one garment lightly. Only rides
+planned within 3° of a garment's own edge count for that garment, because that is the only
+place its range decided anything; too warm in the middle of a jacket's range says nothing about
+the jacket, and goes to the rider correction below instead. It takes three rides pointing the
+same way, at least twice as many as say otherwise; the edge moves past the worst of them by a
+degree, at most three degrees at a time, and a range never closes below two degrees. Hands, feet,
+socks, neck and head are judged on the extremity number, as they are chosen. A ride with a
+recorded speed counts with the speed correction applied, as the rider correction does.
+
+Two garments worn together near both their edges can each get a proposal from the same rides,
+and the app does not pretend to know which one was too much. That is the rider's call.
 
 ## Backups
 
@@ -571,10 +744,11 @@ INSTALL.md if you want to self-host them for a genuinely offline install.
 | `index.html` | Six screens — ride, favourites, history, model, gear, backup |
 | `model.js` | Ride-feel, heat balance, outfit selection |
 | `fuel.js` | Fuel and drink for the ride, and reading a ride handed over by Fietscoach |
+| `ridewindow.js` | The hours you ride, out of the forecast, and the best start across the day |
 | `gear.js` | Seeded inventory and storage |
 | `insulation.js` | Inference engine, runs in both browser and Node |
 | `server.js` | Static files, `/api/lookup`, the synced state, and the backups |
-| `app.js` | Forecast, form wiring, rendering |
+| `app.js` | Forecast, form wiring, and one builder per card of the reading |
 | `gearui.js` | Gear screen: add, edit, delete, lookup |
 | `sync.js` | Local-first sync of gear, history and favourites |
 | `gpx.js` | Route parsing, thinning, leg sampling, headwind and lapse rate |
@@ -583,12 +757,27 @@ INSTALL.md if you want to self-host them for a genuinely offline install.
 | `favourites.js` | Favourite routes: storage, thinning, duplicates |
 | `favouritesui.js` | The favourites screen, Ride now, and Save as favourite |
 | `feedback.js` | Turning ratings into a temperature correction |
+| `intervals.js` / `intervalsui.js` | intervals.icu: what to import, matching, writing ratings back; and its buttons |
+| `calibrate.js` | Turning ratings into proposals for a garment's range |
 | `scorecard.js` | Whether the model and that correction are any good |
 | `scorecardui.js` | The model screen |
 | `backupui.js` | The backup screen: versions, restore, schedule |
 | `map.js` | Slippy-map projection, tiles, and the drawn overlay |
 | `logo.js` | The mark and the tab icon, from one drawing |
+| `sw.js` / `pwa.js` | Opening offline: the service worker, and registering it |
+| `manifest.webmanifest`, `icons/` | Installing to a home screen |
 | `styles.css` | The Weather Effect design system, plus app chrome |
+
+## Testing
+
+`npm test` runs the unit tests: Node's own runner, no dependencies, nothing to install.
+
+`npm run test:ui` drives a real browser through the things only the page can show — a reading
+with no NaN in it, the end of the forecast refused in words, route legs carrying the learned
+correction, the plan through the hours, the way back, garment suggestions, two devices syncing,
+opening offline, and no sideways scroll on a phone. It starts its own server on a spare port
+with a temporary state directory and serves a fixed forecast, so Open-Meteo is never asked. It
+needs Playwright with Chromium; where that is not installed it says so and exits cleanly.
 
 Forecast data from [Open-Meteo](https://open-meteo.com/). Wind correction after
 ISO 11079 / 9920.

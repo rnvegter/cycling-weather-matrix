@@ -92,19 +92,28 @@ function favCard(fav){
       </label>
       <p class="wx-note" style="margin:0">Leave the speed empty to use the Ride tab's assumption for
         the surface and pace.${fav.speedFrom === "recording"
-          ? ` ${r1(fav.speed)} came from the recording.` : ""}</p>`
+          ? ` ${r1(fav.speed)} came from the recording.` : ""}</p>
+      <label class="wx-fav__field">
+        <span class="wx-label">Usual start</span>
+        <input class="wx-input wx-fav__speed" data-field="usualTime" type="time" step="900"
+               value="${fav.usualTime || ""}">
+      </label>
+      <p class="wx-note" style="margin:0">With a usual start, Ride now fills in the next one — tomorrow,
+        once today's has passed — so the evening before is all it takes.</p>`
     : `
       <h3 class="wx-fav__name">${escHtml(fav.name)}</h3>
       <p class="wx-fav__meta">${r1(st.distance)} km${st.hasElevation ? ` · ${Math.round(st.ascent)} m up` : ""}
         · ${st.loop ? "loop" : "point to point"}</p>
       <p class="wx-fav__meta">${FAV_TYPE_LABEL[fav.type]} · ${favSpeedText(fav)}${
+        fav.usualTime ? ` · usually ${fav.usualTime}` : ""}${
         fav.lastRiddenAt ? ` · last used ${favWhen(fav.lastRiddenAt)}` : ""}</p>`;
 
   const foot = editing ? `
       <button class="wx-btn wx-btn--primary" data-favsave="${id}">Save</button>
       <button class="wx-btn wx-btn--quiet" data-favcancel="${id}">Cancel</button>`
     : `
-      <button class="wx-btn wx-btn--primary" data-ridenow="${id}">Ride now</button>
+      <button class="wx-btn wx-btn--primary" data-ridenow="${id}">${
+        fav.usualTime ? `Ride ${nextStart(fav.usualTime).label}` : "Ride now"}</button>
       <span class="wx-spacer"></span>
       <button class="wx-linkbtn" data-favedit="${id}">Edit</button>
       <button class="wx-linkbtn wx-linkbtn--warn" data-favdel="${id}">Delete</button>`;
@@ -163,7 +172,16 @@ function rideNow(id){
   try{ updateFavourite(fav.id, {lastRiddenAt: new Date().toISOString()}); }catch(e){}
 
   showScreen("ride");
-  status(`${fav.name} is loaded. Set the date and start time, then press Read the weather.`);
+  /* With a usual start the date and time are known too. It still stops short
+     of fetching: Ride now fills in, Read the weather reads, as it always has. */
+  const next = nextStart(fav.usualTime);
+  if (next){
+    $("#date").value = next.date;
+    $("#time").value = next.time;
+    status(`${fav.name} is loaded for ${next.label}. Press Read the weather.`);
+  } else {
+    status(`${fav.name} is loaded. Set the date and start time, then press Read the weather.`);
+  }
 }
 
 /* --- The list's buttons ------------------------------------------- */
@@ -221,7 +239,8 @@ function saveFavouriteEdit(id){
   if (raw !== "" && !(speed >= 3 && speed <= 80))
     return favStatus("A speed between 3 and 80 km/h, or leave it empty.", true);
 
-  const patch = {name, type: pressed ? pressed.dataset.v : fav.type};
+  const usualTime = card.querySelector("[data-field=usualTime]").value || null;
+  const patch = {name, type: pressed ? pressed.dataset.v : fav.type, usualTime};
   // Touching the speed makes it yours; leaving it alone keeps where it came from.
   if (speed !== fav.speed) Object.assign(patch, {speed, speedFrom: "typed"});
 

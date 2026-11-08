@@ -134,9 +134,9 @@ $("#speed").addEventListener("input", updateSpeedHint);
    Location
 ----------------------------------------------------------------*/
 async function geocode(q){
-  const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=en&format=json`);
-  if (!r.ok) throw new Error("Location lookup failed");
-  return (await r.json()).results || [];
+  const j = await openMeteoJSON(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=en&format=json`,
+                                "The place search");
+  return j.results || [];
 }
 const placeLabel = p => [p.name, p.admin1, p.country].filter(Boolean).join(", ");
 function showPlace(p){
@@ -159,7 +159,7 @@ async function doSearch(){
       b.onclick = () => { state.place = p; showPlace(p); box.classList.add("wx-hidden"); save(); };
       box.appendChild(b);
     });
-  }catch(e){ box.innerHTML = `<button disabled>${e.message}</button>`; }
+  }catch(e){ box.innerHTML = `<button disabled>${escapeText(e.message)}</button>`; }
 }
 $("#search").onclick = doSearch;
 $("#loc").addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); doSearch(); }});
@@ -260,9 +260,11 @@ async function forecast(lat, lon){
     // which the rain-timing code treats as "fall back to the hour".
     + "&minutely_15=precipitation"
     + "&daily=sunrise,sunset&timezone=auto&forecast_days=16&past_days=2";
-  const r = await fetch(url);
-  if (!r.ok) throw new Error("Forecast request failed");
-  return r.json();
+  const fc = await openMeteoJSON(url, "The forecast", null, null, {keep: true});
+  // Said on the hours card, since a reading within the quarter hour reuses it,
+  // and a reading with no connection uses the one kept from last time.
+  fc.fetchedAt = fc.offlineFrom != null ? fc.offlineFrom : openMeteoFetchedAt(url);
+  return fc;
 }
 
 /* What the weather actually was, for a ride that has already happened.
@@ -282,9 +284,7 @@ async function archiveWeather(lat, lon, dateStr){
     + "wind_direction_10m,wind_gusts_10m,is_day,weather_code,"
     + "relative_humidity_2m,dew_point_2m"
     + "&daily=sunrise,sunset&timezone=auto";
-  const r = await fetch(url);
-  if (!r.ok) throw new Error("Couldn't reach the weather archive.");
-  const fc = await r.json();
+  const fc = await openMeteoJSON(url, "The weather archive");
   if (fc.error) throw new Error(fc.reason || "The weather archive refused that date.");
   if (!fc.hourly || !fc.hourly.time || !fc.hourly.time.length)
     throw new Error("The weather archive has nothing for that date yet. It runs about a day behind.");
@@ -379,98 +379,12 @@ async function rideFromActivity(text, fileName){
   });
   // The GPX is also the actual-ride record, so attach it in the same step —
   // there is no reason to make you upload the same file twice.
-  attachActual(rideId(`${dateStr}T${timeStr}`, place), stats, fileName);
-  return {stats, feel, place, terrain: opts.terrain};
+  const id = rideId(`${dateStr}T${timeStr}`, place);
+  attachActual(id, stats, fileName);
+  return {id, stats, feel, place, terrain: opts.terrain};
 }
 
-function rideWindow(fc, dateStr, timeStr, hours){
-  const times = fc.hourly.time;
-  const i = times.indexOf(`${dateStr}T${timeStr.slice(0,2)}:00`);
-  if (i < 0) throw new Error("That start time is outside the 16-day forecast window.");
-  const last = Math.min(times.length - 1, i + Math.max(0, Math.ceil(hours) - 1));
-  const idx = []; for (let k = i; k <= last; k++) idx.push(k);
-  const g = key => idx.map(k => fc.hourly[key][k]).filter(v => v != null);
-
-  const temps=g("temperature_2m"), winds=g("wind_speed_10m"), gusts=g("wind_gusts_10m"),
-        precip=g("precipitation"), probs=g("precipitation_probability"),
-        cloud=g("cloud_cover"), day=g("is_day"), dirs=g("wind_direction_10m"),
-        codes=g("weather_code"), freeze=g("freezing_level_height"),
-        rhs=g("relative_humidity_2m"), dews=g("dew_point_2m");
-
-  // Directions are angles, so they average on the unit circle — a naive mean of
-  // 350° and 10° gives 180°, which is the exact opposite of the truth.
-  const meanDir = list => {
-    let sx=0, sy=0;
-    list.forEach(d => { const rad=d*Math.PI/180; sx+=Math.cos(rad); sy+=Math.sin(rad); });
-    return ((Math.atan2(sy,sx)*180/Math.PI)+360)%360;
-  };
-  const dirMean = meanDir(dirs);
-  // The return leg is ridden in the later wind, and that is the leg that hurts.
-  const dirLate = meanDir(dirs.slice(Math.floor(dirs.length/2)));
-
-  const dayIdx = fc.daily.time.indexOf(dateStr);
-  const sunrise = dayIdx>=0 ? fc.daily.sunrise[dayIdx] : null;
-  const sunset  = dayIdx>=0 ? fc.daily.sunset[dayIdx]  : null;
-
-  const startDT = new Date(`${dateStr}T${timeStr}`);
-  const endDT = new Date(startDT.getTime() + hours*3600*1000);
-  // Darkness from actual sunrise/sunset, so a 06:30 start after a 06:21
-  // sunrise doesn't read as a night ride.
-  let darkFrac = day.filter(d => d === 0).length / day.length;
-  if (sunrise && sunset){
-    const lit = Math.max(0, Math.min(endDT, new Date(sunset)) - Math.max(startDT, new Date(sunrise)));
-    darkFrac = clamp(1 - lit/(endDT - startDT), 0, 1);
-  }
-
-  return {
-    startDT, endDT, times: idx.map(k => times[k]),
-    tStart:temps[0], tEnd:temps[temps.length-1], tMin:Math.min(...temps), tMax:Math.max(...temps),
-    wind: winds.reduce((a,b)=>a+b,0)/winds.length, gust: Math.max(...gusts), dir: dirMean,
-    precipTotal: precip.reduce((a,b)=>a+b,0), precipPeak: Math.max(...precip),
-    prob: Math.max(...probs), cloud: cloud.reduce((a,b)=>a+b,0)/cloud.length,
-    dark: darkFrac, wetHours: precip.filter(p => p >= 0.1).length, hoursCount: idx.length,
-    sunrise, sunset, dirLate,
-    /* Averaged over the riding hours rather than read off the start, because
-       unlike temperature this is a property of the day rather than the moment
-       you set off — and it barely moves inside a morning. Absent from a feed
-       that didn't carry it, which the model reads as "say nothing". */
-    rh: rhs.length ? rhs.reduce((a,b)=>a+b,0)/rhs.length : null,
-    dew: dews.length ? dews.reduce((a,b)=>a+b,0)/dews.length : null,
-    // Altitude of 0°C. Lower than the ground you are riding on means freezing.
-    freezingLevel: freeze.length ? Math.min(...freeze) : null,
-    // Quarter-hourly rain start, when the 15-minute feed reaches this far out.
-    rainStart15: (() => {
-      const m = fc.minutely_15;
-      if (!m || !m.time) return null;
-      const from = startDT.getTime(), to = endDT.getTime();
-      for (let k = 0; k < m.time.length; k++){
-        const t = new Date(m.time[k]).getTime();
-        if (t < from || t > to) continue;
-        if ((m.precipitation[k] || 0) >= 0.1) return m.time[k];
-      }
-      return null;
-    })(),
-    hourly: idx.map((k,n) => ({
-      time:times[k], t:temps[n], wind:winds[n], precip:precip[n], prob:probs[n],
-      dir:dirs[n], gust:gusts[n], code:codes[n], day:day[n], cloud:cloud[n]
-    })),
-    // What is coming: the ride hours plus a few beyond, so a shower arriving
-    // just after the planned finish is visible rather than a surprise.
-    outlook: (() => {
-      const out = [];
-      for (let k = i; k <= Math.min(times.length - 1, last + 3); k++){
-        const h = fc.hourly;
-        out.push({
-          time: times[k], t: h.temperature_2m[k], wind: h.wind_speed_10m[k],
-          gust: h.wind_gusts_10m[k], dir: h.wind_direction_10m[k],
-          precip: h.precipitation[k], prob: h.precipitation_probability[k],
-          code: h.weather_code[k], day: h.is_day[k], riding: k <= last
-        });
-      }
-      return out;
-    })()
-  };
-}
+// rideWindow, which turns the forecast into the hours you ride, is in ridewindow.js.
 
 /* ---------------------------------------------------------------
    Pollen.
@@ -490,9 +404,7 @@ async function airQuality(lat, lon, dateStr, hourKey){
     + `?latitude=${lat}&longitude=${lon}`
     + `&hourly=${POLLENS.map(p => p[0]).join(",")},european_aqi`
     + `&start_date=${dateStr}&end_date=${dateStr}&timezone=auto`;
-  const r = await fetch(url);
-  if (!r.ok) throw new Error("air quality unavailable");
-  const h = (await r.json()).hourly;
+  const h = (await openMeteoJSON(url, "Air quality")).hourly;
   const i = h.time.indexOf(hourKey);
   if (i < 0) throw new Error("hour outside the air quality window");
 
@@ -534,9 +446,7 @@ async function ensembleSpread(lat, lon, dateStr, hourKey){
     + "&hourly=temperature_2m,precipitation,wind_speed_10m,wind_direction_10m"
     + "&models=ecmwf_ifs025"
     + `&start_date=${dateStr}&end_date=${dateStr}&timezone=auto`;
-  const r = await fetch(url);
-  if (!r.ok) throw new Error("ensemble unavailable");
-  const h = (await r.json()).hourly;
+  const h = (await openMeteoJSON(url, "The ensemble")).hourly;
   const i = h.time.indexOf(hourKey);
   if (i < 0) throw new Error("hour outside the ensemble window");
 
@@ -587,9 +497,7 @@ async function forecastMany(legs){
     + "wind_speed_10m,wind_direction_10m,wind_gusts_10m,is_day,weather_code,"
     + "relative_humidity_2m,dew_point_2m"
     + "&daily=sunrise,sunset&timezone=auto&forecast_days=16&past_days=2";
-  const r = await fetch(url);
-  if (!r.ok) throw new Error("Route forecast request failed");
-  const j = await r.json();
+  const j = await openMeteoJSON(url, "The route forecast");
   return Array.isArray(j) ? j : [j];      // one location comes back unwrapped
 }
 
@@ -605,6 +513,9 @@ function legWeather(fc, leg, opts){
   const j = Math.min(h.time.length - 1, i + Math.max(0, Math.ceil(leg.hours) - 1));
 
   const airRaw = h.temperature_2m[i];
+  // Past the end of the forecast; the route card says so rather than read nulls.
+  if (airRaw == null || h.wind_speed_10m[i] == null)
+    throw new Error("The forecast runs out before this part of the route.");
   const air = lapseAdjust(airRaw, leg.ele, fc.elevation);
   const airEnd = lapseAdjust(h.temperature_2m[j], leg.ele, fc.elevation);
   const wind = h.wind_speed_10m[i], dir = h.wind_direction_10m[i];
@@ -674,14 +585,25 @@ function packingPlan(analysis, opts){
   const carryCandidates = bySlotWarmest(legs.flatMap(l => l.out.wear.filter(canCarry)));
   const wornNames = new Set(wear.map(i => i.name));
 
-  const carry = [];
+  /* Where a carried layer is wanted. The model picking it on a leg is the
+     evidence; any leg at least as cold as the warmest of those wants it too.
+     That reads the same whichever way the ride runs: on a route that climbs
+     into the cold it goes on at the first cold leg, and on a morning that
+     warms up it is on from the start and comes off when it is no longer cold
+     enough. (Reading only the legs it was picked on put leg warmers on at
+     10° on a ride that started at 3°, because at 3° the model had picked
+     tights, which do not come off.) */
   const wornOn = it => legs.filter(l => l.out.wear.some(x => x.name === it.name));
+  const neededOn = it => {
+    const used = wornOn(it);
+    if (!used.length) return [coldest];
+    const upTo = Math.max(...used.map(l => l.f.feel));
+    return legs.filter(l => l.f.feel <= upTo);
+  };
+  const carry = [];
   carryCandidates.forEach(it => {
     if (wornNames.has(it.name)) return;
-    // On when the model first actually picks it, not merely when the temperature
-    // touches the top of its range — those are different moments on a climb.
-    const used = wornOn(it);
-    const leg = used[0] || coldest;
+    const leg = neededOn(it)[0];
     carry.push({item: it, leg, fromStart: leg === legs[0],
                 at: km(leg.fromKm), time: hhmm(leg.startTime)});
   });
@@ -711,7 +633,16 @@ function packingPlan(analysis, opts){
       } else if (warm && warmest.f.feel <= cold.tmax){
         fix = `Wear the ${cold.name} from the start instead — the warmest leg is still inside its range, so it won't cook you.`;
       } else {
-        fix = `Starting in it means running warm until ${km(coldest.fromKm)}. That is the trade, and on a long climb it is usually the wrong side of it.`;
+        // Where it would be too warm, said on the side of the ride it is on.
+        const tooWarm = legs.filter(l => l.f.feel > cold.tmax);
+        const first = tooWarm[0], last = tooWarm[tooWarm.length - 1];
+        const after = first && legs.indexOf(first) > legs.indexOf(coldest);
+        const where = !first ? ""
+          : after ? ` from around ${km(first.fromKm)}, about ${hhmm(first.startTime)}`
+                  : ` until around ${km(legs[legs.indexOf(last) + 1] ? legs[legs.indexOf(last) + 1].fromKm : last.toKm)}`;
+        fix = `Wearing it means running warm${where}, above the ${cold.tmax}&deg; it is good for. ${after
+          ? "Leaving it off means a cold start instead; which is worse is your call."
+          : "That is the trade, and on a long climb it is usually the wrong side of it."}`;
       }
       conflicts.push({cold, warm, fix});
     });
@@ -721,6 +652,8 @@ function packingPlan(analysis, opts){
      actually come off. */
   const lastNeed = new Map();
   legs.forEach(leg => leg.out.wear.forEach(it => lastNeed.set(it.name, leg)));
+  // A carried layer is needed wherever neededOn says, not only where picked.
+  carry.forEach(c => { const n = neededOn(c.item); lastNeed.set(c.item.name, n[n.length - 1]); });
   const shedAt = [];
   [...wear, ...carry.filter(c => c.fromStart).map(c => c.item)].forEach(it => {
     if (!canCarry(it)) return;
@@ -777,11 +710,63 @@ const outfitKey = out => out.wear.map(i => i.name).sort().join("|");
 async function analyseRoute(route, opts){
   const legs = legTiming(sampleRoute(route.points, route.stats, opts), opts.startDT, opts.speed);
   const blocks = await forecastMany(legs);
-
   legs.forEach((leg, k) => {
     const fc = blocks[Math.min(k, blocks.length - 1)];
     leg.modelEle = fc.elevation;
-    const w = legWeather(fc, leg, opts);
+    leg.w = legWeather(fc, leg, opts);
+  });
+  const result = analyseLegs(legs, opts);
+  result.kind = "route";
+
+  /* A loop can be ridden either way, and the forecast already fetched covers
+     both: the reversed legs stand on the same roads, so each takes its wind
+     from the forward leg's block, at its own clock time and turned heading.
+     Only the headwind is read; nothing about the kit changes here. */
+  if (route.stats.loop && legs.length >= 4){
+    const rev = reverseLegs(legs, opts.startDT, opts.speed);
+    rev.forEach(l => { l.headwind = legWeather(blocks[Math.min(l.source, blocks.length - 1)], l, opts).headwind; });
+    result.direction = compareDirections(legs.map(l => ({headwind: l.w.headwind, hours: l.hours})),
+                                         rev, isClockwise(route.points));
+  }
+  return result;
+}
+
+/* ---------------------------------------------------------------
+   The same check without a route: the ride cut into hours at the start
+   point. A four-hour ride from 7° to 15° asks the same question a col does —
+   what goes on and off, and when — and with no GPX loaded it used to get
+   only "dress for the start". The forecast already fetched for the start
+   point serves every hour, so nothing more is asked of Open-Meteo.
+
+   Wind is the ambient wind, as for the headline number: with no heading
+   there is no headwind to work out. Shown only when the kit changes; "the
+   same kit works the whole way" is what the headline already says.
+----------------------------------------------------------------*/
+function analyseHours(fc, w, opts){
+  const n = Math.floor(opts.hours);
+  if (n < 3) return null;
+  const step = opts.hours / n, start = w.startDT.getTime();
+  const legs = [];
+  for (let k = 0; k < n; k++){
+    const leg = {index: k, fromKm: opts.speed * step * k, toKm: opts.speed * step * (k + 1),
+                 lat: null, lon: null, ele: null, climb: 0, gradient: 0, heading: null,
+                 startTime: new Date(start + k * step * 3600e3), endTime: new Date(start + (k + 1) * step * 3600e3),
+                 speed: opts.speed, hours: step};
+    leg.w = legWeather(fc, leg, opts);
+    leg.w.wind = leg.w.ambient;
+    leg.w.headwind = 0;
+    legs.push(leg);
+  }
+  const result = analyseLegs(legs, opts);
+  result.kind = "hours";
+  return result.changes ? result : null;
+}
+
+/* Per leg: the ride-feel and the outfit, then what changes between the
+   coldest and the warmest, and a packing plan. Legs carry their weather (w). */
+function analyseLegs(legs, opts){
+  legs.forEach(leg => {
+    const w = leg.w;
     // Up and down are opposite problems, and treating them the same was wrong.
     // Climbing at 7% is the warmest you will be all day: hard effort, low speed,
     // almost no airflow. The descent that follows is the cold one.
@@ -794,7 +779,6 @@ async function analyseRoute(route, opts){
       // headline number stay in step.
     });
     leg.climbing = climbing; leg.descending = descending;
-    leg.w = w;
     leg.opts = legOpts;
     leg.f = rideFeel(w, legOpts);
     leg.out = state.mode === "wardrobe" ? pickOutfit(leg.f, w, legOpts, gear)
@@ -833,26 +817,25 @@ async function analyseRoute(route, opts){
 const fmtDay = s => new Date(s + "T12:00").toLocaleDateString(undefined, {weekday:"long", day:"numeric", month:"long"});
 const hhmm = d => `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
 
-function render(f, w, opts, place, analysis){
-  const out = state.mode === "wardrobe" ? pickOutfit(f, w, opts, gear) : genericOutfit(f, w, opts);
-  // The route card says the sweat problem better when it has legs to point at.
-  const watch = watchFor(f, w, analysis && analysis.wetThrough
-    ? Object.assign({}, opts, {sweatNoted: true}) : opts);
-  const band = bandFor(f.feel);
-  const hb = out.hb;
-  const ramp = rampFor(f.feel);
+/* ---------------------------------------------------------------
+   The reading, card by card.
 
-  // Head to feet, because that is the order you get dressed in.
-  const byZone = items => items.slice().sort((a, b) => {
-    const ia = ZONE_ORDER.indexOf(a.slot), ib = ZONE_ORDER.indexOf(b.slot);
-    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
-  });
-  /* A reason given for this ride (_why) is short and specific, so it stays in
-     full. A garment's standing note is often a paragraph; shown whole it made
-     the Wear card a screen tall and pushed Carry and the warnings below the
-     fold, so it is one line until tapped. Both are escaped: the notes come
-     from the gear list, which you edit and which syncs. */
-  const kitRows = items => byZone(items).map(it => `
+   render() used to be one 400-line template. Each card is now built by its
+   own function from what it needs, and render() only works out the outfit and
+   puts the cards in order. The markup is unchanged.
+----------------------------------------------------------------*/
+
+// Head to feet, because that is the order you get dressed in.
+const byZone = items => items.slice().sort((a, b) => {
+  const ia = ZONE_ORDER.indexOf(a.slot), ib = ZONE_ORDER.indexOf(b.slot);
+  return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+});
+/* A reason given for this ride (_why) is short and specific, so it stays in
+   full. A garment's standing note is often a paragraph; shown whole it made
+   the Wear card a screen tall and pushed Carry and the warnings below the
+   fold, so it is one line until tapped. Both are escaped: the notes come
+   from the gear list, which you edit and which syncs. */
+const kitRows = items => byZone(items).map(it => `
     <div class="wx-kit__row">
       <div class="wx-kit__zone">${it._label || ZONE_LABEL[it.slot] || ""}</div>
       <div class="wx-kit__items">${escapeText(it.name)}${it._why
@@ -863,18 +846,126 @@ function render(f, w, opts, place, analysis){
           : ""}</div>
     </div>`).join("");
 
+function readoutCard(f, w, opts, place, ramp){
+  return `
+  <section class="wx-readout ${ramp}">
+    <p class="wx-eyebrow">${placeLabel(place)} &middot; ${fmtDay(w.times[0].slice(0,10))}
+       &middot; ${hhmm(w.startDT)}–${hhmm(w.endDT)} &middot; ${r1(opts.dist)} km</p>
+    <div class="wx-readout__row">
+      <div>
+        <span class="wx-readout__value">${f.feel}</span>
+        <span class="wx-readout__unit">&deg;C felt</span>
+      </div>
+      <div class="wx-readout__air">
+        ${r1(w.tStart)}&deg;C air, ${r1(w.tEnd)}&deg; by the end<br>
+        wind ${compass(w.dir)} ${Math.round(w.wind)} km/h${w.gust >= 40 ? `, gusts ${Math.round(w.gust)}` : ""}<br>
+        rain ${Math.round(w.prob)}%${w.precipTotal >= 0.1 ? `, ${r1(w.precipTotal)} mm` : ""}
+      </div>
+    </div>
+    <div class="wx-strip"><span class="wx-strip__mark" style="left:${rampPos(f.feel)}%"></span></div>
+    ${scaleMarkup()}
+  </section>`;
+}
+
+function wearCard(out, ramp){
+  return `
+  <section class="wx-card ${ramp}">
+    <h2 class="wx-heading">Wear</h2>
+    <div class="wx-kit">${kitRows(out.wear)}</div>
+  </section>`;
+}
+
+function carryCard(out, ramp){
+  return out.pocket.length ? `
+  <section class="wx-card wx-card--flat ${ramp}">
+    <h2 class="wx-heading">Carry</h2>
+    <div class="wx-kit">${out.pocket.map(([it, why]) => `
+      <div class="wx-kit__row">
+        <div class="wx-kit__zone">Pocket</div>
+        <p class="wx-kit__items">${escapeText(it.name)}${why ? ` <em>${why}</em>` : ""}</p>
+      </div>`).join("")}</div>
+  </section>` : "";
+}
+
+function chipsList(f){
   // Air -> ride-feel, as chips. Sign is carried by colour so the arithmetic
   // scans without being read.
-  const chips = f.rows.filter(r => !r.base).map(r => `
+  return f.rows.filter(r => !r.base).map(r => `
     <li class="wx-chip${r.v > 0 ? " wx-chip--plus" : ""}">
       <b>${r.v > 0 ? "+" : "−"}${Math.abs(r1(r.v))}</b> ${r.label.toLowerCase()}
     </li>`).join("");
 
-  /* The order follows the question being asked at 06:40: how cold, what to
-     wear, what to carry, what to watch for — and only then the detail behind
-     it. The hours strip and the map used to sit between the reading and the
-     kit, and the warnings came after the route card, several screens down. */
-  const hoursCard = `
+}
+
+/* The way back: what it reads, what to wear both ways, what goes in the bag. */
+function backCard(back, thereFeel){
+  if (!back) return "";
+  if (back.error) return `<p class="wx-alert"><b>The way back.</b> ${escapeText(back.error)}</p>`;
+  const {w: wb, f: fb, out: ob, plan} = back;
+  const row = (zone, items, why) => items.length ? `
+      <div class="wx-kit__row">
+        <div class="wx-kit__zone">${zone}</div>
+        <p class="wx-kit__items">${items.map(i => escapeText(i.name)).join(", ")}${why ? ` <em>${why}</em>` : ""}</p>
+      </div>` : "";
+  const colder = fb.feel < thereFeel, diff = Math.abs(fb.feel - thereFeel);
+  return `
+  <section class="wx-card ${rampFor(fb.feel)}">
+    <div class="wx-card__head">
+      <h2 class="wx-heading">The way back</h2>
+      <span class="wx-eyebrow" style="margin:0">${hhmm(wb.startDT)}–${hhmm(wb.endDT)} &middot; ${fb.feel}&deg; felt</span>
+    </div>
+    <p class="wx-note" style="margin-top:0">${r1(wb.tStart)}&deg;C air, wind ${compass(wb.dir)} ${Math.round(wb.wind)} km/h,
+      rain ${Math.round(wb.prob)}%${wb.precipTotal >= 0.1 ? `, ${r1(wb.precipTotal)} mm` : ""} —
+      ${diff < 2 ? "about the same as the way there" : `${diff}&deg; ${colder ? "colder" : "warmer"} than the way there`}.</p>
+    <div class="wx-kit">
+      ${row("Both ways", plan.both, "")}
+      ${row("In the bag", plan.bring, colder || !plan.stow.length ? "For the way back; the morning doesn't need it." : "To change into for the way back.")}
+      ${row("Stow", plan.stow, "Off and into the bag for the way back.")}
+    </div>
+    ${!plan.bring.length && !plan.stow.length ? `<p class="wx-startdir"><b>The same kit both ways.</b> Nothing to pack for the return.</p>` : ""}
+    ${ob.notes.map(n => `<p class="wx-alert">${n}</p>`).join("")}
+  </section>`;
+}
+
+/* Which start rides best. Said beside the warnings when another hour is
+   clearly better, because it changes the plan before it changes the kit; when
+   the chosen start is as good as the day gets, it says that in one line. */
+function bestStartCard(scan, ramp){
+  if (!scan || !scan.chosen) return "";
+  const {starts, best, chosen, better} = scan;
+  const gains = better ? startGains(best, chosen) : [];
+  const verdict = better
+    ? `<p class="wx-startdir"><b>Starting at ${best.time} rides better.</b> ${
+        gains.length ? `Compared with ${chosen.time}: ${gains.join(", ")}.` : ""}${
+        gains.some(g => / on the bike$/.test(g)) ? ""
+          : ` It reads ${best.f.feel}&deg; on the bike against ${chosen.f.feel}&deg;.`}
+        The kit above is still for ${chosen.time}; read the weather again for the other start.</p>`
+    : `<p class="wx-note">Nothing else in the day rides clearly better than ${chosen.time}.</p>`;
+  return `
+  <section class="wx-card wx-card--flat ${ramp}">
+    <div class="wx-card__head">
+      <h2 class="wx-heading">Best time to go</h2>
+      <span class="wx-eyebrow" style="margin:0">Each start, at the start point</span>
+    </div>
+    ${verdict}
+    <div class="wx-scroll">
+      <div class="wx-hours">${starts.map(s => {
+        const isBest = s === best, isMine = s.time.slice(0, 2) === chosen.time.slice(0, 2);
+        return `
+        <div class="wx-hour${isBest || isMine ? " is-riding" : ""} ${rampFor(s.f.feel)}">
+          <div class="wx-hour__time">${s.time}</div>
+          <div class="wx-hour__temp">${s.f.feel}&deg;</div>
+          <div class="wx-hour__rain${s.w.precipTotal >= 0.3 ? " is-wet" : ""}">${
+            s.w.precipTotal >= 0.1 ? `${r1(s.w.precipTotal)} mm` : "dry"}</div>
+          <div class="wx-hour__tag">${isBest ? "best" : isMine ? "yours" : "&nbsp;"}</div>
+        </div>`;
+      }).join("")}</div>
+    </div>
+  </section>`;
+}
+
+function hoursCard(w, ramp){
+  return `
   <section class="wx-card wx-card--flat ${ramp}">
     <div class="wx-card__head">
       <h2 class="wx-heading">The next hours</h2>
@@ -893,254 +984,266 @@ function render(f, w, opts, place, analysis){
     <p class="wx-note">${skyFor(w.outlook[0].code)[1]} at the start${
       w.outlook.some(h => !h.riding && h.prob >= 50)
         ? `, and it turns wet after you would be home, around ${fmtTime(w.outlook.find(h => !h.riding && h.prob >= 50).time)}`
-        : ""}. Arrows point the way the wind is blowing.</p>
+        : ""}. Arrows point the way the wind is blowing.${
+      w.offlineFrom != null ? ` <b>No connection: this is the forecast kept from ${
+        new Date(w.offlineFrom).toLocaleDateString(undefined, {weekday: "short"})} ${hhmm(new Date(w.offlineFrom))}.</b>`
+      : w.fetchedAt ? ` Forecast as of ${hhmm(new Date(w.fetchedAt))}.` : ""}</p>
   </section>`;
+}
 
+function routeFlag(analysis){
   // A route whose kit changes along the way changes the answer itself, so it
   // is said beside the kit rather than three cards further down.
-  const routeFlag = !analysis ? "" : analysis.error
+  return !analysis ? "" : analysis.error
     ? `<p class="wx-alert"><b>Route check failed.</b> ${analysis.error}
         The advice above still stands for the start point.</p>`
     : analysis.changes
-      ? `<p class="wx-alert"><b>This kit doesn't hold for the whole route.</b> It reads
+      ? analysis.kind === "hours"
+        ? `<p class="wx-alert"><b>This kit doesn't hold for the whole ride.</b> It reads
+            ${analysis.coldest.f.feel}&deg; around ${hhmm(analysis.coldest.startTime)} against
+            ${analysis.warmest.f.feel}&deg; around ${hhmm(analysis.warmest.startTime)}. What to carry,
+            and when to put it on or take it off, is under Through the ride below.</p>`
+        : `<p class="wx-alert"><b>This kit doesn't hold for the whole route.</b> It reads
           ${analysis.coldest.f.feel}&deg; at the coldest point, around
           ${Math.round(analysis.coldest.fromKm)} km, against ${analysis.warmest.f.feel}&deg; at the
           warmest. What to carry, and where to put it on, is under Along the route below.</p>`
       : "";
+}
 
-  const warnings = out.notes.map(n => `<p class="wx-alert">${n}</p>`).join("")
+function warningsList(out, watch){
+  return out.notes.map(n => `<p class="wx-alert">${n}</p>`).join("")
     + watch.map(x => `<p class="wx-alert"><b>Watch.</b> ${x}</p>`).join("");
+}
 
-  $("#out").innerHTML = `
-  <section class="wx-readout ${ramp}">
-    <p class="wx-eyebrow">${placeLabel(place)} &middot; ${fmtDay(w.times[0].slice(0,10))}
-       &middot; ${hhmm(w.startDT)}–${hhmm(w.endDT)} &middot; ${r1(opts.dist)} km</p>
-    <div class="wx-readout__row">
-      <div>
-        <span class="wx-readout__value">${f.feel}</span>
-        <span class="wx-readout__unit">&deg;C felt</span>
+/* For a loop: which way round, said in the unit you decide in. Replaces the
+   compass bearing, which a loop makes meaningless — you set off along the
+   road in front of you either way. */
+function directionNote(d){
+  if (!d) return "";
+  const kmh = v => `${Math.round(Math.abs(v))} km/h of ${v >= 0 ? "headwind" : "tailwind"}`;
+  const word = dir => turnWord(dir, d.clockwise);
+  const name = dir => dir === "forward"
+    ? `as recorded${word(dir) ? ` (${word(dir)})` : ""}`
+    : `the other way round${word(dir) ? ` (${word(dir)})` : ""}`;
+  if (!d.better){
+    return `<p class="wx-note">Clockwise or anticlockwise makes little difference today:
+      the last third of the ride carries ${kmh(d.forward.late)} as recorded and
+      ${kmh(d.reverse.late)} the other way round.</p>`;
+  }
+  const win = d[d.better], lose = d[d.better === "forward" ? "reverse" : "forward"];
+  return `<p class="wx-startdir"><b>Ride it ${name(d.better)}.</b>
+    The last third of the ride then carries ${kmh(win.late)}, against ${kmh(lose.late)} the other
+    way round; the first third, which you ride fresh, takes ${kmh(win.early)}. It is the same wind
+    on the same roads either way — this only decides when you meet it.</p>`;
+}
+
+function windCard(w, place, ramp, analysis){
+  const bft = beaufort(w.wind), gustBft = beaufort(w.gust);
+  // Ride out into the wind so the way home has it behind: the return leg is
+  // ridden tired, and a headwind there is what actually makes people cold.
+  const outbound = w.dirLate;
+  const shifts = angleGap(w.dir, w.dirLate) > 40;
+  const matters = bft.force >= 3;
+  return `
+<section class="wx-card ${ramp}">
+  <h2 class="wx-heading">${matters ? "Wind, and which way to go" : "Wind"}</h2>
+  ${(() => {
+    // The bearing only means something if you can see where it points. With a
+    // route loaded that is the route itself; without one, the start point.
+    const box = document.querySelector(".wx-shell");
+    const width = Math.max(240, Math.min(560, (box ? box.clientWidth : 600) - 44));
+    const m = renderMap({
+      width, height: Math.round(width * (route ? 0.62 : 0.5)),
+      points: route ? route.points : null,
+      lat: place.latitude, lon: place.longitude,
+      windFrom: w.dir, outbound: matters ? outbound : null
+    });
+    return m + `<p class="wx-maplegend">
+      <span><i class="k-wind"></i> wind, blowing this way</span>
+      ${matters ? `<span><i class="k-go"></i> set off this way</span>` : ""}
+      ${route ? `<span><i class="k-route"></i> your route</span>` : ""}
+    </p>`;
+  })()}
+
+  <div>
+      <div class="wx-bft">
+        <span class="wx-bft__n">${bft.force}</span>
+        <span class="wx-bft__u">Bft</span>
+        <span class="wx-bft__name">${bft.name}</span>
       </div>
-      <div class="wx-readout__air">
-        ${r1(w.tStart)}&deg;C air, ${r1(w.tEnd)}&deg; by the end<br>
-        wind ${compass(w.dir)} ${Math.round(w.wind)} km/h${w.gust >= 40 ? `, gusts ${Math.round(w.gust)}` : ""}<br>
-        rain ${Math.round(w.prob)}%${w.precipTotal >= 0.1 ? `, ${r1(w.precipTotal)} mm` : ""}
-      </div>
-    </div>
-    <div class="wx-strip"><span class="wx-strip__mark" style="left:${rampPos(f.feel)}%"></span></div>
-    ${scaleMarkup()}
-  </section>
+      <p class="wx-note" style="margin-top:var(--sp-2)">
+        From the <b>${compass(w.dir)}</b>, ${Math.round(w.wind)} km/h${
+          w.gust >= w.wind + 12 ? `, gusting ${Math.round(w.gust)} which is force ${gustBft.force}` : ""}.
+        ${bft.note}
+      </p>
+      ${(() => {
+        const sp = w.spread;
+        if (!sp) return "";
+        const tight = sp.dirSpread <= 25;
+        const wetPct = Math.round(100 * sp.wetMembers / sp.rainMembers);
+        return `<p class="wx-agree ${tight ? "is-tight" : "is-loose"}">
+          <b>${sp.members} ECMWF members</b> ${tight
+            ? `land within ${Math.round(sp.dirSpread)}&deg; of each other on direction — the bearing is worth planning around.`
+            : `spread over ${Math.round(sp.dirSpread)}&deg; on direction, so treat the bearing as a steer and look again nearer the time.`}
+          ${sp.wetMembers > 0
+            ? ` ${sp.wetMembers} of ${sp.rainMembers} have rain at this hour (${wetPct}%).`
+            : " None of them have rain at this hour."}
+          ${sp.tempSpread >= 2.5
+            ? ` Air temperature spans ${r1(sp.tempLow)}&ndash;${r1(sp.tempHigh)}&deg;C across the middle of the spread, so the kit call is less settled than one number looks.`
+            : ""}</p>`;
+      })()}
+      ${directionNote(analysis && analysis.direction)}
+      ${matters && !(analysis && analysis.direction) ? `
+      <p class="wx-startdir"><b>Set off towards the ${compass(outbound)}.</b>
+        That puts the wind in your face going out and behind you coming back,
+        which is the leg you ride tired.</p>
+      ${shifts ? `<p class="wx-note">It veers from ${compass(w.dir)} to ${compass(w.dirLate)}
+        across the ride, so this bearing follows the later wind, which is what
+        you will actually be riding home in.</p>` : ""}`
+      : `<p class="wx-note">Force ${bft.force} is not worth planning a route around.
+         Go whichever way you like.</p>`}
+  </div>
+</section>`;
+}
 
-  <section class="wx-card ${ramp}">
-    <h2 class="wx-heading">Wear</h2>
-    <div class="wx-kit">${kitRows(out.wear)}</div>
-  </section>
+function routeCard(analysis, ramp){
+  // A failed check is already said beside the kit, in routeFlag.
+  if (!analysis || analysis.error) return "";
 
-  ${out.pocket.length ? `
-  <section class="wx-card wx-card--flat ${ramp}">
-    <h2 class="wx-heading">Carry</h2>
-    <div class="wx-kit">${out.pocket.map(([it, why]) => `
-      <div class="wx-kit__row">
-        <div class="wx-kit__zone">Pocket</div>
-        <p class="wx-kit__items">${escapeText(it.name)}${why ? ` <em>${why}</em>` : ""}</p>
+  const {legs, coldest, warmest, extra, shed, swaps, changes, spread, wetThrough} = analysis;
+  const consistent = !changes;
+  const km = n => `${Math.round(n)} km`;
+  const hours = analysis.kind === "hours";
+
+  return `
+<section class="wx-card ${consistent ? ramp : rampFor(coldest.f.feel)}">
+  <div class="wx-card__head">
+    <h2 class="wx-heading">${hours ? "Through the ride" : "Along the route"}</h2>
+    <span class="wx-eyebrow" style="margin:0">${hours
+      ? `${legs.length} stretches &middot; at the start point, hour by hour`
+      : `${legs.length} legs &middot; ${km(route.stats.distance)}${
+      route.stats.hasElevation ? ` &middot; ${Math.round(route.stats.ascent)} m up` : ""}`}</span>
+  </div>
+
+  <div class="wx-scroll">
+    <div class="wx-legs">${legs.map(l => `
+      <div class="wx-leg ${rampFor(l.f.feel)}">
+        <div class="wx-leg__km">${km(l.fromKm)}</div>
+        ${skyIcon(l.w.code, l.w.day, 22)}
+        <div class="wx-leg__feel">${l.f.feel}&deg;</div>
+        <div class="wx-leg__air">${r1(l.w.tStart)}&deg; air</div>
+        ${hours ? `<div class="wx-leg__wind" title="${Math.round(l.w.ambient)} km/h wind">${windArrow(l.w.dir)}
+          <span class="wx-num">${Math.round(l.w.ambient)}</span></div>`
+        : `<div class="wx-leg__wind" title="${Math.round(l.w.ambient)} km/h wind, ${Math.round(Math.abs(l.w.headwind))} km/h of it ${windLabel(l.w.headwind)}">
+          ${l.heading != null ? windArrow(l.w.dir) : ""}
+          <span class="wx-num">${l.w.headwind > 0 ? "+" : ""}${Math.round(l.w.headwind)}</span>
+        </div>`}
+        ${l.ele != null ? `<div class="wx-leg__ele">${Math.round(l.ele)} m</div>` : ""}
+        <div class="wx-leg__time">${hhmm(l.startTime)}</div>
       </div>`).join("")}</div>
-  </section>` : ""}
+  </div>
 
-  ${fuelCard(fuelPlan(w, f, opts), ramp, opts)}
+  ${wetThrough ? `<p class="wx-alert"><b>Wet through before the top.</b>
+    The climb from ${km(wetThrough.climb.fromKm)} is ${wetThrough.climb.f.feel}&deg; in
+    ${wetThrough.rh}% humidity — hard, slow, and with next to no airflow to dry you — and the
+    descent at ${km(wetThrough.descent.fromKm)} is ${Math.round(wetThrough.drop)}&deg; colder
+    than that. The descent's own number was worked out for a dry base layer, so carry something
+    windproof to shut over a wet one rather than a thicker layer to put under it.</p>` : ""}
 
-  ${routeFlag}
-  ${warnings}
-  ${hoursCard}
+  ${consistent ? `
+    <p class="wx-startdir"><b>The same kit works the whole way.</b>
+      Ride-feel moves ${spread <= 1 ? "barely at all" : `about ${Math.round(spread)}&deg;`}
+      between the legs, and nothing in that range changes what you'd put on or take off.</p>
+    ${swaps.length ? `<p class="wx-note">Borderline either way: ${swaps.join("; ")}. Same
+      warmth, so it isn't worth carrying both.</p>` : ""}`
+  : `
+    <p class="wx-startdir"><b>The kit doesn't hold for the whole ride.</b>
+      Coldest is ${coldest.f.feel}&deg; around ${km(coldest.fromKm)}${
+        coldest.ele != null && route && route.stats.hasElevation ? ` at ${Math.round(coldest.ele)} m` : ""},
+      warmest ${warmest.f.feel}&deg; around ${km(warmest.fromKm)}.</p>
 
-  ${(() => {
-    const bft = beaufort(w.wind), gustBft = beaufort(w.gust);
-    // Ride out into the wind so the way home has it behind: the return leg is
-    // ridden tired, and a headwind there is what actually makes people cold.
-    const outbound = w.dirLate;
-    const shifts = angleGap(w.dir, w.dirLate) > 40;
-    const matters = bft.force >= 3;
-    return `
-  <section class="wx-card ${ramp}">
-    <h2 class="wx-heading">${matters ? "Wind, and which way to go" : "Wind"}</h2>
-    ${(() => {
-      // The bearing only means something if you can see where it points. With a
-      // route loaded that is the route itself; without one, the start point.
-      const box = document.querySelector(".wx-shell");
-      const width = Math.max(240, Math.min(560, (box ? box.clientWidth : 600) - 44));
-      const m = renderMap({
-        width, height: Math.round(width * (route ? 0.62 : 0.5)),
-        points: route ? route.points : null,
-        lat: place.latitude, lon: place.longitude,
-        windFrom: w.dir, outbound: matters ? outbound : null
-      });
-      return m + `<p class="wx-maplegend">
-        <span><i class="k-wind"></i> wind, blowing this way</span>
-        ${matters ? `<span><i class="k-go"></i> set off this way</span>` : ""}
-        ${route ? `<span><i class="k-route"></i> your route</span>` : ""}
-      </p>`;
-    })()}
-
-    <div>
-        <div class="wx-bft">
-          <span class="wx-bft__n">${bft.force}</span>
-          <span class="wx-bft__u">Bft</span>
-          <span class="wx-bft__name">${bft.name}</span>
-        </div>
-        <p class="wx-note" style="margin-top:var(--sp-2)">
-          From the <b>${compass(w.dir)}</b>, ${Math.round(w.wind)} km/h${
-            w.gust >= w.wind + 12 ? `, gusting ${Math.round(w.gust)} which is force ${gustBft.force}` : ""}.
-          ${bft.note}
-        </p>
-        ${(() => {
-          const sp = w.spread;
-          if (!sp) return "";
-          const tight = sp.dirSpread <= 25;
-          const wetPct = Math.round(100 * sp.wetMembers / sp.rainMembers);
-          return `<p class="wx-agree ${tight ? "is-tight" : "is-loose"}">
-            <b>${sp.members} ECMWF members</b> ${tight
-              ? `land within ${Math.round(sp.dirSpread)}&deg; of each other on direction — the bearing is worth planning around.`
-              : `spread over ${Math.round(sp.dirSpread)}&deg; on direction, so treat the bearing as a steer and look again nearer the time.`}
-            ${sp.wetMembers > 0
-              ? ` ${sp.wetMembers} of ${sp.rainMembers} have rain at this hour (${wetPct}%).`
-              : " None of them have rain at this hour."}
-            ${sp.tempSpread >= 2.5
-              ? ` Air temperature spans ${r1(sp.tempLow)}&ndash;${r1(sp.tempHigh)}&deg;C across the middle of the spread, so the kit call is less settled than one number looks.`
-              : ""}</p>`;
-        })()}
-        ${matters ? `
-        <p class="wx-startdir"><b>Set off towards the ${compass(outbound)}.</b>
-          That puts the wind in your face going out and behind you coming back,
-          which is the leg you ride tired.</p>
-        ${shifts ? `<p class="wx-note">It veers from ${compass(w.dir)} to ${compass(w.dirLate)}
-          across the ride, so this bearing follows the later wind, which is what
-          you will actually be riding home in.</p>` : ""}`
-        : `<p class="wx-note">Force ${bft.force} is not worth planning a route around.
-           Go whichever way you like.</p>`}
-    </div>
-  </section>`;
-  })()}
-
-  ${(() => {
-    // A failed check is already said beside the kit, in routeFlag.
-    if (!analysis || analysis.error) return "";
-
-    const {legs, coldest, warmest, extra, shed, swaps, changes, spread, wetThrough} = analysis;
-    const consistent = !changes;
-    const km = n => `${Math.round(n)} km`;
-
-    return `
-  <section class="wx-card ${consistent ? ramp : rampFor(coldest.f.feel)}">
-    <div class="wx-card__head">
-      <h2 class="wx-heading">Along the route</h2>
-      <span class="wx-eyebrow" style="margin:0">${legs.length} legs &middot; ${km(route.stats.distance)}${
-        route.stats.hasElevation ? ` &middot; ${Math.round(route.stats.ascent)} m up` : ""}</span>
-    </div>
-
-    <div class="wx-scroll">
-      <div class="wx-legs">${legs.map(l => `
-        <div class="wx-leg ${rampFor(l.f.feel)}">
-          <div class="wx-leg__km">${km(l.fromKm)}</div>
-          ${skyIcon(l.w.code, l.w.day, 22)}
-          <div class="wx-leg__feel">${l.f.feel}&deg;</div>
-          <div class="wx-leg__air">${r1(l.w.tStart)}&deg; air</div>
-          <div class="wx-leg__wind" title="${Math.round(l.w.ambient)} km/h wind, ${Math.round(Math.abs(l.w.headwind))} km/h of it ${windLabel(l.w.headwind)}">
-            ${l.heading != null ? windArrow(l.w.dir) : ""}
-            <span class="wx-num">${l.w.headwind > 0 ? "+" : ""}${Math.round(l.w.headwind)}</span>
-          </div>
-          ${l.ele != null ? `<div class="wx-leg__ele">${Math.round(l.ele)} m</div>` : ""}
-          <div class="wx-leg__time">${hhmm(l.startTime)}</div>
-        </div>`).join("")}</div>
-    </div>
-
-    ${wetThrough ? `<p class="wx-alert"><b>Wet through before the top.</b>
-      The climb from ${km(wetThrough.climb.fromKm)} is ${wetThrough.climb.f.feel}&deg; in
-      ${wetThrough.rh}% humidity — hard, slow, and with next to no airflow to dry you — and the
-      descent at ${km(wetThrough.descent.fromKm)} is ${Math.round(wetThrough.drop)}&deg; colder
-      than that. The descent's own number was worked out for a dry base layer, so carry something
-      windproof to shut over a wet one rather than a thicker layer to put under it.</p>` : ""}
-
-    ${consistent ? `
-      <p class="wx-startdir"><b>The same kit works the whole way.</b>
-        Ride-feel moves ${spread <= 1 ? "barely at all" : `about ${Math.round(spread)}&deg;`}
-        between the legs, and nothing in that range changes what you'd put on or take off.</p>
-      ${swaps.length ? `<p class="wx-note">Borderline either way: ${swaps.join("; ")}. Same
-        warmth, so it isn't worth carrying both.</p>` : ""}`
-    : `
-      <p class="wx-startdir"><b>The kit doesn't hold for the whole ride.</b>
-        Coldest is ${coldest.f.feel}&deg; around ${km(coldest.fromKm)}${
-          coldest.ele != null && route.stats.hasElevation ? ` at ${Math.round(coldest.ele)} m` : ""},
-        warmest ${warmest.f.feel}&deg; around ${km(warmest.fromKm)}.</p>
-
-      ${analysis.plan ? (() => {
-        const {wear: pWear, carry, conflicts, shedAt, holds, worn, required} = analysis.plan;
-        return `
-        <h3 class="wx-heading" style="margin-top:var(--sp-4)">To make it hold</h3>
-        <div class="wx-kit">
-          ${pWear.length ? `
+    ${analysis.plan ? (() => {
+      const {wear: pWear, carry, conflicts, shedAt, holds, worn, required} = analysis.plan;
+      return `
+      <h3 class="wx-heading" style="margin-top:var(--sp-4)">To make it hold</h3>
+      <div class="wx-kit">
+        ${pWear.length ? `
+        <div class="wx-kit__row">
+          <div class="wx-kit__zone">Wear</div>
+          <p class="wx-kit__items">${pWear.map(i => i.name).join(", ")}
+            <em>Chosen for the warmest ${hours ? "hour" : "leg"}, because a jersey can't come off at the roadside.</em></p>
+        </div>` : ""}
+        ${carry.map(c => `
           <div class="wx-kit__row">
-            <div class="wx-kit__zone">Wear</div>
-            <p class="wx-kit__items">${pWear.map(i => i.name).join(", ")}
-              <em>Chosen for the warmest leg, because a jersey can't come off at the roadside.</em></p>
-          </div>` : ""}
-          ${carry.map(c => `
-            <div class="wx-kit__row">
-              <div class="wx-kit__zone">${c.fromStart ? "On now" : "Carry"}</div>
-              <p class="wx-kit__items">${c.item.name}
-                <em>${c.fromStart
-                  ? "Wanted from the off."
-                  : `On around ${c.at}, about ${c.time}, where it reads ${c.leg.f.feel}&deg;.`}${
-                  c.item.pack ? " Packs into a pocket." : ""}</em></p>
-            </div>`).join("")}
-          ${shedAt.map(sd => `
-            <div class="wx-kit__row">
-              <div class="wx-kit__zone">Shed</div>
-              <p class="wx-kit__items">${sd.item.name}
-                <em>Off around ${sd.at}, about ${sd.time} — into a pocket, not left behind.</em></p>
-            </div>`).join("")}
-          ${conflicts.map(c => `
-            <div class="wx-kit__row">
-              <div class="wx-kit__zone">Decide</div>
-              <p class="wx-kit__items">${c.cold.name} against ${c.warm ? c.warm.name : "nothing"}
-                <em>${c.fix}</em></p>
-            </div>`).join("")}
-        </div>
+            <div class="wx-kit__zone">${c.fromStart ? "On now" : "Carry"}</div>
+            <p class="wx-kit__items">${c.item.name}
+              <em>${c.fromStart
+                ? "Wanted from the off."
+                : `On around ${c.at}, about ${c.time}, where it reads ${c.leg.f.feel}&deg;.`}${
+                c.item.pack ? " Packs into a pocket." : ""}</em></p>
+          </div>`).join("")}
+        ${shedAt.map(sd => `
+          <div class="wx-kit__row">
+            <div class="wx-kit__zone">Shed</div>
+            <p class="wx-kit__items">${sd.item.name}
+              <em>Off around ${sd.at}, about ${sd.time} — into a pocket, not left behind.</em></p>
+          </div>`).join("")}
+        ${conflicts.map(c => `
+          <div class="wx-kit__row">
+            <div class="wx-kit__zone">Decide</div>
+            <p class="wx-kit__items">${c.cold.name} against ${c.warm ? c.warm.name : "nothing"}
+              <em>${c.fix}</em></p>
+          </div>`).join("")}
+      </div>
 
-        ${holds
-          ? `<p class="wx-note">Everything the cold end needs goes in a pocket, so start in what
-             the warm legs want and add as the route cools. Worn and carried together come to
-             ${worn} clo against ${required} required at the coldest point.</p>`
-          : `<p class="wx-alert"><b>Carrying isn't enough on its own.</b> Even with everything
-             above on, the coldest leg wants ${required} clo and this gives ${worn}. ${
-               conflicts.length
-                 ? "The decision above is the one that closes it."
-                 : "And nothing else in your gear closes it — this route is colder than what you have with you. Shorten it, start later when it has warmed, or go back for more kit."
-             }</p>`}`;
-      })() : `
-        ${extra.length ? `<p class="wx-note"><b>The cold end wants</b> ${extra.join(", ")} —
-          carry what you can rather than starting in it.</p>` : ""}
-        ${shed.length ? `<p class="wx-note"><b>The warm end doesn't want</b> ${shed.join(", ")}.</p>` : ""}`}`}
+      ${holds
+        ? `<p class="wx-note">Everything the cold end needs goes in a pocket, so start in what
+           the warm legs want and add as the route cools. Worn and carried together come to
+           ${worn} clo against ${required} required at the coldest point.</p>`
+        : `<p class="wx-alert"><b>Carrying isn't enough on its own.</b> Even with everything
+           above on, the coldest leg wants ${required} clo and this gives ${worn}. ${
+             conflicts.length
+               ? "The decision above is the one that closes it."
+               : "And nothing else in your gear closes it — this route is colder than what you have with you. Shorten it, start later when it has warmed, or go back for more kit."
+           }</p>`}`;
+    })() : `
+      ${extra.length ? `<p class="wx-note"><b>The cold end wants</b> ${extra.join(", ")} —
+        carry what you can rather than starting in it.</p>` : ""}
+      ${shed.length ? `<p class="wx-note"><b>The warm end doesn't want</b> ${shed.join(", ")}.</p>` : ""}`}`}
 
-    ${(() => {
-      const hard = legs.filter(l => l.w.headwind >= 15);
-      if (!hard.length) return "";
-      return `<p class="wx-note">Into the wind from ${hard.map(l => km(l.fromKm)).join(", ")} —
-        ${Math.round(Math.max(...hard.map(l => l.w.headwind)))} km/h of headwind at the worst of it.</p>`;
-    })()}
-    ${(() => {
-      const wet = legs.filter(l => l.w.prob >= 50);
-      if (!wet.length) return "";
-      return `<p class="wx-note">Rain most likely around ${wet.map(l => km(l.fromKm)).join(", ")}.</p>`;
-    })()}
-  </section>`;
+  ${(() => {
+    const hard = legs.filter(l => l.w.headwind >= 15);
+    if (!hard.length) return "";
+    return `<p class="wx-note">Into the wind from ${hard.map(l => km(l.fromKm)).join(", ")} —
+      ${Math.round(Math.max(...hard.map(l => l.w.headwind)))} km/h of headwind at the worst of it.</p>`;
   })()}
+  ${(() => {
+    const wet = legs.filter(l => l.w.prob >= 50);
+    if (!wet.length) return "";
+    return `<p class="wx-note">Rain most likely around ${wet.map(l => km(l.fromKm)).join(", ")}.</p>`;
+  })()}
+</section>`;
+}
 
-  <h2 class="wx-heading" style="margin-top:var(--sp-6)">Air &rarr; ride-feel</h2>
-  <p class="wx-eyebrow">${r1(f.air)}&deg;C air, ${f.feel}&deg; felt${
-    f.extFeel !== f.feel ? ` &middot; hands and feet ${f.extFeel}&deg;` : ""}</p>
-  <ul class="wx-chips">${chips}</ul>
-  <p class="wx-note">Hands and feet sit still in the airflow, and running hot does not apply
-     to fingers — so they are read on ${f.extFeel}&deg;, not ${f.feel}&deg;.</p>
+function feelSection(f, opts){
+  const lx = (opts && opts.learnedExt) || {}, ln = (opts && opts.learnedExtN) || {};
+  const zone = (name, v, feel) => v
+    ? `${name} ${feel}&deg; (${v > 0 ? "+" : "−"}${Math.abs(Math.round(v * 10) / 10)}&deg; learned from ${ln[name.toLowerCase()]} rides)`
+    : null;
+  const learnedLines = [zone("Hands", lx.hands, f.handsFeel), zone("Feet", lx.feet, f.feetFeel)].filter(Boolean);
+return `
+<h2 class="wx-heading" style="margin-top:var(--sp-6)">Air &rarr; ride-feel</h2>
+<p class="wx-eyebrow">${r1(f.air)}&deg;C air, ${f.feel}&deg; felt${
+  f.extFeel !== f.feel ? ` &middot; hands and feet ${f.extFeel}&deg;` : ""}${
+  learnedLines.length ? ` &middot; ${learnedLines.join(" &middot; ")}` : ""}</p>
+<ul class="wx-chips">${chipsList(f)}</ul>
+<p class="wx-note">Hands and feet sit still in the airflow, and running hot does not apply
+   to fingers — so they are read on ${f.extFeel}&deg;, not ${f.feel}&deg;.${
+   learnedLines.length ? " Your own hands and feet verdicts move their numbers on top of that, each on its own." : ""}</p>`;
+}
 
-  ${hb ? `
+function heatBalanceCard(hb, f, opts, ramp){
+  return hb ? `
   <details class="wx-more">
     <summary>Heat balance &middot; ${r2(hb.worn)} of ${r2(hb.required)} clo, ${hb.verdict}</summary>
     <div class="wx-scroll"><table class="wx-table ${ramp}">
@@ -1157,8 +1260,11 @@ function render(f, w, opts, place, analysis){
     ${hb.detail ? `<p class="wx-note">${hb.detail}</p>` : ""}
     <p class="wx-note">A windproof outer layer keeps the stack beneath it; a permeable one lets
        the airflow strip it. That is why 75&nbsp;g of gilet can beat a much thicker fleece.</p>
-  </details>` : ""}
+  </details>` : "";
+}
 
+function scaleCard(band){
+  return `
   <details class="wx-more">
     <summary>The whole scale</summary>
     <div class="wx-scroll"><table class="wx-table">
@@ -1170,9 +1276,40 @@ function render(f, w, opts, place, analysis){
     </table></div>
   </details>
 
-`;
-  $("#out").scrollIntoView({behavior:"smooth", block:"start"});
 
+
+`;
+}
+
+function render(f, w, opts, place, analysis){
+  const out = state.mode === "wardrobe" ? pickOutfit(f, w, opts, gear) : genericOutfit(f, w, opts);
+  // The route card says the sweat problem better when it has legs to point at.
+  const watch = watchFor(f, w, analysis && analysis.wetThrough
+    ? Object.assign({}, opts, {sweatNoted: true}) : opts);
+  const band = bandFor(f.feel);
+  const ramp = rampFor(f.feel);
+
+  /* The order follows the question being asked at 06:40: how cold, what to
+     wear, what to carry, what to watch for — and only then the detail behind
+     it. The hours strip and the map used to sit between the reading and the
+     kit, and the warnings came after the route card, several screens down. */
+  $("#out").innerHTML = [
+    readoutCard(f, w, opts, place, ramp),
+    wearCard(out, ramp),
+    carryCard(out, ramp),
+    fuelCard(fuelPlan(w, f, opts), ramp, opts),
+    routeFlag(analysis),
+    warningsList(out, watch),
+    backCard(w.back, f.feel),
+    bestStartCard(w.scan, ramp),
+    hoursCard(w, ramp),
+    windCard(w, place, ramp, analysis),
+    routeCard(analysis, ramp),
+    feelSection(f, opts),
+    heatBalanceCard(out.hb, f, opts, ramp),
+    scaleCard(band)
+  ].join("\n");
+  $("#out").scrollIntoView({behavior:"smooth", block:"start"});
 }
 
 // One line of a garment's note until you ask for the rest. Delegated, because
@@ -1200,6 +1337,8 @@ $("#go").onclick = async () => {
   try{
     const fc = await forecast(state.place.latitude, state.place.longitude);
     const w = rideWindow(fc, date, time, hours);
+    w.fetchedAt = fc.fetchedAt;
+    w.offlineFrom = fc.offlineFrom != null ? fc.offlineFrom : null;
     // The highest ground the ride reaches — the route's summit if one is
     // loaded, otherwise the model's terrain height at the start point.
     opts.maxElevation = (route && route.stats.hasElevation)
@@ -1213,6 +1352,19 @@ $("#go").onclick = async () => {
     ]);
     w.spread = spread;
     w.pollen = pollen;
+    /* The learned corrections go into opts BEFORE any leg is worked out. They
+       used to be set after the route check, so the legs were read without
+       them: with four rides rated too cold, the headline said 6° and every
+       leg still said 8°. Two passes: the first tells us whether it is a wet
+       ride, which decides which learned correction applies. */
+    const dry = rideFeel(w, opts);
+    const off = learnedOffset(loadHistory(), {wet: dry.wet});
+    opts.learned = off.value;
+    opts.learnedLabel = learnedLabel(off);
+    // Hands and feet, from their own verdicts where given.
+    const lx = learnedExtremities(loadHistory());
+    opts.learnedExt = {hands: lx.hands.value, feet: lx.feet.value};
+    opts.learnedExtN = {hands: lx.hands.n, feet: lx.feet.n};
     let analysis = null;
     if (route){
       status("Checking the kit along the route…");
@@ -1222,24 +1374,58 @@ $("#go").onclick = async () => {
         // A route that fails shouldn't cost you the advice for the start point.
         analysis = {error: err.message};
       }
+    } else {
+      // No route: the same question asked of the hours. A nice-to-have, so a
+      // failure costs the card and nothing else.
+      try{ analysis = analyseHours(fc, w, Object.assign({}, opts, {startDT: w.startDT})); }
+      catch(err){ analysis = null; }
     }
-    // Two passes: the first tells us whether it is a wet ride, which decides
-    // which learned correction applies, and the second uses it.
-    const dry = rideFeel(w, opts);
-    const off = learnedOffset(loadHistory(), {wet: dry.wet});
-    opts.learned = off.value;
-    opts.learnedLabel = learnedLabel(off);
+    // The rest of the day, for a better start. A nice-to-have like the
+    // ensemble: if it fails, the card goes and the answer stays.
+    try{ w.scan = bestStarts(fc, date, hours, opts, time); }catch(e){ w.scan = null; }
     status("");
     // Kept so it can be rated afterwards, which is the only time the question
     // can honestly be answered.
     const out0 = state.mode === "wardrobe" ? pickOutfit(rideFeel(w, opts), w, opts, gear)
                                            : genericOutfit(rideFeel(w, opts), w, opts);
+
+    /* The way back, when there is one: the same distance and speed later the
+       same day, from the forecast already fetched. Its own learned correction,
+       since it can be wet when the morning was dry. A failure costs the card,
+       not the answer. */
+    const backTime = $("#back").value;
+    if (backTime){
+      try{
+        const wb = rideWindow(fc, date, backTime, hours);
+        if (wb.startDT < w.endDT){
+          w.back = {error: `The way back has to start after you arrive, at ${hhmm(w.endDT)}.`};
+        } else {
+          const ob = Object.assign({}, opts);
+          const offB = learnedOffset(loadHistory(), {wet: rideFeel(wb, ob).wet});
+          ob.learned = offB.value; ob.learnedLabel = learnedLabel(offB);
+          const fb = rideFeel(wb, ob);
+          const outB = state.mode === "wardrobe" ? pickOutfit(fb, wb, ob, gear) : genericOutfit(fb, wb, ob);
+          const plan = returnPlan(out0, outB, fb);
+          w.back = {w: wb, f: fb, out: outB, plan};
+          // Its own entry in History, so the way home can be rated on its own.
+          recordRide({
+            startISO: `${date}T${backTime}`, place: placeLabel(state.place),
+            dist: r1(dist), hours: r1(hours), speed: r1(n.speed),
+            feel: fb.feel, extFeel: fb.extFeel, air: r1(fb.air), handsFeel: fb.handsFeel, feetFeel: fb.feetFeel,
+            wet: fb.wet, raining: fb.raining, wind: r1(wb.wind), gust: Math.round(wb.gust),
+            rider: state.rider, mode: state.mode, routeName: "the way back",
+            kit: plan.both.concat(plan.bring).map(i => i.name)
+          });
+        }
+      }catch(err){ w.back = {error: err.message}; }
+    }
     const feelNow = rideFeel(w, opts);
     recordRide({
       startISO: `${date}T${time}`,
       place: placeLabel(state.place),
       dist: r1(dist), hours: r1(hours), speed: r1(n.speed),
       feel: feelNow.feel, extFeel: feelNow.extFeel, air: r1(feelNow.air),
+      handsFeel: feelNow.handsFeel, feetFeel: feelNow.feetFeel,
       wet: feelNow.wet, raining: feelNow.raining,
       wind: r1(w.wind), gust: Math.round(w.gust),
       rider: state.rider, mode: state.mode,
@@ -1248,6 +1434,8 @@ $("#go").onclick = async () => {
     });
     if (typeof renderHistory === "function") renderHistory();
     render(rideFeel(w, opts), w, opts, state.place, analysis);
+    if (w.offlineFrom != null) status(`No connection, so this is the forecast kept from ${
+      new Date(w.offlineFrom).toLocaleString(undefined, {weekday: "short", hour: "2-digit", minute: "2-digit"})}. Read again when you have signal.`);
   }catch(e){
     status(e.message, true);
     $("#out").innerHTML = "";

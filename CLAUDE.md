@@ -6,6 +6,7 @@ Instructions for working on the Cycling Weather Effect Matrix. They come from ho
 
 - **Build it, test it, push it.** A change is finished when it is implemented, verified, committed and pushed to `origin` (`rnvegter/cycling-weather-matrix`, private). Say plainly if any of those did not happen.
 - **Run `npm test` before every commit.** All tests must pass. The script is `node --test`; the directory form `node --test test/` fails on Node 26.
+- **Run `npm run test:ui` for a change the page shows**, where Playwright is installed (it skips and exits 0 where it is not). It drives a real browser against a scratch server with a fixed forecast; it is not part of `npm test` and adds no dependency.
 - **Update `README.md` or `INSTALL.md`** when a change alters what the app does or how it is deployed.
 
 ## Asking and scope
@@ -48,17 +49,18 @@ Instructions for working on the Cycling Weather Effect Matrix. They come from ho
 - **The rider's own calibration beats a maker's rating.** Stored `tmin`/`tmax` are ride-feel ranges for when this rider reaches for a garment; a maker's air-temperature range goes in the note.
 - **No cliffs in the model.** Thresholds ramp rather than step. Ride-feel must stay monotonic in air temperature, and a test guards it.
 - **Speed touches ride-feel only through `selfWindTerm`,** which keeps the speed correction in `history.js` exact. Do not add a second route for speed.
-- **Extremities use the air-based number,** not the run-hot calibration.
+- **Extremities use the air-based number,** not the run-hot calibration — plus their own learned correction per zone (`learnedExtremities`), never the core's.
 - **Treat the gear lookup service as a starting point.** Confirm a surprising scraped value before applying it.
-- **Changing the seed in `gear.js` does not reach an existing install** — a saved gear list wins. Say so whenever a change edits the seed.
+- **Changing the seed in `gear.js` reaches an existing install only through `GEAR_SEED_CHANGES`.** Add an entry with the new version for every seed edit (`add`, or `update` with the old value in `from`), or say plainly that it reaches only new installs and Reset.
 - **Mind the sign convention:** a verdict of "too warm" is +2 and means the model read *cold*.
 
 ## Security constraints
 
-- **The static allow-list (`isServable`) must keep refusing** dotfiles, `.git`, `deploy/`, `backups/`, `node_modules`, `server.js`, `package.json`, `Dockerfile` and every `.md` and `.json`.
+- **The static allow-list (`isServable`) must keep refusing** dotfiles, `.git`, `deploy/`, `backups/`, `ui-test/`, `node_modules`, `server.js`, `package.json`, `Dockerfile` and every `.md` and `.json`. The web app manifest is `.webmanifest` for that reason.
 - **Outbound fetches go through `checkedURL`:** resolved, private and link-local ranges refused, redirects re-checked hop by hop, ports 80 and 443 only.
 - **The client IP for rate limiting** is read `TRUST_PROXY_HOPS` entries from the end of `X-Forwarded-For`, and only from a loopback peer.
 - **Every writing route checks `sameOrigin`.** The API has no authentication of its own by design; it relies on the reverse proxy.
+- **The intervals.icu key lives only in the server's environment** (`INTERVALS_API_KEY`). Never send it to the browser, write it to state or a backup, or log it; `/api/intervals/*` answers with the app's own fields, not intervals.icu's objects.
 
 ## Deployment facts to keep straight
 

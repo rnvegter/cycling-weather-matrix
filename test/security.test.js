@@ -69,11 +69,38 @@ describe("outbound address filter", () => {
     ]) assert.equal(await checkedURL(bad), null, `${bad} should be refused`);
   });
 
+  /* DNS is answered here rather than asked: a test that needs the real
+     resolver fails wherever there is none (a CI box, a sandbox), and what is
+     under test is what checkedURL does with an answer, not the resolver. */
+  const withDNS = async (answers, fn) => {
+    const dns = require("dns").promises, real = dns.lookup;
+    dns.lookup = async (host, opts) => {
+      if (!(host in answers)) return real.call(dns, host, opts);
+      const list = answers[host].map(a => ({address: a, family: a.includes(":") ? 6 : 4}));
+      return opts && opts.all ? list : list[0];
+    };
+    try{ return await fn(); } finally { dns.lookup = real; }
+  };
+
   test("URL check keeps ordinary product pages, on either standard port", async () => {
-    for (const good of ["https://www.gorewear.com/some-garment",
-                        "http://example.com/x", "https://example.com:443/x"]){
-      assert.ok(await checkedURL(good), `${good} should be allowed`);
-    }
+    await withDNS({"www.gorewear.com": ["104.18.20.31"], "example.com": ["93.184.215.14", "2606:2800:21f:cb07:6820:80da:af6b:8b2c"]}, async () => {
+      for (const good of ["https://www.gorewear.com/some-garment",
+                          "http://example.com/x", "https://example.com:443/x"]){
+        assert.ok(await checkedURL(good), `${good} should be allowed`);
+      }
+    });
+  });
+
+  test("one internal address among public ones is enough to refuse", async () => {
+    await withDNS({"mixed.cwem.test": ["93.184.215.14", "10.0.0.5"]}, async () => {
+      assert.equal(await checkedURL("https://mixed.cwem.test/"), null);
+    });
+  });
+
+  test("a name that does not resolve is refused, not let through", async () => {
+    await withDNS({}, async () => {
+      assert.equal(await checkedURL("https://no-such-host.invalid/"), null);
+    });
   });
 
   test("a hostname that resolves to loopback is refused", async () => {
@@ -134,13 +161,26 @@ describe("static file allow-list", () => {
      "server.js", "package.json", "package-lock.json", "Dockerfile",
      "deploy/Caddyfile", "deploy/nginx.conf",
      "state.json", "state.prev.json",           // no .json is servable at all
-     "node_modules/x/index.js", "README.md", "INSTALL.md", ""]
+     "node_modules/x/index.js", "README.md", "INSTALL.md", "ui-test/run.js", ""]
       .forEach(p => assert.equal(isServable(rel(p)), false, `${p} must not be servable`));
   });
 
   test("still serves what the browser actually needs", () => {
     ["index.html", "styles.css", "app.js", "model.js", "gear.js", "gpx.js",
-     "history.js", "historyui.js", "sync.js", "insulation.js", "weather.js", "map.js"]
+     "history.js", "historyui.js", "sync.js", "insulation.js", "weather.js", "map.js",
+     "sw.js", "pwa.js", "manifest.webmanifest", rel("icons/icon-192.png"), rel("icons/apple-touch-icon.png")]
       .forEach(p => assert.equal(isServable(p), true, `${p} should be servable`));
+  });
+
+  test("every file index.html and the manifest ask for exists and is servable", () => {
+    const fs = require("fs"), root = path.join(__dirname, "..");
+    const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+    const man = JSON.parse(fs.readFileSync(path.join(root, "manifest.webmanifest"), "utf8"));
+    const wanted = [...html.matchAll(/(?:src|href)="([^"#:]+)"/g)].map(m => m[1])
+      .concat(man.icons.map(i => i.src));
+    for (const f of wanted){
+      assert.ok(fs.existsSync(path.join(root, f)), `${f} is missing`);
+      assert.equal(isServable(rel(f)), true, `${f} is asked for but would be refused`);
+    }
   });
 });

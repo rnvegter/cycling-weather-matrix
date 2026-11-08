@@ -79,6 +79,8 @@ function validEnvelope(doc){
   if (!st || typeof st !== "object") return "That file has no state in it.";
   if (!Array.isArray(st.gear) && !Array.isArray(st.history))
     return "That file holds neither gear nor rides.";
+  if (typeof STATE_SCHEMA === "number" && Number.isInteger(st.schema) && st.schema > STATE_SCHEMA)
+    return "That backup was written by a newer version of the app. Update this one first.";
   return null;
 }
 
@@ -94,7 +96,13 @@ function validEnvelope(doc){
    just undid quietly come back. */
 function applyRestore(state){
   let rides = 0, items = 0;
-  if (Array.isArray(state.history)){ saveHistory(state.history); rides = state.history.length; }
+  if (Array.isArray(state.history)){
+    const list = state.history.map(normaliseRide).filter(Boolean);
+    // replaceHistory stamps the restore, so the server replaces instead of
+    // merging the rides you just undid back in.
+    if (typeof replaceHistory === "function") replaceHistory(list); else saveHistory(list);
+    rides = list.length;
+  }
   if (Array.isArray(state.gear)){
     gear = state.gear.map(typeof normaliseItem === "function" ? normaliseItem : (x => x));
     saveGear(gear);

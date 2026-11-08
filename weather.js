@@ -141,3 +141,123 @@ function windArrow(fromDeg, size){
       fill="none" stroke="currentColor" stroke-width="1.6"
       stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 }
+
+/* ---------------------------------------------------------------
+   When Open-Meteo says no.
+
+   A refusal is an answer, not a lost connection, and the most common one is
+   429: the free tier's request limit for this address is used up. Saying
+   "couldn't reach" there sends you looking at your network. So the message
+   says what happened and quotes Open-Meteo's own reason, cut short, because it
+   comes from outside. The caller shows it as text, never as markup.
+----------------------------------------------------------------*/
+function openMeteoMessage(status, body, what){
+  const raw = body && typeof body === "object" && typeof body.reason === "string" ? body.reason : "";
+  const reason = raw.replace(/\s+/g, " ").trim().slice(0, 200);
+  if (status === 429){
+    return `${what} is refusing requests for now: Open-Meteo's free request limit for this connection is used up`
+      + `${reason ? ` ("${reason}")` : ""}. Nothing is wrong with the app or your network; try again later.`;
+  }
+  return `${what} did not answer (Open-Meteo said ${status}${reason ? `: ${reason}` : ""}).`;
+}
+
+/* Reads the body of a refused response and turns it into an Error. */
+async function openMeteoError(r, what){
+  let body = null;
+  try{ body = await r.json(); }catch(e){}
+  return new Error(openMeteoMessage(r.status, body, what));
+}
+
+/* ---------------------------------------------------------------
+   A short memory for Open-Meteo answers.
+
+   Reading the weather again for the same place — another start time,
+   another distance, the best-start check — asked Open-Meteo for the same
+   16 days every time. The models behind it update hourly at best, so an
+   answer is kept for a quarter of an hour and reused: the second reading is
+   immediate, and the free service's request limit is reached far less often.
+
+   Kept in memory only, per page: a reload asks afresh, which is what
+   someone who reloads expects. Only successful answers are kept, two
+   requests for the same URL at once share one fetch, and each caller gets
+   its own copy so nothing can change the stored answer.
+----------------------------------------------------------------*/
+const OM_CACHE_MS = 15 * 60 * 1000;
+const OM_CACHE_MAX = 40;
+const omCache = new Map();     // url → {at, data} or {at, pending}
+
+/* ---------------------------------------------------------------
+   The last forecast, for a morning with no signal.
+
+   The app is read at 06:40, often in a garage or a stairwell. With `keep`,
+   the answer is also put in localStorage (the last two places), and when the
+   network fails outright — not when Open-Meteo refuses, which is an answer —
+   a kept answer up to 36 hours old is used instead, marked with when it was
+   fetched (offlineFrom) so the page can say so. A 16-day forecast from last
+   night still covers this morning; it is just not the newest.
+----------------------------------------------------------------*/
+const OM_KEEP_KEY = "cwem-last-forecast";
+const OM_KEEP_MAX_AGE = 36 * 3600 * 1000;
+const OM_KEEP_N = 2;
+
+function keepAnswer(url, at, data){
+  try{
+    const list = JSON.parse(localStorage.getItem(OM_KEEP_KEY) || "[]").filter(x => x && x.url !== url);
+    list.unshift({url, at, data});
+    localStorage.setItem(OM_KEEP_KEY, JSON.stringify(list.slice(0, OM_KEEP_N)));
+  }catch(e){
+    // A full browser keeps the rides and the gear rather than a spare forecast.
+    try{ localStorage.removeItem(OM_KEEP_KEY); }catch(e2){}
+  }
+}
+function keptAnswer(url, now){
+  try{
+    const hit = JSON.parse(localStorage.getItem(OM_KEEP_KEY) || "[]").find(x => x && x.url === url);
+    return hit && now - hit.at <= OM_KEEP_MAX_AGE && hit.data ? hit : null;
+  }catch(e){ return null; }
+}
+
+/* fetchFn and now are there for the tests; the app passes neither.
+   opts.keep: store the answer for use offline (see above). */
+async function openMeteoJSON(url, what, fetchFn, now, opts){
+  const t = now != null ? now : Date.now();
+  const keep = !!(opts && opts.keep);
+  const hit = omCache.get(url);
+  if (hit && t - hit.at < OM_CACHE_MS){
+    const data = hit.pending ? await hit.pending : hit.data;
+    return structuredClone(data);
+  }
+  const pending = (async () => {
+    let r;
+    try{ r = await (fetchFn || fetch)(url); }
+    catch(netErr){
+      // No answer at all. A kept one beats none, said as what it is.
+      const kept = keep ? keptAnswer(url, t) : null;
+      if (kept) return Object.assign(structuredClone(kept.data), {offlineFrom: kept.at});
+      throw new Error(`${what} could not be reached — no connection?`);
+    }
+    if (!r.ok) throw await openMeteoError(r, what);
+    const data = await r.json();
+    if (keep) keepAnswer(url, t, data);
+    return data;
+  })();
+  omCache.set(url, {at: t, pending});
+  try{
+    const data = await pending;
+    // An offline stand-in is not remembered: the next reading tries the network.
+    if (data.offlineFrom != null){ omCache.delete(url); return structuredClone(data); }
+    omCache.set(url, {at: t, data});
+    // Oldest out first; a Map keeps insertion order.
+    while (omCache.size > OM_CACHE_MAX) omCache.delete(omCache.keys().next().value);
+    return structuredClone(data);
+  }catch(e){
+    omCache.delete(url);         // a refusal is not an answer worth keeping
+    throw e;
+  }
+}
+
+/* When the answer for a URL was fetched, or null. For saying how fresh it is. */
+function openMeteoFetchedAt(url){
+  const hit = omCache.get(url);
+  return hit && hit.data ? hit.at : null;
+}

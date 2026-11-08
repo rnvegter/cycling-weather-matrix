@@ -276,8 +276,15 @@ function rideFeel(w, opts){
   // humidity changes is how easily surplus heat gets OUT, which is a different
   // question — and one the balance answers separately, via evap.
   const envTemp = air + ambient + rain + sun + dark + terrain;
+  /* Hands and feet run on the air-based number, without the rider
+     calibration — plus whatever their own verdicts have taught, zone by zone
+     (learnedExtremities). The shared extFeel stays as it was; the picks for
+     gloves and shoes use the corrected number for their zone. */
+  const ext = feel - cal;
+  const lx = opts.learnedExt || {};
   return {
-    rows, feel: Math.round(feel), extFeel: Math.round(feel - cal), envTemp,
+    rows, feel: Math.round(feel), extFeel: Math.round(ext), envTemp,
+    handsFeel: Math.round(ext + (lx.hands || 0)), feetFeel: Math.round(ext + (lx.feet || 0)),
     raining, light, wet: raining && !light, air,
     humid, rh: hum ? hum.rh : null, evap: evaporativeBlock(w, air)
   };
@@ -486,10 +493,12 @@ function pickOutfit(f, w, opts, gear){
   }
 
   /* --- Extremities run on the air-based number ------------------- */
-  ["hands","socks","feet","neck","head"].forEach(slot => push(bestOrEdge(slot, ex)));
+  const hx = f.handsFeel != null ? f.handsFeel : ex, fx = f.feetFeel != null ? f.feetFeel : ex;
+  const zoneTemp = slot => slot === "hands" ? hx : (slot === "feet" || slot === "socks") ? fx : ex;
+  ["hands","socks","feet","neck","head"].forEach(slot => push(bestOrEdge(slot, zoneTemp(slot))));
   // Feet get covered in the wet whatever the temperature.
   if (f.wet && !wear.some(i => i.slot === "feet")){
-    const feet = best(inSlot("feet"), ex);
+    const feet = best(inSlot("feet"), fx);
     if (feet) push(feet, "Wet feet are the complaint that outlasts the ride.");
   }
   /* Rain-only items, wherever they live. A brimmed cap and waterproof
@@ -667,3 +676,51 @@ function wetThroughLegs(legs){
 }
 
 const fmtTime = s => s ? s.slice(11,16) : "—";
+
+/* ---------------------------------------------------------------
+   There and back: the way home, hours later.
+
+   A commute, or a ride to somewhere you stop for the day, is ridden twice in
+   one kit, with a bag in between. The question for the way back is what to
+   bring that the morning did not need, and what can stay in the bag.
+
+   Slot by slot: a garment worn this morning that still covers the way back's
+   number is worn both ways, even if the model would have picked a different
+   one fresh — two near-identical jerseys are not a reason to pack a second.
+   Where it does not cover it, the way back's own pick goes in the bag. A slot
+   only the morning wanted is stowed; a slot only the way back wants is
+   brought. Rain-only things and eyewear, chosen by the weather and the light
+   rather than by warmth, are matched by name: sunglasses at 08:00 cover
+   nothing at 18:30 in the dark. Generic outfits have no ranges, so they
+   compare by name.
+----------------------------------------------------------------*/
+function returnPlan(outThere, outBack, fBack){
+  const temp = it => it.slot === "hands" ? fBack.handsFeel
+    : (it.slot === "feet" || it.slot === "socks") ? fBack.feetFeel
+    : ["neck", "head"].includes(it.slot) ? fBack.extFeel : fBack.feel;
+  const covers = it => it.tmin != null && it.tmax != null && !it.rainOnly && it.slot !== "eyes"
+    && temp(it) >= it.tmin && temp(it) <= it.tmax;
+  const key = it => it.slot || it._label || it.name;
+
+  const both = [], bring = [], stow = [];
+  const backBySlot = new Map();
+  outBack.wear.forEach(it => { const k = key(it); if (!backBySlot.has(k)) backBySlot.set(k, []); backBySlot.get(k).push(it); });
+  const handled = new Set();
+
+  outThere.wear.forEach(it => {
+    const k = key(it), back = backBySlot.get(k) || [];
+    if (back.some(b => b.name === it.name) || (back.length && covers(it))){
+      both.push(it);
+      back.filter(b => b.name !== it.name && (!covers(it) || b.rainOnly)).forEach(b => { if (!bring.includes(b)) bring.push(b); });
+      handled.add(k);
+    } else if (back.length){
+      stow.push(it);
+      back.forEach(b => { if (!bring.includes(b)) bring.push(b); });
+      handled.add(k);
+    } else {
+      stow.push(it);
+    }
+  });
+  backBySlot.forEach((items, k) => { if (!handled.has(k)) items.forEach(b => bring.push(b)); });
+  return {both, bring, stow};
+}

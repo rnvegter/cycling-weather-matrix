@@ -34,6 +34,14 @@ function showScreen(name){
   /* The backup list is on the server, and a scheduled run can have added to it
      since this tab was last looked at, so arriving asks rather than assumes. */
   if (name === "backup" && typeof refreshBackups === "function") refreshBackups();
+  // A seed upgrade happens at load, usually on another tab; it is said here,
+  // once, where the list it changed is.
+  // Rides rated since the last visit can have produced a suggestion.
+  if (name === "gear") renderGearSuggestions();
+  if (name === "gear" && typeof takeGearUpgradeNote === "function"){
+    const note = takeGearUpgradeNote();
+    if (note) status2(`Gear list updated: ${note} Your own edits were left as they were.`);
+  }
   document.querySelectorAll(".wx-tab[data-screen]").forEach(t =>
     t.setAttribute("aria-pressed", t.dataset.screen === name ? "true" : "false"));
   document.body.dataset.screen = name;
@@ -186,8 +194,65 @@ function gearDetail(it, span){
   </td></tr>`;
 }
 
+/* ---------------------------------------------------------------
+   From your rides.
+
+   calibrate.js reads the rated rides for a garment worn near the edge of its
+   range and, when enough of them agree, proposes moving that edge. It is shown
+   here, next to the list it would change, with the rides behind it, and only
+   the rider's Apply changes anything. Apply is an ordinary edit: it goes
+   through saveGear, so it syncs and moves the sync stamp like any other.
+----------------------------------------------------------------*/
+function renderGearSuggestions(){
+  const box = document.getElementById("gearsuggest");
+  if (!box || typeof gearSuggestions !== "function") return;
+  const list = gearSuggestions(gear, loadHistory(), dismissedSuggestions());
+  box.classList.toggle("wx-hidden", !list.length);
+  if (!list.length){ box.innerHTML = ""; return; }
+  const when = iso => new Date(iso).toLocaleDateString(undefined, {day: "numeric", month: "short"});
+  box.innerHTML = `
+    <div class="wx-card wx-card--flat" style="margin-top:var(--sp-4)">
+      <div class="wx-card__head">
+        <h3 class="wx-heading">From your rides</h3>
+        <span class="wx-eyebrow" style="margin:0">${list.length} suggestion${list.length === 1 ? "" : "s"}</span>
+      </div>
+      ${list.map(s => `
+      <div class="wx-advice" data-key="${escHtml(s.key)}">
+        <p class="wx-advice__text"><b>${escHtml(s.name)}</b> — ${escHtml(suggestionText(s))}</p>
+        <p class="wx-note" style="margin:0">${s.examples.map(x =>
+          `${when(x.startISO)}: ${x.feel}° felt, ${escHtml((verdictById(x.verdict) || {label: x.verdict}).label.toLowerCase())}`).join(" · ")}</p>
+        <div class="wx-bar-row" style="margin-top:var(--sp-2)">
+          <button class="wx-btn wx-btn--primary" data-act="apply" data-i="${s.index}" data-edge="${s.edge}" data-to="${s.to}">Apply</button>
+          <button class="wx-btn wx-btn--quiet" data-act="dismiss">Not now</button>
+        </div>
+      </div>`).join("")}
+      <p class="wx-note">Only rides planned within ${EDGE_ZONE}° of a garment's own edge count for it; a
+        verdict in the middle of its range is the whole outfit's, and goes to the rider correction instead.
+        "Not now" keeps a suggestion away until the rides behind it change.</p>
+    </div>`;
+}
+
+document.getElementById("gearsuggest").addEventListener("click", e => {
+  const btn = e.target.closest("button[data-act]");
+  const row = e.target.closest(".wx-advice");
+  if (!btn || !row) return;
+  if (btn.dataset.act === "apply"){
+    const it = gear[+btn.dataset.i];
+    if (!it) return;
+    const before = it[btn.dataset.edge];
+    it[btn.dataset.edge] = +btn.dataset.to;
+    saveGear(gear);
+    renderGear();
+    status2(`${it.name}: ${btn.dataset.edge === "tmax" ? "warm" : "cold"} end moved from ${before}° to ${btn.dataset.to}°.`);
+  } else {
+    dismissSuggestion(row.dataset.key);
+    renderGearSuggestions();
+  }
+});
+
 function renderGear(){
   renderGearHead();
+  renderGearSuggestions();
   const rows = visibleGear();
   const tbody = document.querySelector("#geartable tbody");
 

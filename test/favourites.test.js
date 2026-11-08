@@ -245,3 +245,24 @@ describe("maintaining the list", () => {
     assert.equal(loadFavourites().length, 1, "and what was there is untouched");
   });
 });
+
+/* --- A usual start ------------------------------------------------- */
+
+describe("usual start time", () => {
+  const fav = extra => normaliseFavourite(Object.assign({name: "Loop", points: [[52, 5, 1], [52.1, 5.1, 2]]}, extra));
+
+  test("is kept when it is a time, and dropped when it is not", () => {
+    assert.equal(fav({usualTime: "08:00"}).usualTime, "08:00");
+    for (const bad of ["8:00", "24:00", "08:60", "soon", 800, null, undefined])
+      assert.equal(fav({usualTime: bad}).usualTime, null, `${bad}`);
+  });
+
+  test("the next start is today while there is half an hour to go, then tomorrow", () => {
+    const at = (h, m) => new Date(2026, 10, 9, h, m).getTime();      // local 9 Nov
+    assert.deepEqual(nextStart("08:00", at(7, 0)), {date: "2026-11-09", time: "08:00", label: "today 08:00"});
+    assert.deepEqual(nextStart("08:00", at(7, 45)), {date: "2026-11-10", time: "08:00", label: "tomorrow 08:00"});
+    assert.deepEqual(nextStart("08:00", at(21, 0)), {date: "2026-11-10", time: "08:00", label: "tomorrow 08:00"});
+    assert.equal(nextStart("07:00", new Date(2026, 11, 31, 22, 0).getTime()).date, "2027-01-01", "across a year end");
+    assert.equal(nextStart(null), null);
+  });
+});
