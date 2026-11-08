@@ -67,7 +67,7 @@ Instructions for working on the Cycling Weather Effect Matrix. They come from ho
 - **Containers are replaced, not restarted,** to pick up a new image. State lives in the `cwem-state` volume at `/state`.
 - **A host folder for backups** needs owner `1000:1000` and the `:Z` mount flag on SELinux hosts; rootless Podman uses `:Z,U`.
 - **Under systemd the checkout stays root-owned and read-only;** state goes to `/var/lib/cycling-weather-matrix`.
-- **Prove an update landed** by comparing the checksum of the served `model.js` with the checkout's.
+- **Prove an update landed** by comparing what is served with the checkout — every file the browser loads, as `deploy/update-docker.sh` does, since `model.js` alone does not change in every update.
 
 ## Working in this environment
 
