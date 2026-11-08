@@ -409,6 +409,29 @@ function writeState(doc){
   fs.renameSync(tmp, STATE_FILE);
 }
 
+/* A whole-list store (gear, favourites) in an incoming write gives way to the
+   stored one when its stamp is older. A missing stamp is older than any
+   stamp. Without this, a tab left open since yesterday pushes its day-old
+   gear along with today's ride, and the newer list from another device is
+   gone: the browser only pulls once, when it loads.
+
+   Equal stamps let the write through (it is the same list, or the same
+   browser), and so does an unstamped write over an unstamped store, which is
+   how it always behaved. History is not touched here; it merges ride by ride
+   in the browser. */
+function keepNewerLists(stored, doc){
+  if (!stored) return doc;
+  for (const [key, stamp] of [["gear", "gearUpdatedAt"], ["favourites", "favouritesUpdatedAt"]]){
+    if (!Array.isArray(stored[key])) continue;
+    const have = String(stored[stamp] || ""), incoming = String(doc[stamp] || "");
+    if (have && incoming < have){
+      doc[key] = stored[key];
+      doc[stamp] = stored[stamp];
+    }
+  }
+  return doc;
+}
+
 /* Is this write coming from the app itself rather than from some other page
    the browser happens to have open?
 
@@ -713,6 +736,7 @@ const server = http.createServer(async (req, res) => {
         const doc = JSON.parse(body);
         if (!doc || typeof doc !== "object" || Array.isArray(doc))
           throw new Error("expected an object");
+        keepNewerLists(readState(), doc);
         doc.savedAt = new Date().toISOString();
         writeState(doc);
         res.writeHead(200);
@@ -927,7 +951,7 @@ if (require.main === module){
 }
 
 module.exports = {server, isServable, isBlockedAddress, checkedURL, checkedTarget, pinnedLookup, requestOnce, get, clientIP,
-                  rateLimited, RATE, BACKUP_RATE, toText, rank, sameOrigin,
+                  rateLimited, RATE, BACKUP_RATE, toText, rank, sameOrigin, keepNewerLists,
                   BACKUP_DIR, BACKUP_NAME, backupPath, listBackups, pruneBackups, writeBackup,
                   readSchedule, writeSchedule, backupDue, runScheduledBackup, lastScheduleFailure,
                   KEEP_DEFAULT, KEEP_MAX, EVERY_HOURS_MIN, EVERY_HOURS_MAX};

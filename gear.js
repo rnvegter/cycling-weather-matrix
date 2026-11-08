@@ -154,6 +154,15 @@ function loadGear(){
   }catch(e){}
   return GEAR_SEED.map(normaliseItem);
 }
+/* Whether this browser holds a gear list of its own, as opposed to answering
+   with the seed because nothing is stored. Sync needs the difference: a seed
+   nobody chose must never stand against a real list from the server. */
+function hasStoredGear(){
+  try{
+    const g = JSON.parse(localStorage.getItem(GEAR_KEY) || "null");
+    return Array.isArray(g) && g.length > 0;
+  }catch(e){ return false; }
+}
 function saveGear(gear){
   try{ localStorage.setItem(GEAR_KEY, JSON.stringify(gear)); }catch(e){}
 }

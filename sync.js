@@ -76,14 +76,18 @@ function mergeIncoming(doc){
       importHistory(JSON.stringify(doc.history));
     }
 
-    // Gear: newest document wins outright.
+    /* Gear: newest document wins outright. A missing stamp is older than any
+       stamp — and when neither side has one, a browser that only holds the
+       seed takes the server's list, because otherwise its first push would
+       write the seed over a list someone actually built. */
     if (Array.isArray(doc.gear) && doc.gear.length){
       const theirs = String(doc.gearUpdatedAt || "");
       const mine = gearStamp();
-      if (theirs && theirs > mine){
+      const seedOnly = !mine && !theirs && !hasStoredGear();
+      if ((theirs && theirs > mine) || seedOnly){
         gear = doc.gear.map(normaliseItem);
         saveGear(gear);
-        setGearStamp(theirs);
+        if (theirs) setGearStamp(theirs);
         if (typeof renderGear === "function") renderGear();
       }
     }
