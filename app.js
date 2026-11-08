@@ -738,6 +738,17 @@ async function analyseRoute(route, opts){
 
   const result = {legs, coldest, warmest, extra, shed, swaps, changes, spread,
                   wetThrough: wetThroughLegs(legs)};
+
+  /* A loop can be ridden either way, and the forecast already fetched covers
+     both: the reversed legs stand on the same roads, so each takes its wind
+     from the forward leg's block, at its own clock time and turned heading.
+     Only the headwind is read; nothing about the kit changes here. */
+  if (route.stats.loop && legs.length >= 4){
+    const rev = reverseLegs(legs, opts.startDT, opts.speed);
+    rev.forEach(l => { l.headwind = legWeather(blocks[Math.min(l.source, blocks.length - 1)], l, opts).headwind; });
+    result.direction = compareDirections(legs.map(l => ({headwind: l.w.headwind, hours: l.hours})),
+                                         rev, isClockwise(route.points));
+  }
   // Only the wardrobe knows what packs; the generic list has no such detail.
   if (changes && state.mode === "wardrobe") result.plan = packingPlan(result, opts);
   return result;
@@ -909,7 +920,29 @@ function warningsList(out, watch){
     + watch.map(x => `<p class="wx-alert"><b>Watch.</b> ${x}</p>`).join("");
 }
 
-function windCard(w, place, ramp){
+/* For a loop: which way round, said in the unit you decide in. Replaces the
+   compass bearing, which a loop makes meaningless — you set off along the
+   road in front of you either way. */
+function directionNote(d){
+  if (!d) return "";
+  const kmh = v => `${Math.round(Math.abs(v))} km/h of ${v >= 0 ? "headwind" : "tailwind"}`;
+  const word = dir => turnWord(dir, d.clockwise);
+  const name = dir => dir === "forward"
+    ? `as recorded${word(dir) ? ` (${word(dir)})` : ""}`
+    : `the other way round${word(dir) ? ` (${word(dir)})` : ""}`;
+  if (!d.better){
+    return `<p class="wx-note">Clockwise or anticlockwise makes little difference today:
+      the last third of the ride carries ${kmh(d.forward.late)} as recorded and
+      ${kmh(d.reverse.late)} the other way round.</p>`;
+  }
+  const win = d[d.better], lose = d[d.better === "forward" ? "reverse" : "forward"];
+  return `<p class="wx-startdir"><b>Ride it ${name(d.better)}.</b>
+    The last third of the ride then carries ${kmh(win.late)}, against ${kmh(lose.late)} the other
+    way round; the first third, which you ride fresh, takes ${kmh(win.early)}. It is the same wind
+    on the same roads either way — this only decides when you meet it.</p>`;
+}
+
+function windCard(w, place, ramp, analysis){
   const bft = beaufort(w.wind), gustBft = beaufort(w.gust);
   // Ride out into the wind so the way home has it behind: the return leg is
   // ridden tired, and a headwind there is what actually makes people cold.
@@ -964,7 +997,8 @@ function windCard(w, place, ramp){
             ? ` Air temperature spans ${r1(sp.tempLow)}&ndash;${r1(sp.tempHigh)}&deg;C across the middle of the spread, so the kit call is less settled than one number looks.`
             : ""}</p>`;
       })()}
-      ${matters ? `
+      ${directionNote(analysis && analysis.direction)}
+      ${matters && !(analysis && analysis.direction) ? `
       <p class="wx-startdir"><b>Set off towards the ${compass(outbound)}.</b>
         That puts the wind in your face going out and behind you coming back,
         which is the leg you ride tired.</p>
@@ -1161,7 +1195,7 @@ function render(f, w, opts, place, analysis){
     warningsList(out, watch),
     bestStartCard(w.scan, ramp),
     hoursCard(w, ramp),
-    windCard(w, place, ramp),
+    windCard(w, place, ramp, analysis),
     routeCard(analysis, ramp),
     feelSection(f),
     heatBalanceCard(out.hb, f, opts, ramp),

@@ -19,8 +19,9 @@ const path = require("path");
 const vm = require("vm");
 
 before(() => {
-  vm.runInThisContext(fs.readFileSync(path.join(__dirname, "..", "gpx.js"), "utf8"),
-    {filename: "gpx.js"});
+  // legTiming uses clamp from model.js, which loads after gpx.js in index.html.
+  ["weather.js", "gpx.js", "gear.js", "model.js"].forEach(f =>
+    vm.runInThisContext(fs.readFileSync(path.join(__dirname, "..", f), "utf8"), {filename: f}));
 });
 
 /* --- Roads: elevation as a function of distance in metres ---------- */
@@ -194,5 +195,81 @@ describe("what else routeStats reports is unchanged", () => {
     assert.ok(Math.abs(routeStats(two).ascent - 20) < 0.5);
     const one = [{lat: 52, lon: 5, ele: 10}, {lat: 52.01, lon: 5, ele: null}];
     assert.equal(routeStats(one).ascent, 0);
+  });
+});
+
+/* --- Which way round a loop ------------------------------------ */
+
+describe("loop direction", () => {
+  // A square loop, 10 km a side, ridden N, E, S, W from the SW corner — clockwise.
+  const square = () => {
+    const legs = [];
+    [[0, 0, 10, 0], [10, 0, 10, 10], [10, 10, 0, 10], [0, 10, 0, 0]].forEach(([y0, x0, y1, x1], k) => {
+      const heading = k === 0 ? 0 : k === 1 ? 90 : k === 2 ? 180 : 270;
+      legs.push({index: k, fromKm: k * 10, toKm: (k + 1) * 10, lat: 52 + (y0 + y1) / 2 / 111,
+                 lon: 5 + (x0 + x1) / 2 / 68, ele: 10, climb: 0, gradient: 0, heading});
+    });
+    return legTiming(legs, new Date("2026-11-09T08:00"), 25);
+  };
+  const withWind = (legs, from, speed = 20) =>
+    legs.map(l => Object.assign({}, l, {headwind: headwindComponent(speed, from, l.heading)}));
+
+  test("reversed legs run the other way round, turned and timed from the same start", () => {
+    const f = square(), r = reverseLegs(f, new Date("2026-11-09T08:00"), 25);
+    assert.deepEqual(r.map(l => l.heading), [90, 0, 270, 180]);
+    assert.deepEqual(r.map(l => l.source), [3, 2, 1, 0]);
+    assert.equal(r[0].fromKm, 0); assert.equal(r[3].toKm, 40);
+    assert.equal(r[0].startTime.getTime(), f[0].startTime.getTime());
+    assert.ok(Math.abs(r[3].endTime - f[3].endTime) < 1000, "same length, same finish");
+  });
+
+  test("a climb ridden the other way is a descent, and faster", () => {
+    const f = square(); f[1].gradient = 0.06; f[1].climb = 600;
+    const r = reverseLegs(legTiming(f, new Date("2026-11-09T08:00"), 25), new Date("2026-11-09T08:00"), 25);
+    assert.equal(r[2].gradient, -0.06);
+    assert.ok(r[2].speed > 25 && f[1].speed < 25);
+  });
+
+  test("tells clockwise from anticlockwise", () => {
+    const cw = [{lat: 52, lon: 5}, {lat: 52.1, lon: 5}, {lat: 52.1, lon: 5.15}, {lat: 52, lon: 5.15}];
+    assert.equal(isClockwise(cw), true);
+    assert.equal(isClockwise(cw.slice().reverse()), false);
+    assert.equal(isClockwise([{lat: 52, lon: 5}]), null);
+  });
+
+  const both = from => {
+    const f = withWind(square(), from);
+    const r = withWind(reverseLegs(square(), new Date("2026-11-09T08:00"), 25), from);
+    return compareDirections(f, r, true);
+  };
+
+  test("the total headwind is the same either way round; only the order differs", () => {
+    const f = withWind(square(), 250), r = withWind(reverseLegs(square(), new Date("2026-11-09T08:00"), 25), 250);
+    const sum = legs => legs.reduce((a, l) => a + l.headwind * l.hours, 0);
+    assert.ok(Math.abs(sum(f) - sum(r)) < 1e-9);
+  });
+
+  test("a west wind: as recorded finishes into it; the other way round finishes across it", () => {
+    const d = both(270);
+    assert.equal(d.better, "reverse");
+    assert.equal(Math.round(d.forward.late), 20, "W leg last, headwind");
+    assert.equal(Math.round(d.reverse.late), 0, "S leg last, crosswind");
+    assert.equal(turnWord(d.better, d.clockwise), "anticlockwise");
+  });
+
+  test("a north wind: the other way round finishes with it behind", () => {
+    const d = both(0);
+    assert.equal(d.better, "reverse");
+    assert.equal(Math.round(d.reverse.late), -20, "S leg last, tailwind");
+  });
+
+  test("a south wind: as recorded, which finishes across it rather than into it", () => {
+    assert.equal(both(180).better, "forward");
+  });
+
+  test("a light wind decides nothing", () => {
+    const f = withWind(square(), 270, 4);
+    const r = withWind(reverseLegs(square(), new Date("2026-11-09T08:00"), 25), 270, 4);
+    assert.equal(compareDirections(f, r, true).better, null);
   });
 });

@@ -251,6 +251,16 @@ quietly picking one.
 Below force 3 it says the wind isn't worth planning a route around, instead of inventing
 advice.
 
+**Clockwise or anticlockwise.** With a loop loaded, the bearing gives way to the choice you
+actually make at the start. The legs are run the other way round too — same roads, headings
+turned, climbs become descents, timed from the same start — against the forecast already
+fetched for them. In a steady wind the total headwind on a closed loop is the same either way;
+what the direction decides is *when* you meet it, so the comparison reads the ends of the
+ride: the mean headwind over the last third, ridden tired, decides, and the first third is
+reported as what you get in exchange. A difference under 5 km/h is called what it is: little
+difference today. A wind that veers or builds during the ride tells the two directions apart on
+top of that.
+
 **How sure is it?** Open-Meteo's default already serves the highest-resolution model for a
 location — over the Netherlands that is KNMI HARMONIE at 2.5 km, and it is what everything
 above is built from. What one model cannot say is how much to trust itself, so the ensemble
