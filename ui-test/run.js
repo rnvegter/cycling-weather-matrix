@@ -102,7 +102,10 @@ async function read(p, f){
   if (!f.keepPlace){ await p.fill("#loc", "Utrecht"); await p.click("#search"); await p.click("#geo button:not([disabled])"); }
   await p.fill("#date", f.date || "2026-11-10"); await p.fill("#time", f.time || "08:00");
   await p.fill("#dist", f.dist == null ? "" : String(f.dist)); await p.fill("#dur", f.hours == null ? "" : String(f.hours));
-  await p.fill("#speed", String(f.speed || 25)); await p.fill("#back", f.back || "");
+  await p.fill("#speed", String(f.speed || 25));
+  // Only where the page has the field, so the checks can also be run against
+  // an older version to see which of them it fails.
+  if (await p.$("#back")) await p.fill("#back", f.back || "");
   if (f.gpx){ await p.setInputFiles("#gpx", f.gpx); await p.waitForTimeout(200); }
   await p.click("#go");
   await p.waitForFunction(() => !document.querySelector("#go").disabled, null, {timeout: 20000});
