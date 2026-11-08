@@ -390,6 +390,11 @@ ride another device added since. **Gear is last-write-wins**, guarded by a times
 it deliberately, in one sitting, and merging per garment would mean stamping every item to
 protect against something that does not happen. A missing stamp counts as older than any.
 
+When a push comes back changed — the server kept newer gear or favourites, or merged in rides
+this page had not seen — the page fetches the server's copy at once and says so in the sync
+line ("Another device had newer gear and rides; this page shows them now") instead of
+reporting "Synced" over yesterday's list.
+
 A merge of lists cannot see a deletion, so **a deleted ride leaves a tombstone** — its id and
 when — that travels with the history and is applied on every device; planning the same ride
 again lifts it, and a ride rated after the deletion is kept. **Restoring a backup replaces** the

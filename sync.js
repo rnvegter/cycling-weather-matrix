@@ -50,6 +50,7 @@ let pushTimer = null;
 let pendingPush = false;      // a push failed, or was queued while merging
 let lastSyncedAt = null;
 let lastError = null;
+let lastNotice = null;        // what the last push brought back from another device
 
 const gearStamp = () => { try{ return localStorage.getItem(GEAR_STAMP_KEY) || ""; }catch(e){ return ""; } };
 const setGearStamp = v => { try{ localStorage.setItem(GEAR_STAMP_KEY, v); }catch(e){} };
@@ -70,9 +71,12 @@ function syncStatusText(){
   if (schemaBlocked) return `Not syncing: ${lastError}. Changes stay in this browser until then.`;
   if (lastError) return `Sync failed: ${lastError}. It will try again on the next change.`;
   if (pendingPush) return "Saving…";
-  if (!lastSyncedAt) return "Synced.";
-  const mins = Math.round((Date.now() - lastSyncedAt) / 60000);
-  return mins < 1 ? "Synced just now" : `Synced ${mins} minute${mins === 1 ? "" : "s"} ago`;
+  const when = (() => {
+    if (!lastSyncedAt) return "Synced.";
+    const mins = Math.round((Date.now() - lastSyncedAt) / 60000);
+    return mins < 1 ? "Synced just now." : `Synced ${mins} minute${mins === 1 ? "" : "s"} ago.`;
+  })();
+  return lastNotice ? `${when} ${lastNotice}` : when;
 }
 
 function paintSyncStatus(){
@@ -202,10 +206,27 @@ async function syncPush(immediate){
       throw new Error(why || "the server holds a different version of this app's data");
     }
     if (!r.ok) throw new Error(`server said ${r.status}`);
+    let res = {};
+    try{ res = await r.json(); }catch(e){}
     lastSyncedAt = Date.now();
     pendingPush = false;
     lastError = null;
     syncAvailable = true;
+    lastNotice = null;
+    /* The server kept a newer list, or merged in rides this page has never
+       seen: what it holds is not what was sent. Fetch it now rather than at
+       the next load, and say what changed, because a page that just said
+       "Synced" while showing yesterday's gear is the thing being fixed. */
+    const kept = Array.isArray(res.kept) ? res.kept : [];
+    if (kept.length || res.historyChanged){
+      const g = await fetch(SYNC_ENDPOINT, {method: "GET", cache: "no-store"});
+      if (g.ok) mergeIncoming(await g.json());
+      const parts = kept.filter(k => k === "gear" || k === "favourites");
+      if (res.historyChanged) parts.push("rides");
+      const list = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : parts[0];
+      lastNotice = `Another device had newer ${list}; this page shows ${parts.length === 1 && parts[0] === "gear" ? "it" : "them"} now.`;
+      if (typeof renderHistory === "function") renderHistory();
+    }
   }catch(e){
     // Keep the change locally and try again on the next one — never lose it.
     pendingPush = true;

@@ -279,3 +279,50 @@ describe("schema version", () => {
     assert.equal(srv.schemaRefusal(null, {schema: srv.STATE_SCHEMA}), null);
   });
 });
+
+/* --- Saying what the server held back ------------------------------ */
+
+describe("a push the server partly kept back", () => {
+  let base;
+  before(async () => {
+    await new Promise(r => srv.server.listen(0, "127.0.0.1", r));
+    base = `http://127.0.0.1:${srv.server.address().port}/api/state`;
+  });
+  after(() => new Promise(r => srv.server.close(r)));
+  beforeEach(() => { try{ fs.rmSync(path.join(TMP, "state.json")); }catch(e){} });
+
+  const real = () => globalThis._restoreFetch;
+  const T1 = "2026-10-01T08:00:00.000Z", T2 = "2026-10-02T08:00:00.000Z";
+
+  test("the server says which lists it kept and whether the history moved", async () => {
+    const put = doc => real()(base, {method: "PUT", headers: {"content-type": "application/json"}, body: JSON.stringify(doc)}).then(r => r.json());
+    await put({gear: [{model: "newer", slot: "mid"}], gearUpdatedAt: T2,
+               history: [{id: "a", startISO: "2026-10-01T08:00"}, {id: "b", startISO: "2026-10-02T08:00"}]});
+    const r = await put({gear: [{model: "stale", slot: "mid"}], gearUpdatedAt: T1, history: [{id: "a", startISO: "2026-10-01T08:00"}]});
+    assert.deepEqual(r.kept, ["gear"]);
+    assert.equal(r.historyChanged, true);
+    const r2 = await put({gear: [{model: "newer", slot: "mid"}], gearUpdatedAt: T2,
+                          history: [{id: "a", startISO: "2026-10-01T08:00"}, {id: "b", startISO: "2026-10-02T08:00"}]});
+    assert.deepEqual(r2.kept, []);
+    assert.equal(r2.historyChanged, false);
+  });
+
+  test("the page then takes the newer list and the rides, and says so", async () => {
+    // The server holds newer gear and a ride this page has never seen.
+    await real()(base, {method: "PUT", headers: {"content-type": "application/json"}, body: JSON.stringify({
+      gear: [{brand: "", model: "From the other device", slot: "mid"}], gearUpdatedAt: "2026-10-05T08:00:00.000Z",
+      history: [{id: "2026-10-04T08:00|Utrecht", startISO: "2026-10-04T08:00", place: "Utrecht", savedAt: T1}]})});
+    store.clear();
+    localStorage.setItem(GEAR_KEY, JSON.stringify([{brand: "", model: "Old here", slot: "mid"}]));
+    localStorage.setItem(GEAR_STAMP_KEY, T1);
+    const wasFetch = globalThis.fetch;
+    globalThis.fetch = (url, opts) => real()(base, opts);     // the page's endpoint, pointed at the test server
+    syncAvailable = true; schemaBlocked = false; lastError = null;
+    try{
+      await syncPush(true);
+    } finally { globalThis.fetch = wasFetch; }
+    assert.equal(loadGear()[0].model, "From the other device");
+    assert.ok(loadHistory().some(e => e.startISO === "2026-10-04T08:00"), "the other device's ride arrived");
+    assert.match(syncStatusText(), /another device/i);
+  });
+});

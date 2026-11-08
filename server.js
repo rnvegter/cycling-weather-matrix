@@ -420,16 +420,18 @@ function writeState(doc){
    how it always behaved. History is not touched here; it merges ride by ride
    in the browser. */
 function keepNewerLists(stored, doc){
-  if (!stored) return doc;
+  const kept = [];               // which lists were held back, for the writer to be told
+  if (!stored) return kept;
   for (const [key, stamp] of [["gear", "gearUpdatedAt"], ["favourites", "favouritesUpdatedAt"]]){
     if (!Array.isArray(stored[key])) continue;
     const have = String(stored[stamp] || ""), incoming = String(doc[stamp] || "");
     if (have && incoming < have){
       doc[key] = stored[key];
       doc[stamp] = stored[stamp];
+      kept.push(key);
     }
   }
-  return doc;
+  return kept;
 }
 
 /* --- History, ride by ride -------------------------------------
@@ -481,14 +483,19 @@ const cleanTombs = t => {
 const rideList = v => Array.isArray(v) ? v.filter(r => r && typeof r === "object" && typeof r.id === "string" && r.id) : [];
 const buried = (ride, tombs) => !!tombs[ride.id] && !(ride.ratedAt && ride.ratedAt > tombs[ride.id]);
 
+/* Returns true when the stored result differs from what the writer sent in
+   a way the writer should see: a ride it lacks, a ride it has that is gone,
+   or a ride where the server's copy won. */
 function mergeHistory(stored, doc){
   const theirs = rideList(doc.history), mine = stored ? rideList(stored.history) : [];
+  const sent = new Set(theirs.map(r => r.id));
+  let serverWon = false;
   const replaced = String(doc.historyReplacedAt || ""), had = String((stored && stored.historyReplacedAt) || "");
   if (!stored || (replaced && replaced > had)){
     doc.history = theirs;
     doc.deletedRides = cleanTombs(doc.deletedRides);
     doc.historyReplacedAt = replaced || had;
-    return doc;
+    return false;
   }
   const tombs = cleanTombs(stored.deletedRides);
   for (const [id, at] of Object.entries(cleanTombs(doc.deletedRides))) if (!tombs[id] || at > tombs[id]) tombs[id] = at;
@@ -504,13 +511,15 @@ function mergeHistory(stored, doc){
     const ex = byId.get(r.id);
     if (!ex && behind && !(typeof r.savedAt === "string" && r.savedAt > had)) return;
     if (!ex || rideWins(r, ex)) byId.set(r.id, ex ? Object.assign({}, ex, r) : r);
+    else serverWon = true;
   });
   // Newest rides last, as the browser keeps them, and the same cap.
   const merged = [...byId.values()].sort((a, b) => String(a.startISO || "").localeCompare(String(b.startISO || "")));
   doc.history = merged.slice(-HISTORY_MAX);
   doc.deletedRides = Object.fromEntries(Object.entries(tombs).sort((a, b) => a[1].localeCompare(b[1])).slice(-TOMBS_MAX));
   doc.historyReplacedAt = had;
-  return doc;
+  const result = new Set(doc.history.map(r => r.id));
+  return serverWon || result.size !== sent.size || [...result].some(id => !sent.has(id));
 }
 
 /* Is this write coming from the app itself rather than from some other page
@@ -824,12 +833,13 @@ const server = http.createServer(async (req, res) => {
           return res.end(JSON.stringify({error: refusal}));
         }
         doc.schema = docSchema(doc);
-        keepNewerLists(stored, doc);
-        mergeHistory(stored, doc);
+        const kept = keepNewerLists(stored, doc);
+        const historyChanged = mergeHistory(stored, doc);
         doc.savedAt = new Date().toISOString();
         writeState(doc);
         res.writeHead(200);
-        return res.end(JSON.stringify({ok: true, savedAt: doc.savedAt}));
+        // What was not taken as sent, so the page can fetch it and say so.
+        return res.end(JSON.stringify({ok: true, savedAt: doc.savedAt, kept, historyChanged}));
       }catch(e){
         res.writeHead(e.message === "too large" ? 413 : 400);
         return res.end(JSON.stringify({error: String(e.message || e)}));
