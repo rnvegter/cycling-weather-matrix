@@ -350,6 +350,19 @@ Where a layer that cannot come off is the trade-off, the plan says on which side
 it would run warm. With no change across the hours, nothing is added: the headline already
 says the same kit works.
 
+## There and back
+
+A commute, or a ride to somewhere you spend the day, is ridden twice in one kit with a bag in
+between. Fill in **Back at** and the same ride is worked out again for the way home, from the
+forecast already fetched, and **The way back** says what it reads and what that means for the
+bag: what is worn **both ways**, what goes **in the bag** for the return, and what to **stow**
+when the afternoon no longer wants it. A garment worn in the morning that still covers the way
+back's number counts as both ways, even if a fresh pick would differ — two near-identical
+jerseys are not a reason to pack a second. Rain kit and eyewear are chosen by the weather and
+the light, so sunglasses at 08:00 do not cover 18:30 in the dark. The way back gets its own
+entry in History, to be rated on its own. Back at is not remembered between rides, so a
+weekend ride never inherits Tuesday's return.
+
 ## On the phone, the evening before
 
 **Install it.** Served over HTTPS (or on localhost), the app can be added to a home screen and

@@ -896,6 +896,36 @@ function chipsList(f){
 
 }
 
+/* The way back: what it reads, what to wear both ways, what goes in the bag. */
+function backCard(back, thereFeel){
+  if (!back) return "";
+  if (back.error) return `<p class="wx-alert"><b>The way back.</b> ${escapeText(back.error)}</p>`;
+  const {w: wb, f: fb, out: ob, plan} = back;
+  const row = (zone, items, why) => items.length ? `
+      <div class="wx-kit__row">
+        <div class="wx-kit__zone">${zone}</div>
+        <p class="wx-kit__items">${items.map(i => escapeText(i.name)).join(", ")}${why ? ` <em>${why}</em>` : ""}</p>
+      </div>` : "";
+  const colder = fb.feel < thereFeel, diff = Math.abs(fb.feel - thereFeel);
+  return `
+  <section class="wx-card ${rampFor(fb.feel)}">
+    <div class="wx-card__head">
+      <h2 class="wx-heading">The way back</h2>
+      <span class="wx-eyebrow" style="margin:0">${hhmm(wb.startDT)}–${hhmm(wb.endDT)} &middot; ${fb.feel}&deg; felt</span>
+    </div>
+    <p class="wx-note" style="margin-top:0">${r1(wb.tStart)}&deg;C air, wind ${compass(wb.dir)} ${Math.round(wb.wind)} km/h,
+      rain ${Math.round(wb.prob)}%${wb.precipTotal >= 0.1 ? `, ${r1(wb.precipTotal)} mm` : ""} —
+      ${diff < 2 ? "about the same as the way there" : `${diff}&deg; ${colder ? "colder" : "warmer"} than the way there`}.</p>
+    <div class="wx-kit">
+      ${row("Both ways", plan.both, "")}
+      ${row("In the bag", plan.bring, colder || !plan.stow.length ? "For the way back; the morning doesn't need it." : "To change into for the way back.")}
+      ${row("Stow", plan.stow, "Off and into the bag for the way back.")}
+    </div>
+    ${!plan.bring.length && !plan.stow.length ? `<p class="wx-startdir"><b>The same kit both ways.</b> Nothing to pack for the return.</p>` : ""}
+    ${ob.notes.map(n => `<p class="wx-alert">${n}</p>`).join("")}
+  </section>`;
+}
+
 /* Which start rides best. Said beside the warnings when another hour is
    clearly better, because it changes the plan before it changes the kit; when
    the chosen start is as good as the day gets, it says that in one line. */
@@ -1269,6 +1299,7 @@ function render(f, w, opts, place, analysis){
     fuelCard(fuelPlan(w, f, opts), ramp, opts),
     routeFlag(analysis),
     warningsList(out, watch),
+    backCard(w.back, f.feel),
     bestStartCard(w.scan, ramp),
     hoursCard(w, ramp),
     windCard(w, place, ramp, analysis),
@@ -1356,6 +1387,37 @@ $("#go").onclick = async () => {
     // can honestly be answered.
     const out0 = state.mode === "wardrobe" ? pickOutfit(rideFeel(w, opts), w, opts, gear)
                                            : genericOutfit(rideFeel(w, opts), w, opts);
+
+    /* The way back, when there is one: the same distance and speed later the
+       same day, from the forecast already fetched. Its own learned correction,
+       since it can be wet when the morning was dry. A failure costs the card,
+       not the answer. */
+    const backTime = $("#back").value;
+    if (backTime){
+      try{
+        const wb = rideWindow(fc, date, backTime, hours);
+        if (wb.startDT < w.endDT){
+          w.back = {error: `The way back has to start after you arrive, at ${hhmm(w.endDT)}.`};
+        } else {
+          const ob = Object.assign({}, opts);
+          const offB = learnedOffset(loadHistory(), {wet: rideFeel(wb, ob).wet});
+          ob.learned = offB.value; ob.learnedLabel = learnedLabel(offB);
+          const fb = rideFeel(wb, ob);
+          const outB = state.mode === "wardrobe" ? pickOutfit(fb, wb, ob, gear) : genericOutfit(fb, wb, ob);
+          const plan = returnPlan(out0, outB, fb);
+          w.back = {w: wb, f: fb, out: outB, plan};
+          // Its own entry in History, so the way home can be rated on its own.
+          recordRide({
+            startISO: `${date}T${backTime}`, place: placeLabel(state.place),
+            dist: r1(dist), hours: r1(hours), speed: r1(n.speed),
+            feel: fb.feel, extFeel: fb.extFeel, air: r1(fb.air), handsFeel: fb.handsFeel, feetFeel: fb.feetFeel,
+            wet: fb.wet, raining: fb.raining, wind: r1(wb.wind), gust: Math.round(wb.gust),
+            rider: state.rider, mode: state.mode, routeName: "the way back",
+            kit: plan.both.concat(plan.bring).map(i => i.name)
+          });
+        }
+      }catch(err){ w.back = {error: err.message}; }
+    }
     const feelNow = rideFeel(w, opts);
     recordRide({
       startISO: `${date}T${time}`,
