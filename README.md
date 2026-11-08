@@ -337,6 +337,19 @@ balance at the coldest leg. If a pocket can't close it, the conflict is named as
 with the trade either way, plus any workaround the wardrobe has — the shorts-and-warmers route
 to where tights reach. If nothing closes it, it says so and suggests shortening the ride.
 
+### Without a route
+
+A long ride asks the same question a col does even with no GPX loaded: a 07:00 start at 3°
+that ends at 13° needs layers on at the start and off later. Rides of three hours or more are
+cut into hourly stretches at the start point, from the forecast already fetched, and run
+through the same check; when the kit changes, **Through the ride** gives the same packing plan
+as a route, with times. A carried layer is wanted on every stretch at least as cold as the
+warmest one the model picked it for, so on a morning that warms up it is on from the start and
+comes off when the day has warmed, and on an afternoon that cools it goes on when needed.
+Where a layer that cannot come off is the trade-off, the plan says on which side of the ride
+it would run warm. With no change across the hours, nothing is added: the headline already
+says the same kit works.
+
 ## Favourite rides
 
 The routes you ride again live on the **Favourites** tab. Add them from GPX files there — a
